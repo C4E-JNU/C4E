@@ -1,0 +1,482 @@
+"""
+文件读写工具 — 在安全白名单目录内操作文件
++ 文件上传管理 + 笔记 CRUD
+"""
+import json
+import os
+import uuid
+import shutil
+from datetime import datetime
+
+
+def _get_workspace_dir():
+    """获取 workspace 目录的绝对路径（项目根目录下的 workspace/）"""
+    return os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "workspace")
+    )
+
+
+# 当前请求的文件访问模式：safe=仅workspace；ask=读任意+写workspace/skills；full=任意读写
+_PERMISSION_MODE = "safe"
+
+def set_permission_mode(mode: str):
+    """设置当前请求的文件访问模式。由 agent 每次运行前调用。"""
+    global _PERMISSION_MODE
+    if mode in ("safe", "ask", "full"):
+        _PERMISSION_MODE = mode
+
+def _get_project_root():
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+def _get_skills_dir():
+    return os.path.join(_get_project_root(), "skills")
+
+def _within(base: str, p: str) -> bool:
+    p = os.path.abspath(p)
+    return p.startswith(base + os.sep) or p == base
+
+
+def _resolve_safe_path(relative_path: str, write: bool = False) -> str:
+    """将路径解析为绝对路径，并按当前权限模式校验访问范围。
+
+    write=False 表示读/列目录；write=True 表示写文件。
+    相对路径以 workspace/ 为基准；绝对路径直接使用（非安全模式下可访问项目/任意路径）。
+    """
+    mode = _PERMISSION_MODE
+    workspace = _get_workspace_dir()
+    # 确保 workspace 目录存在
+    os.makedirs(workspace, exist_ok=True)
+
+    # 规范化路径：相对路径以 workspace 为基准，绝对路径直接用
+    if os.path.isabs(relative_path):
+        full_path = os.path.abspath(relative_path)
+    else:
+        full_path = os.path.abspath(os.path.join(workspace, relative_path))
+
+    if mode == "full":
+        return full_path  # 完全访问：任意路径读写
+
+    workspace_abs = os.path.abspath(workspace)
+    project_abs = os.path.abspath(_get_project_root())
+
+    if mode == "safe":
+        # 仅 workspace
+        if not _within(workspace_abs, full_path):
+            raise PermissionError(f"安全模式下仅允许访问 workspace 目录: {relative_path}")
+        return full_path
+
+    # ask 询问模式
+    if not write:
+        # 读：允许 workspace + 项目根（含 skills/）
+        if _within(workspace_abs, full_path) or _within(project_abs, full_path):
+            return full_path
+        raise PermissionError(f"询问模式下仅可读取项目与 workspace 目录: {relative_path}")
+    # 写：允许 workspace + skills 目录（写技能作为例外放行）
+    skills_abs = os.path.abspath(_get_skills_dir())
+    if _within(workspace_abs, full_path) or _within(skills_abs, full_path):
+        return full_path
+    raise PermissionError("__NEED_FULL__ 该写操作超出 workspace 与 skills 目录，需要切换到完全访问模式才能执行")
+
+
+async def read_file(path: str = "", file_id: str = "", as_base64: bool = False, offset: int = 1, limit: int = 500):
+    """读取文件内容。统一入口：
+    - 提供 file_id（上传附件 id）时，按附件读取：文档返回解析全文，图片(或 as_base64=True)返回 base64(dataURL)
+    - 否则按 path 读取磁盘文件（原逻辑，行号分页）
+    Args:
+        path: 相对于 workspace/ 的文件路径
+        file_id: 上传附件的 file_id（优先于 path）
+        as_base64: 当按 file_id 且是文档时，仍尝试返回原始字节 base64（图片默认返回 base64）
+        offset: 起始行号 (1-indexed)
+        limit: 最多返回多少行
+    """
+    # 附件模式：按 file_id 读上传的文件
+    if (file_id or "").strip():
+        fid = file_id.strip()
+        # 图片 → 返回 base64(dataURL)；文档 → 返回解析全文
+        data_url = await image_to_base64(fid)
+        if data_url:
+            return json.dumps({"ok": True, "source": "attachment", "file_id": fid, "mode": "base64", "data_url": data_url}, ensure_ascii=False)
+        text = await get_file_text(fid)
+        if text:
+            return json.dumps({"ok": True, "source": "attachment", "file_id": fid, "mode": "text", "content": text}, ensure_ascii=False)
+        return json.dumps({"ok": False, "error": f"附件 {fid} 无内容"})
+
+    path = (path or "").strip()
+    if not path:
+        return json.dumps({"error": "文件路径不能为空"})
+
+    try:
+        full_path = _resolve_safe_path(path)
+
+        if not os.path.isfile(full_path):
+            return json.dumps({"error": f"文件不存在: {path}"})
+
+        with open(full_path, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()
+
+        total_lines = len(lines)
+        start = max(0, offset - 1)
+        end = min(total_lines, start + limit)
+
+        content = "".join(lines[start:end])
+
+        return json.dumps({
+            "path": path,
+            "total_lines": total_lines,
+            "offset": offset,
+            "limit": limit,
+            "content": content,
+        }, ensure_ascii=False)
+
+    except PermissionError as e:
+        return json.dumps({"error": str(e)})
+    except Exception as e:
+        return json.dumps({"error": f"读取文件失败: {str(e)}"})
+
+
+async def write_file(path: str, content: str):
+    """写入文件到 workspace 目录
+
+    Args:
+        path: 相对于 workspace/ 的文件路径
+        content: 文件内容（完整覆盖）
+    """
+    path = path.strip()
+    if not path:
+        return json.dumps({"error": "文件路径不能为空"})
+
+    try:
+        full_path = _resolve_safe_path(path, write=True)
+
+        # 确保父目录存在
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+
+        with open(full_path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        return json.dumps({
+            "status": "ok",
+            "path": path,
+            "bytes_written": len(content.encode("utf-8")),
+        }, ensure_ascii=False)
+
+    except PermissionError as e:
+        return json.dumps({"error": str(e)})
+    except Exception as e:
+        return json.dumps({"error": f"写入文件失败: {str(e)}"})
+
+
+async def list_files(subdir: str = ""):
+    """列出 workspace 目录下的文件"""
+    try:
+        full_path = _resolve_safe_path(subdir) if subdir else _get_workspace_dir()
+        if not os.path.isdir(full_path):
+            return json.dumps({"error": f"目录不存在: {subdir}"})
+
+        items = []
+        for name in sorted(os.listdir(full_path)):
+            item_path = os.path.join(full_path, name)
+            items.append({
+                "name": name,
+                "type": "dir" if os.path.isdir(item_path) else "file",
+                "size": os.path.getsize(item_path) if os.path.isfile(item_path) else 0,
+                "modified": os.path.getmtime(item_path),
+            })
+
+        return json.dumps({
+            "path": subdir or "/",
+            "items": items,
+        }, ensure_ascii=False)
+
+    except PermissionError as e:
+        return json.dumps({"error": str(e)})
+    except Exception as e:
+        return json.dumps({"error": f"列出目录失败: {str(e)}"})
+
+
+# ═══════════════════════════════════════════════
+# 文件上传管理
+# ═══════════════════════════════════════════════
+
+_UPLOADS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "workspace", "uploads")
+
+def _get_upload_dir():
+    os.makedirs(_UPLOADS_DIR, exist_ok=True)
+    return _UPLOADS_DIR
+
+def _get_upload_meta(file_id: str) -> dict | None:
+    """读取上传文件的 metadata"""
+    meta_path = os.path.join(_UPLOADS_DIR, file_id, "meta.json")
+    if not os.path.isfile(meta_path):
+        return None
+    with open(meta_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def _save_upload_meta(file_id: str, meta: dict):
+    meta_dir = os.path.join(_UPLOADS_DIR, file_id)
+    os.makedirs(meta_dir, exist_ok=True)
+    with open(os.path.join(meta_dir, "meta.json"), "w", encoding="utf-8") as f:
+        json.dump(meta, f, ensure_ascii=False, indent=2)
+
+async def upload_file(filename: str, content_bytes: bytes) -> str:
+    """上传文件，返回 JSON 字符串 { file_id, name, text, size }"""
+    file_id = str(uuid.uuid4())[:8]
+    file_dir = os.path.join(_UPLOADS_DIR, file_id)
+    os.makedirs(file_dir, exist_ok=True)
+
+    # 保存原始文件（带扩展名，方便系统识别类型）
+    orig_path = os.path.join(file_dir, filename)
+    with open(orig_path, "wb") as f:
+        f.write(content_bytes)
+
+    # 提取文本
+    text_content = ""
+    ext = os.path.splitext(filename)[1].lower()
+
+    try:
+        if ext == ".txt":
+            text_content = content_bytes.decode("utf-8", errors="replace")
+        elif ext == ".pdf":
+            import fitz
+            doc = fitz.open(stream=content_bytes, filetype="pdf")
+            for page in doc:
+                text_content += page.get_text()
+            doc.close()
+        elif ext in (".md", ".csv", ".json", ".xml", ".yaml", ".yml"):
+            text_content = content_bytes.decode("utf-8", errors="replace")
+        elif ext in (".docx", ".doc"):
+            try:
+                import io, docx
+                doc = docx.Document(io.BytesIO(content_bytes))
+                text_content = "\n".join(p.text for p in doc.paragraphs)
+            except Exception as e:
+                text_content = f"[Word 文档解析失败: {str(e)}]"
+        elif ext == ".pptx":
+            try:
+                import io
+                from pptx import Presentation
+                prs = Presentation(io.BytesIO(content_bytes))
+                texts = []
+                for slide in prs.slides:
+                    for shape in slide.shapes:
+                        if hasattr(shape, "text") and shape.text.strip():
+                            texts.append(shape.text)
+                text_content = "\n".join(texts)
+            except Exception as e:
+                text_content = f"[PPT 解析失败: {str(e)}]"
+        elif ext == ".odt":
+            try:
+                import zipfile, io
+                with zipfile.ZipFile(io.BytesIO(content_bytes)) as z:
+                    import xml.etree.ElementTree as ET
+                    ns = {"text": "urn:oasis:names:tc:opendocument:xmlns:text:1.0"}
+                    tree = ET.parse(io.BytesIO(z.read("content.xml")))
+                    paras = tree.findall(".//text:p", ns)
+                    text_content = "\n".join("".join(p.itertext()) for p in paras)
+            except Exception as e:
+                text_content = f"[ODT 解析失败: {str(e)}]"
+        elif ext == ".svg":
+            text_content = content_bytes.decode("utf-8", errors="replace")
+        elif ext == ".xlsx":
+            try:
+                import io, openpyxl
+                wb = openpyxl.load_workbook(io.BytesIO(content_bytes), read_only=True, data_only=True)
+                rows = []
+                for ws in wb.worksheets:
+                    for row in ws.iter_rows(values_only=True):
+                        rows.append("\t".join(str(c or "") for c in row))
+                text_content = "\n".join(rows)
+                wb.close()
+            except Exception as e:
+                text_content = f"[Excel 解析失败: {str(e)}]"
+        elif ext == ".xls":
+            # 旧版 Excel(.xls) 用 xlrd 解析（openpyxl 不支持 .xls）
+            try:
+                import io, xlrd
+                wb = xlrd.open_workbook(file_contents=content_bytes)
+                rows = []
+                for ws in wb.sheets():
+                    for r in range(ws.nrows):
+                        rows.append("\t".join(str(ws.cell_value(r, c)) for c in range(ws.ncols)))
+                text_content = "\n".join(rows) if rows else ""
+            except Exception as e:
+                text_content = f"[Excel(.xls) 解析失败: {str(e)}；建议将文件另存为 .xlsx 后重传]"
+        elif ext == ".doc":
+            # 旧版 Word(.doc) 无成熟解析库；给出清晰指引
+            text_content = "[Word(.doc) 旧格式暂不支持后端解析；建议将文件另存为 .docx 后重传]"
+        elif ext in (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff"):
+            text_content = f"[图片文件: {filename}]"
+        elif ext == ".svg":
+            text_content = content_bytes.decode("utf-8", errors="replace")
+        else:
+            # 其他格式尽量以 UTF-8 读
+            try:
+                text_content = content_bytes.decode("utf-8", errors="replace")
+            except:
+                text_content = f"[二进制文件，无法提取文本: {filename}]"
+    except Exception as e:
+        text_content = f"[文本提取失败: {str(e)}]"
+
+    # 保存提取文本
+    with open(os.path.join(file_dir, "text.txt"), "w", encoding="utf-8") as f:
+        f.write(text_content)
+
+    # 保存 metadata
+    meta = {
+        "file_id": file_id,
+        "name": filename,
+        "size": len(content_bytes),
+        "mime": ext,
+        "text_length": len(text_content),
+        "created": str(datetime.now()),
+    }
+    _save_upload_meta(file_id, meta)
+
+    return json.dumps({
+        "file_id": file_id,
+        "name": filename,
+        "text": text_content,  # 完整文本（模型上下文足够，不做截断）
+        "text_full_length": len(text_content),
+        "size": len(content_bytes),
+    }, ensure_ascii=False)
+
+
+async def delete_upload(file_id: str) -> str:
+    """删除上传的文件"""
+    file_dir = os.path.join(_UPLOADS_DIR, file_id)
+    if os.path.isdir(file_dir):
+        shutil.rmtree(file_dir)
+        return json.dumps({"status": "ok", "file_id": file_id})
+    return json.dumps({"error": f"文件 {file_id} 不存在"})
+
+
+async def get_upload_text(file_id: str) -> str:
+    """获取上传文件的完整文本内容"""
+    text_path = os.path.join(_UPLOADS_DIR, file_id, "text.txt")
+    if not os.path.isfile(text_path):
+        return ""
+    with open(text_path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+# ═══════════════════════════════════════════════
+# 笔记 CRUD
+# ═══════════════════════════════════════════════
+
+_NOTES_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "workspace", "_notes.json")
+
+def _read_notes():
+    os.makedirs(os.path.dirname(_NOTES_PATH), exist_ok=True)
+    if not os.path.isfile(_NOTES_PATH):
+        return []
+    with open(_NOTES_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def _write_notes(notes: list):
+    with open(_NOTES_PATH, "w", encoding="utf-8") as f:
+        json.dump(notes, f, ensure_ascii=False, indent=2)
+
+async def list_notes(branch_id: str = "") -> str:
+    notes = _read_notes()
+    if branch_id:
+        notes = [n for n in notes if n.get("branch_id", "") == branch_id]
+    return json.dumps({"status": "ok", "total": len(notes), "notes": notes}, ensure_ascii=False)
+
+async def add_note(title: str, content: str, branch_id: str = "") -> str:
+    notes = _read_notes()
+    note = {
+        "id": "note-" + str(int(__import__("time").time() * 1000)),
+        "title": title or "新笔记",
+        "content": content or "",
+        "branch_id": branch_id,
+        "createdAt": str(datetime.now()),
+        "updatedAt": str(datetime.now()),
+    }
+    notes.append(note)
+    _write_notes(notes)
+    return json.dumps({"status": "ok", "note_id": note["id"]}, ensure_ascii=False)
+
+async def update_note(note_id: str, title: str = None, content: str = None) -> str:
+    notes = _read_notes()
+    for n in notes:
+        if n["id"] == note_id:
+            if title is not None:
+                n["title"] = title
+            if content is not None:
+                n["content"] = content
+            n["updatedAt"] = str(datetime.now())
+            _write_notes(notes)
+            return json.dumps({"status": "ok"}, ensure_ascii=False)
+    return json.dumps({"error": "笔记不存在"})
+
+async def delete_note(note_id: str) -> str:
+    notes = _read_notes()
+    new_notes = [n for n in notes if n["id"] != note_id]
+    if len(new_notes) == len(notes):
+        return json.dumps({"error": "笔记不存在"})
+    _write_notes(new_notes)
+    return json.dumps({"status": "ok"}, ensure_ascii=False)
+
+async def move_note(note_id: str, direction: int) -> str:
+    """在所属对话(branch)内移动笔记顺序。direction<0 上移, >0 下移。"""
+    notes = _read_notes()
+    idx = next((i for i, n in enumerate(notes) if n.get("id") == note_id), -1)
+    if idx == -1:
+        return json.dumps({"error": "笔记不存在"})
+    branch_id = notes[idx].get("branch_id", "")
+    rng = range(idx - 1, -1, -1) if direction < 0 else range(idx + 1, len(notes))
+    for j in rng:
+        if notes[j].get("branch_id", "") == branch_id:
+            notes[idx], notes[j] = notes[j], notes[idx]
+            _write_notes(notes)
+            return json.dumps({"status": "ok"}, ensure_ascii=False)
+    msg = "已经是第一条" if direction < 0 else "已经是最后一条"
+    return json.dumps({"status": "ok", "message": msg}, ensure_ascii=False)
+
+
+# ═══════════════ 后端化：按 file_id 读取文件内容（供 agent 后续轮次调取） ═══════════════
+
+def _resolve_upload(file_id: str):
+    """返回 (dir, meta, orig_path) 或 (None,None,None)。"""
+    d = os.path.join(_UPLOADS_DIR, file_id)
+    mp = os.path.join(d, "meta.json")
+    if not os.path.isfile(mp):
+        return None, None, None
+    with open(mp, "r", encoding="utf-8") as f:
+        meta = json.load(f)
+    orig = os.path.join(d, meta.get("name", "file"))
+    return d, meta, orig
+
+
+async def get_file_text(file_id: str) -> str:
+    """按 file_id 读取后端已解析的文本（text.txt）。若没有则返回空串。"""
+    tp = os.path.join(_UPLOADS_DIR, file_id, "text.txt")
+    if os.path.isfile(tp):
+        with open(tp, "r", encoding="utf-8") as f:
+            return f.read()
+    return ""
+
+
+async def image_to_base64(file_id: str) -> str:
+    """按 file_id 读取原始图片并转为 dataURL(base64)。非图片返回空串。"""
+    import base64
+    _, meta, orig = _resolve_upload(file_id)
+    if not orig or not os.path.isfile(orig):
+        return ""
+    ext = (meta.get("name", "").split(".")[-1] or "").lower()
+    if ext not in ("jpg", "jpeg", "png", "gif", "webp", "bmp"):
+        return ""
+    with open(orig, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode()
+    mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+            "gif": "image/gif", "webp": "image/webp", "bmp": "image/bmp"}.get(ext, "application/octet-stream")
+    return f"data:{mime};base64,{b64}"
+
+
+async def get_upload_file(file_id: str):
+    """返回原始上传文件字节（后端统一读文件，前端不再解析）。"""
+    _, meta, orig = _resolve_upload(file_id)
+    if not orig or not os.path.isfile(orig):
+        return None
+    with open(orig, "rb") as f:
+        return f.read(), meta.get("name", "file"), (meta.get("name", "").split(".")[-1] or "")

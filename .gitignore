@@ -1,0 +1,39 @@
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# ── 虚拟环境 ──
+.venv/
+venv/
+backend/.venv/
+*.venv_*/
+
+# ── 运行数据（不提交） ──
+# workspace 是运行/上传/解析数据目录，整体不入库（上传文献、解析产物、对话历史、测试文件）
+workspace/
+backend/workspace/
+backend/_test_astream.py
+backend/_test_stream.py
+test_sse.py
+backend/test_agent.py
+migrate.html
+*.log
+mineru_processing.log
+
+# ── 配置/密钥（不提交） ──
+.env
+**/mineru_config.json
+**/*_secret*.json
+
+# ── Node / 前端构建（如适用） ──
+node_modules/
+
+# ── 编辑器 / 系统 ──
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -1,0 +1,426 @@
+/* ==================== 智能体配置面板 ==================== */
+.agent-config-panel {
+    display: none;
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--border-color, #e0e0e0);
+    border-radius: 12px;
+    padding: 0;
+    margin-bottom: 0.5rem;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+    max-height: 60vh;
+    overflow-y: auto;
+}
+.agent-config-panel.active {
+    display: block;
+}
+
+.config-panel-header {
+    display: flex;
+    align-items: center;
+    padding: 0.6rem 0.8rem;
+    border-bottom: 1px solid var(--border-color, #e0e0e0);
+    font-size: 0.9rem;
+    font-weight: 600;
+    gap: 0.5rem;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--card-bg, #fff);
+}
+.config-panel-title {
+    flex: 1;
+}
+
+.config-save-btn {
+    background: var(--primary, #185ab4);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 0.25rem 0.7rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+    white-space: nowrap;
+}
+.config-save-btn:hover {
+    opacity: 0.85;
+}
+
+.neo4j-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 4px;
+}
+.neo4j-status-dot.connected {
+    background: #22c55e;
+    box-shadow: 0 0 4px rgba(34,197,94,0.5);
+}
+.neo4j-status-dot.disconnected {
+    background: #ef4444;
+    box-shadow: 0 0 4px rgba(239,68,68,0.3);
+}
+
+.config-panel-body {
+    padding: 0.6rem 0.8rem;
+}
+
+.config-section {
+    margin-bottom: 0.6rem;
+}
+.config-section:last-child {
+    margin-bottom: 0;
+}
+.config-section-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--gray, #666);
+    margin-bottom: 0.3rem;
+    padding-bottom: 0.2rem;
+    border-bottom: 1px solid var(--border-color, #e0e0e0);
+}
+
+.config-option {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.25rem 0;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+.config-option input[type="checkbox"] {
+    margin: 0;
+    accent-color: var(--primary, #4361ee);
+}
+.config-option-label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+.config-option-desc {
+    font-size: 0.75rem;
+    color: var(--gray, #999);
+}
+
+.config-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0;
+    font-size: 0.85rem;
+}
+.config-slider {
+    flex: 1;
+    max-width: 120px;
+    accent-color: var(--primary, #4361ee);
+}
+.config-slider-value {
+    font-size: 0.8rem;
+    font-weight: 600;
+    min-width: 20px;
+    text-align: center;
+}
+
+/* ==================== 中间推理步骤卡片 ==================== */
+.message.agent-thought {
+    background: rgba(67, 97, 238, 0.06);
+    border-left: 3px solid var(--primary, #4361ee);
+    border-radius: 8px;
+    margin: 0.3rem 0;
+    padding: 0.5rem 0.8rem;
+    max-width: 90%;
+}
+.agent-step-header {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--gray, #666);
+    margin-bottom: 0.25rem;
+    letter-spacing: 0.3px;
+}
+.agent-thought-content {
+    font-size: 0.85rem;
+    color: var(--text, #333);
+    line-height: 1.5;
+}
+
+.message.tool-call {
+    background: rgba(16, 185, 129, 0.05);
+    border-left: 3px solid #10b981;
+    border-radius: 8px;
+    margin: 0.3rem 0;
+    padding: 0.5rem 0.8rem;
+    max-width: 90%;
+}
+.tool-input-block,
+.tool-result-block {
+    margin-top: 0.3rem;
+}
+.tool-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--gray, #666);
+    margin-bottom: 0.15rem;
+}
+.tool-code {
+    background: rgba(0,0,0,0.04);
+    border-radius: 4px;
+    padding: 0.3rem 0.5rem;
+    font-size: 0.75rem;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    white-space: pre-wrap;
+    word-break: break-all;
+    overflow-x: auto;
+    max-height: 120px;
+    overflow-y: auto;
+    margin: 0;
+    line-height: 1.4;
+}
+.tool-result {
+    background: rgba(0,0,0,0.03);
+    border-radius: 4px;
+    padding: 0.3rem 0.5rem;
+    font-size: 0.75rem;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    white-space: pre-wrap;
+    word-break: break-all;
+    overflow-x: auto;
+    max-height: 100px;
+    overflow-y: auto;
+    margin: 0;
+    line-height: 1.4;
+    color: var(--gray, #666);
+}
+
+.agent-source-tag {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--gray, #666);
+    margin-bottom: 0.4rem;
+    padding: 0.15rem 0.4rem;
+    background: rgba(67, 97, 238, 0.08);
+}
+
+/* ==================== 推理过程切换按钮 ==================== */
+.agent-reasoning-toggle {
+    padding: 0.35rem 0.6rem;
+    margin: 0.15rem 0;
+    font-size: var(--font-size-thinking);
+    font-weight: 600;
+    color: var(--primary, #4361ee);
+    cursor: pointer;
+    border-radius: 6px;
+    background: rgba(67, 97, 238, 0.04);
+    border: 1px solid rgba(67, 97, 238, 0.1);
+    user-select: none;
+    transition: background 0.2s;
+    max-width: fit-content;
+}
+.agent-reasoning-toggle:hover {
+    background: rgba(67, 97, 238, 0.08);
+}
+
+/* ==================== 推理步骤容器 ==================== */
+#ephemeral-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    max-width: 90%;
+}
+
+/* ==================== 智能体思考步骤 ==================== */
+.message.agent-thought .streaming-thought {
+    font-size: 0.82rem;
+    color: var(--text, #333);
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    min-height: 1.2em;
+    margin-top: 0.1rem;
+}
+
+/* ==================== 步骤内的模型推理框 ==================== */
+.agent-reasoning-box {
+    margin-bottom: 0.1rem;
+}
+.agent-reasoning-box .reasoning-toggle {
+    font-size: var(--font-size-thinking);
+    font-weight: 600;
+    color: #8b5cf6;
+    cursor: pointer;
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    background: rgba(139, 92, 246, 0.04);
+    display: inline-block;
+    user-select: none;
+}
+.agent-reasoning-box .reasoning-toggle:hover {
+    background: rgba(139, 92, 246, 0.08);
+}
+.agent-reasoning-box .reasoning-content {
+    font-size: var(--font-size-thinking);
+    color: #7c5cbf;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: rgba(139, 92, 246, 0.02);
+    border-left: 2px solid rgba(139, 92, 246, 0.15);
+    padding: 0.2rem 0.4rem;
+    margin-top: 0.1rem;
+    border-radius: 0 3px 3px 0;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+/* ==================== 步骤指示（思考中） ==================== */
+.message.step-indicator {
+    background: rgba(99, 102, 241, 0.03);
+    border-left: 3px solid #6366f1;
+    border-radius: 6px;
+    margin: 0.1rem 0;
+    padding: 0.3rem 0.6rem;
+    max-width: 90%;
+}
+
+/* ==================== 推理步骤容器（最终回答内） ==================== */
+.reasoning-steps-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 0.15rem 0;
+}
+.reasoning-steps-container .agent-step-header {
+    font-size: var(--font-size-thinking);
+    font-weight: 600;
+    color: var(--gray, #666);
+    padding: 0.1rem 0;
+}
+.reasoning-steps-container .streaming-step-content {
+    font-size: var(--font-size-thinking);
+    color: var(--text, #333);
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin-bottom: 0.15rem;
+}
+.reasoning-steps-container .tool-code {
+    font-size: var(--font-size-thinking);
+    background: rgba(0,0,0,0.02);
+    border-radius: 3px;
+    padding: 0.2rem 0.4rem;
+    margin: 0.05rem 0 0.15rem;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+.reasoning-steps-container .obs-content {
+    font-size: var(--font-size-thinking);
+    color: var(--gray, #666);
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: rgba(245,158,11,0.03);
+    border-left: 2px solid #f59e0b;
+    padding: 0.2rem 0.4rem;
+    margin-bottom: 0.15rem;
+    border-radius: 0 3px 3px 0;
+}
+.reasoning-steps-container .obs-content.err {
+    border-left-color: #ef4444;
+    background: rgba(239,68,68,0.03);
+}
+.reasoning-steps-container .agent-reasoning-box {
+    margin-bottom: 0.1rem;
+}
+
+/* ==================== 阅读技能卡片 ==================== */
+.message.read-skill {
+    background: rgba(139, 92, 246, 0.06);
+    border-left: 3px solid #8b5cf6;
+    border-radius: 8px;
+    margin: 0.3rem 0;
+    padding: 0.5rem 0.8rem;
+    max-width: 90%;
+}
+.skill-preview {
+    margin-top: 0.3rem;
+    font-size: 0.8rem;
+    color: var(--gray, #666);
+    line-height: 1.5;
+    background: rgba(139, 92, 246, 0.04);
+    border-radius: 4px;
+    padding: 0.3rem 0.5rem;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+/* ==================== Observation 卡片 ==================== */
+.message.agent-observation {
+    background: rgba(245, 158, 11, 0.06);
+    border-left: 3px solid #f59e0b;
+    border-radius: 8px;
+    margin: 0.3rem 0;
+    padding: 0.5rem 0.8rem;
+    max-width: 90%;
+}
+.obs-content {
+    margin-top: 0.2rem;
+    font-size: 0.8rem;
+    color: var(--gray, #666);
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+/* ==================== Neo4j 连接表单（面板内） ==================== */
+.neo4j-connect-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+.neo4j-input {
+    width: 100%;
+    padding: 0.35rem 0.5rem;
+    border: 1px solid var(--border-color, #e0e0e0);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    background: var(--card-bg, #fff);
+    color: var(--text, #333);
+    outline: none;
+    transition: border-color 0.2s;
+}
+.neo4j-input:focus {
+    border-color: var(--primary, #4361ee);
+}
+.neo4j-row {
+    display: flex;
+    gap: 0.35rem;
+}
+.neo4j-row .neo4j-input {
+    flex: 1;
+}
+.neo4j-connect-btn {
+    align-self: flex-start;
+    padding: 0.3rem 0.8rem;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    background: var(--primary, #4361ee);
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.neo4j-connect-btn:hover {
+    background: #3651d4;
+}
+.neo4j-connect-btn:disabled {
+    background: #94a3b8;
+    cursor: not-allowed;
+}
+.neo4j-connect-msg {
+    font-size: 0.75rem;
+    margin-left: 0.3rem;
+}

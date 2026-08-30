@@ -1,0 +1,24 @@
+{
+  "skills": [
+    {
+      "name": "graph-guide",
+      "description": "催化降解图谱查询指引 — 图谱结构、别名映射、查询策略、回答格式",
+      "version": "1.0.0"
+    },
+    {
+      "name": "self-modify",
+      "description": "自我修改指南 — 如何用 skill_write 创建/更新技能（含子文件），以及在完全访问模式下如何修改项目代码。加速定位与修改。",
+      "version": "1.0.0"
+    },
+    {
+      "name": "demo-skill",
+      "description": "演示技能 — 用于展示如何自我生成技能，包含一个示例参考文件",
+      "version": "1.0.0"
+    },
+    {
+      "name": "mineru-agent-parse",
+      "description": "使用 mineru_parse 工具将 PDF 解析为 Markdown，支持单文件或文件夹批量（MinerU v4），需配置 MinerU Token",
+      "version": "3.0.0"
+    }
+  ]
+}
