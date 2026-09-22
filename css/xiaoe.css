@@ -9,8 +9,20 @@
 #xiaoe-root {
     position: fixed; z-index: 3500; left: 22px; bottom: 22px; width: 104px; height: 104px;
     cursor: grab; user-select: none; -webkit-user-drag: none;
+    /* ⚠️ 手机端拖拽必需：不写 touch-action:none 的话，手指一滑会被浏览器
+       当成页面滚动 → 触发 pointercancel，pointermove 收不到 → 小e 拖不动。 */
+    touch-action: none;
+    -webkit-touch-callout: none;
     /* 拖拽时提权，避免被其他浮层盖住 */
     will-change: transform;
+}
+/* 小e 本体与内部元素都不参与浏览器手势（拖动/长按菜单） */
+#xiaoe-root .xiaoe-stage,
+#xiaoe-root svg,
+#xiaoe-root .xiaoe-body {
+    touch-action: none;
+    -webkit-touch-callout: none;
+    user-select: none;
 }
 #xiaoe-root.xiaoe-dragging { cursor: grabbing; z-index: 3600; }
 #xiaoe-root.xiaoe-hidden { display: none; }

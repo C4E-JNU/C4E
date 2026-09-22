@@ -414,6 +414,11 @@
 
     /* 抽屉里的「全屏沉浸」按钮在手机上无意义 */
     #full-screen-toggle { display: none !important; }
+    /* 手机端隐藏「展开/收缩侧栏」箭头按钮（.sidebar-toggle-btn）
+       —— 手机改成了 DeepSeek 同款抽屉，汉堡按钮已负责开合，
+          这个箭头会与抽屉行为打架（bug），故整体隐藏。 */
+    .sidebar-toggle-btn,
+    #sidebar-toggle-btn { display: none !important; }
     /* 侧栏内的搜索/过滤行：手机上保持可用但紧凑 */
     .sidebar-header { padding: 10px !important; }
     .sidebar-search-area { margin: 6px 0 !important; }

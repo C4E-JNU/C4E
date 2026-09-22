@@ -108,15 +108,18 @@
     function _bindInteractions(el) {
         // —— 指针按下：记录起点，准备拖拽 ——
         el.addEventListener('pointerdown', function (e) {
-            if (e.button !== 0) return;
+            // 手机上触摸事件的 button 可能是 0/-1/undefined，不能只放行 0（否则触摸拖不动）
+            if (typeof e.button === 'number' && e.button > 0) return;
             _dragging = true; _moved = false;
             _startX = e.clientX; _startY = e.clientY;
             var r = el.getBoundingClientRect();
             _offX = e.clientX - r.left; _offY = e.clientY - r.top;
-            el.setPointerCapture(e.pointerId);
+            try { el.setPointerCapture(e.pointerId); } catch (err) {}
             el.classList.add('xiaoe-dragging');
             _wake();
-        });
+            // 阻止触摸默认行为（页面滚动），否则移动端 pointermove 会被取消
+            if (e.cancelable) { try { e.preventDefault(); } catch (err) {} }
+        }, { passive: false });
 
         // —— 指针移动：超过阈值才算拖拽 ——
         el.addEventListener('pointermove', function (e) {
@@ -136,6 +139,14 @@
                 el.style.top = y + 'px';
                 if (_bubble) _placeBubble();
             }
+        });
+
+        // —— 手势被浏览器打断（手机常见）：安全收尾，避免卡在拖拽态 ——
+        el.addEventListener('pointercancel', function () {
+            if (!_dragging) return;
+            _dragging = false;
+            el.classList.remove('xiaoe-dragging');
+            if (_moved) _anim('land', 700);
         });
 
         // —— 指针抬起：区分「拖拽落地」与「点击互动」 ——
@@ -207,7 +218,7 @@
 
     // 每次互动（戳/敲打/连击/拖拽落地）都有 5% 概率额外触发一次随机天气，
     // 给"玩小e"一点意外惊喜；右键仍可手动切（保留可控性）。
-    var WEATHER_CHANCE = 0.05;
+    var WEATHER_CHANCE = 0.025;      // 2.5%（原 5%，用户要求降低一半）
     var _bonusCooling = false;          // 避免同一次互动里连续触发
 
     function _maybeRandomWeather() {
@@ -219,7 +230,7 @@
         var w = WEATHERS[Math.floor(Math.random() * WEATHERS.length)];
         var dur = 3000 + Math.floor(Math.random() * 2000);
         _setWeather(w.k, dur);
-        if (typeof showToast === 'function') showToast('小e: ' + w.tip + '（随机惊喜✨）', 'info');
+        if (typeof showToast === 'function') showToast('小e: ' + w.tip, 'info');
         // 小e 顺便冒个反应，让"惊喜"更明显
         _pulseEmote(['✨']);
     }
