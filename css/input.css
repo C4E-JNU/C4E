@@ -38,7 +38,25 @@
         }
 
              body.full-screen-mode header {
-                     display: none;
+                     display: block;
+                     position: fixed;
+                     top: 0; left: 0; right: 0;
+                     z-index: 2100;               /* 高于 chat-section(2000) */
+                     transform: translateY(-100%);  /* 完全收起，靠下方热区触发 */
+                     transition: transform 0.25s ease;
+                     box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+                 }
+             /* 20px 隐形悬停热区：鼠标移到顶部一带即滑出状态栏 */
+             body.full-screen-mode header::after {
+                     content: '';
+                     position: absolute;
+                     left: 0; right: 0;
+                     top: 100%;
+                     height: 20px;
+                 }
+             body.full-screen-mode header:hover,
+             body.full-screen-mode header:focus-within {
+                     transform: translateY(0);
                  }
 
                  /* 全屏模式下弹窗层级提升 */

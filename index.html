@@ -4,7 +4,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>C4EAI | RAGAgent</title>
+    <title>C4EAI · Shared Wiki</title>
+    <!-- 站点图标（标签页 / 书签 / 手机主屏）：C4E 标志，透明背景（跟随浏览器明暗主题）
+         优先 SVG（矢量、任意缩放不虚），不支持 SVG 的浏览器回退 PNG / ICO -->
+    <link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">
+    <link rel="icon" type="image/x-icon" href="assets/icons/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/c4e-logo-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/icons/c4e-logo-16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png">
     <!--与代码高亮和Markdown渲染相关的CDN-->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js"></script>
@@ -23,15 +30,16 @@
     <script src="https://unpkg.com/neo4j-driver@5"></script>
 
     <!-- 本地样式文件 -->
-    <link rel="stylesheet" href="css/variables.css?v=3">
-    <link rel="stylesheet" href="css/reset.css?v=3">
-    <link rel="stylesheet" href="css/layout.css?v=3">
-    <link rel="stylesheet" href="css/sidebar.css?v=3">
-    <link rel="stylesheet" href="css/messages.css?v=3">
-    <link rel="stylesheet" href="css/input.css?v=3">
-    <link rel="stylesheet" href="css/modals.css?v=3">
-    <link rel="stylesheet" href="css/components.css?v=3">
-    <link rel="stylesheet" href="css/agent.css?v=3">
+    <link rel="stylesheet" href="css/variables.css?v=5">
+    <link rel="stylesheet" href="css/reset.css?v=4">
+    <link rel="stylesheet" href="css/layout.css?v=12">
+    <link rel="stylesheet" href="css/sidebar.css?v=6">
+    <link rel="stylesheet" href="css/messages.css?v=4">
+    <link rel="stylesheet" href="css/input.css?v=7">
+    <link rel="stylesheet" href="css/modals.css?v=4">
+    <link rel="stylesheet" href="css/xiaoe.css?v=5">
+    <link rel="stylesheet" href="css/components.css?v=5">
+    <link rel="stylesheet" href="css/agent.css?v=4">
 
 </head>
 
@@ -66,10 +74,12 @@
                         onclick="setGlobalTheme('macaron-blue')"></div>
                 </div>
 
-                <!-- 数据库上传按钮 -->
-                <button class="db-analysis-btn" id="db-analysis-btn">
-                    🗄️ 数据库上传
+                <!-- 数据库按钮（直达数据库面板） -->
+                <button class="db-analysis-btn" id="db-analysis-btn" style="font-size:.78rem;padding:.28rem .7rem;margin-right:8px;">
+                    🗄️ 数据库
                 </button>
+                <!-- 登录/账号芯片插槽（auth.js 渲染） -->
+                <span id="auth-chip-slot" style="display:inline-flex;align-items:center;"></span>
             </div>
         </div>
     </header>
@@ -84,32 +94,23 @@
         </div>
     </div>
 
-    <!-- 数据库管理模态框 -->
-    <div class="modal database-modal" id="database-modal">
-        <div class="modal-content" style="max-width: 600px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
-                <h3 style="margin:0;">🗄️ 知识库管理</h3>
-                <span id="database-status-badge" style="font-size:0.85rem;color:var(--gray);">0 个文档</span>
-            </div>
-
-            <!-- 文档列表 -->
-            <div id="db-doc-list" style="max-height:300px;overflow-y:auto;margin-bottom:1rem;">
-                <div style="text-align:center;padding:2rem;color:var(--gray);font-size:0.9rem;">
-                    暂无文档，点击下方按钮上传
-                </div>
-            </div>
-
-            <!-- 上传区域 -->
-            <div style="display:flex;gap:0.5rem;margin-bottom:1rem;">
-                <button class="key-btn" id="db-upload-btn" style="flex:1;">📤 上传文档</button>
-                <input type="file" id="db-file-input" style="display:none;"
-                    accept=".txt,.md,.js,.py,.c,.cpp,.h,.html,.css,.json,.csv,.log,.yaml,.yml,.sql,.sh,.xml,.ts,.java,.go,.rs,.docx,.pdf">
-            </div>
-
-            <div style="text-align:center;margin-top:0.5rem;">
-                <button class="chat-btn" id="cancel-database-btn">关闭</button>
+    <!-- 数据库面板（浮动窗，与笔记面板同形态；条目按用户分组展示） -->
+    <div class="notes-panel" id="database-panel" style="top:140px;left:auto;right:40px;width:520px;height:600px;">
+        <div class="notes-panel-header" id="db-panel-header">
+            <span class="notes-panel-title">🗄️ 数据库</span>
+            <span id="database-status-badge" style="font-size:0.78rem;color:var(--gray);margin-left:.5rem;">0 个条目</span>
+            <div class="notes-panel-actions">
+                <button id="db-upload-btn" title="上传文档（自动建条目）">📤 上传</button>
+                <button id="db-add-entry-btn" title="新建空条目">＋ 条目</button>
+                <button id="db-close-btn" class="notes-close-btn" title="关闭">×</button>
             </div>
         </div>
+        <input type="file" id="db-file-input" style="display:none;"
+            accept="image/*,.txt,.md,.js,.py,.c,.cpp,.h,.html,.css,.json,.csv,.log,.yaml,.yml,.sql,.sh,.xml,.ts,.java,.go,.rs,.docx,.pdf,.pptx,.odt,.rtf,.toml,.ini,.tex">
+        <div class="notes-empty" id="db-empty" style="display:none;">
+            <span>暂无条目</span>
+        </div>
+        <div class="notes-list" id="db-doc-list" style="flex:1;overflow-y:auto;padding:0.6rem;"></div>
     </div>
 
     <!-- 设置面板和遮罩 -->
@@ -123,20 +124,36 @@
             <div class="settings-group">
                 <h3>模型参数</h3>
 
-                            <!-- 文件打开方式设置 -->
+                            <!-- 文件打开方式设置（三选一：后端打开 / 浏览器新标签 / 应用内浮窗） -->
                             <div class="setting-item">
                                 <label class="setting-label">
                                     文件打开方式
                                     <span class="setting-value" id="file-open-mode-value">后端打开</span>
                                 </label>
+                                <div class="mode-seg" id="file-open-mode-group">
+                                    <button type="button" class="mode-seg-btn" data-mode="backend">后端打开</button>
+                                    <button type="button" class="mode-seg-btn" data-mode="browser">浏览器新标签</button>
+                                    <button type="button" class="mode-seg-btn" data-mode="float">应用内浮窗</button>
+                                </div>
+                                <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
+                                    后端打开：用本机默认应用（Word/Excel/看图器）打开；浏览器新标签：新标签页预览/下载；应用内浮窗：在页面内浮窗预览，不跳出应用
+                                </div>
+                            </div>
+
+                            <!-- 桌宠小e 开关 -->
+                            <div class="setting-item">
+                                <label class="setting-label">
+                                    小e 桌宠
+                                    <span class="setting-value" id="xiaoe-enabled-value">已开启</span>
+                                </label>
                                 <div style="margin-top: 0.5rem;">
                                     <label class="switch">
-                                        <input type="checkbox" id="file-open-mode-toggle">
+                                        <input type="checkbox" id="toggle-xiaoe" checked>
                                         <span class="slider-round"></span>
                                     </label>
                                 </div>
                                 <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
-                                    关闭：后端打开（文件在本机系统用默认应用打开）；开启：浏览器打开（直接预览/下载）
+                                    页面上那只云朵团。点它聊天（问功能/用法），双击敲打、连点发飙、拖着玩、右键换天气；60 秒不理它会睡着。小e 不保存任何记录，关掉即忘
                                 </div>
                             </div>
 
@@ -176,6 +193,28 @@
                     <input type="range" min="1" max="50" step="1" value="10" class="slider" id="context-length">
                     <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
                         模型记住的对话轮次数量
+                    </div>
+                </div>
+
+                <!-- 超时保护（三级）：催促 → 警告 → 终止 -->
+                <div class="setting-item">
+                    <label class="setting-label">⏱️ 超时保护（秒，0=关闭该级）</label>
+                    <div style="display:flex;gap:.5rem;align-items:center;margin-top:.3rem;flex-wrap:wrap;">
+                        <label style="font-size:.82rem;">催促
+                            <input type="number" id="timeout-nudge" min="0" max="3600" step="10" value="120"
+                                   style="width:76px;margin-left:4px;padding:2px 6px;">
+                        </label>
+                        <label style="font-size:.82rem;">警告
+                            <input type="number" id="timeout-warn" min="0" max="3600" step="10" value="240"
+                                   style="width:76px;margin-left:4px;padding:2px 6px;">
+                        </label>
+                        <label style="font-size:.82rem;">终止
+                            <input type="number" id="timeout-abort" min="0" max="7200" step="10" value="420"
+                                   style="width:76px;margin-left:4px;padding:2px 6px;">
+                        </label>
+                    </div>
+                    <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
+                        催促=注入「尽快收尾」提示；警告=注入「立即作答」提示；终止=强制结束并返回超时说明
                     </div>
                 </div>
 
@@ -307,40 +346,58 @@
     <main class="container">
         <!-- 英雄区域 -->
         <section class="hero">
-            <h1>C4E-CatMind</h1>
-            <p>服务于环境催化材料研究的领域智能体，旨在为从事环境催化材料的设计、评估与应用的研究者提供智能辅助</p>
-            <button id="start-experience" class="cta-button">立即开始对话 →</button>
+            <div style="text-align:center;">
+                <h1 style="margin:0;font-size:4.8rem;line-height:1.05;">C4EAI</h1>
+                <div style="text-align:center;font-size:1.35rem;letter-spacing:.22em;text-transform:uppercase;opacity:.75;margin-top:.3rem;">Shared Wiki AI Agent</div>
+            </div>
+            <div><button id="start-experience" class="cta-button" style="margin-top:2.2rem;">立即开始对话 →</button></div>
         </section>
 
         <!-- 模型选择区 -->
         <section class="models-section" id="models-section">
             <!-- 智慧瓷砖：常驻显示 -->
             <div class="banner-decoration">
-                <div class="decor-tile">
-                    <div class="decor-icon-container">🧠</div>
+                <div class="decor-tile open" onclick="this.classList.toggle('open')">
+                    <div class="decor-icon-container">🕸️</div>
                     <div class="decor-info">
-                        <div class="decor-title">多模态智能</div>
+                        <div class="decor-title">GraphRAG 图谱检索</div>
+                    </div>
+                    <div class="decor-detail">
+                        <span class="dot">●</span>组内协作知识图谱（Neo4j）：跨文献实体与关系检索，结构化汇总任意主题的参数与结论。<br>
+                        <span class="dot">●</span>在智能体配置面板连接图谱后直接提问，如「汇总 A 与 B 相关的研究条件与效果」。
                     </div>
                     <div class="decor-aurora"></div>
                 </div>
-                <div class="decor-tile">
-                    <div class="decor-icon-container">⚡</div>
+                <div class="decor-tile open" onclick="this.classList.toggle('open')">
+                    <div class="decor-icon-container">🤖</div>
                     <div class="decor-info">
-                        <div class="decor-title">数据多重渲染</div>
+                        <div class="decor-title">多智能体协作</div>
+                    </div>
+                    <div class="decor-detail">
+                        <span class="dot">●</span>派发专有子智能体（核查/提取/验证）并行处理互相独立的子任务，过程实时流式可见。<br>
+                        <span class="dot">●</span>勾选工具 delegate_task，在配置中调节轮次与并发，如「并行核对这 N 篇文献的数据」。
                     </div>
                     <div class="decor-aurora"></div>
                 </div>
-                <div class="decor-tile">
+                <div class="decor-tile open" onclick="this.classList.toggle('open')">
                     <div class="decor-icon-container">📚</div>
                     <div class="decor-info">
-                        <div class="decor-title">深度检索增强</div>
+                        <div class="decor-title">文献解析·翻译·对账</div>
+                    </div>
+                    <div class="decor-detail">
+                        <span class="dot">●</span>对任何 PDF：解析归档为全文与按图注编号的图库，全文中译网格排版写进笔记，图表段落三轨对账出矛盾台账。<br>
+                        <span class="dot">●</span>上传 PDF 后说「解析归档」，再按需说「全文翻译入笔记」「对账找矛盾」。
                     </div>
                     <div class="decor-aurora"></div>
                 </div>
-                <div class="decor-tile">
-                    <div class="decor-icon-container">🔒</div>
+                <div class="decor-tile open" onclick="this.classList.toggle('open')">
+                    <div class="decor-icon-container">☁️</div>
                     <div class="decor-info">
-                        <div class="decor-title">隐私数据加密</div>
+                        <div class="decor-title">组内共享知识库</div>
+                    </div>
+                    <div class="decor-detail">
+                        <span class="dot">●</span>面向任何文献的通用组内笔记与共享数据库：上传自动解析入向量索引，全员语义检索，笔记支持富文本与图片。<br>
+                        <span class="dot">●</span>登录后在数据库面板上传，或对话中说「把这份文件共享给组里」「在共享库里搜…」。
                     </div>
                     <div class="decor-aurora"></div>
                 </div>
@@ -430,6 +487,10 @@
                     <label class="form-label">默认Base URL</label>
                     <input type="text" class="form-input" id="new-provider-url" placeholder="http://localhost:11434/v1">
                 </div>
+                <div class="form-group-item">
+                    <label class="form-label">简介（可选）</label>
+                    <input type="text" class="form-input" id="new-provider-desc" placeholder="一句话说明这个服务商">
+                </div>
                 <div class="modal-actions">
                     <button class="chat-btn" id="cancel-add-provider">取消</button>
                     <button class="save-config-btn" id="confirm-add-provider">创建</button>
@@ -488,8 +549,11 @@
                 </div>
             </div>
 
-             <!-- 侧边栏切换按钮 (仅全屏模式显示，提到 chat-main 外面避免被遮挡) -->
-             <button id="sidebar-toggle-btn" class="sidebar-toggle-btn" title="切换侧边栏">
+            <!-- 左右占比分隔拖条（历史侧栏 ↔ 聊天） -->
+            <div class="sidebar-resizer" id="sidebar-resizer" title="拖动调整历史/聊天左右占比"></div>
+
+            <!-- 侧边栏切换按钮 (仅全屏模式显示，提到 chat-main 外面避免被遮挡) -->
+            <button id="sidebar-toggle-btn" class="sidebar-toggle-btn" title="切换侧边栏">
                  <!-- Icon via CSS -->
              </button>
 
@@ -499,6 +563,7 @@
                      <span class="notes-panel-title">📝 对话笔记</span>
                      <div class="notes-panel-actions">
                          <button id="notes-add-btn">＋ 添加笔记</button>
+                         <button id="notes-close-btn" class="notes-close-btn" title="关闭笔记">×</button>
                      </div>
                  </div>
                  <div class="notes-empty" id="notes-empty">
@@ -514,8 +579,9 @@
                     <div class="messages-container" id="messages-container">
                         <div class="message assistant" data-id="welcome">
                             <div class="message-content">
-                                您好！我是RAGAgent，基于多模型的智能助手。<br>
-                                请先选择模型并配置API密钥，然后开始对话。
+                                您好！我是 <b>C4EAI · Shared Wiki</b> —— 实验室协作知识与文献智能体。<br>
+                                我能帮您：<b>① GraphRAG 图谱检索</b>（Neo4j 协作知识图谱）｜<b>② 多智能体协作</b>（专有子智能体并行处理）｜<b>③ 数据分析与代码执行</b>｜<b>④ 组内共享数据库</b>（文献/笔记上传与语义检索）｜<b>⑤ RAG 知识检索</b>｜<b>⑥ 高阶文献翻译</b>（MinerU 解析归档→图文并茂中文全译）｜<b>⑦ 文献内容审查</b>（图/表/段落三轨对账·矛盾裁决）｜<b>⑧ 联网搜索与文件处理</b>。<br>
+                                直接提问即可；点输入框左侧 📎 上传文献。模型默认「本地千问」，免费不限量。
                             </div>
                         </div>
                     </div>
@@ -570,6 +636,52 @@
                                             <option value="50">50 轮</option>
                                             <option value="0">无限</option>
                                         </select>
+                                    </div>
+                                </div>
+                                <!-- 子智能体（delegate_task）配置 -->
+                                <div class="config-section">
+                                    <div class="config-section-title">🤖 子智能体</div>
+                                    <label class="config-option" style="margin-bottom:.5rem;">
+                                        <input type="checkbox" id="subagent-enabled" checked>
+                                        <span class="config-option-label">启用子智能体
+                                            <span class="config-option-desc">主智能体可派子智能体并行处理独立子任务（需在下方工具区勾选 delegate_task）</span>
+                                        </span>
+                                    </label>
+                                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem .6rem;">
+                                        <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">轮次/个
+                                            <input type="number" id="subagent-rounds" min="1" max="20" step="1" value="4"
+                                                   class="neo4j-input" style="width:100%;box-sizing:border-box;">
+                                        </label>
+                                        <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">并发上限
+                                            <input type="number" id="subagent-parallel" min="1" max="8" step="1" value="2"
+                                                   class="neo4j-input" style="width:100%;box-sizing:border-box;">
+                                        </label>
+                                        <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">最多子任务
+                                            <input type="number" id="subagent-maxtasks" min="1" max="8" step="1" value="4"
+                                                   class="neo4j-input" style="width:100%;box-sizing:border-box;">
+                                        </label>
+                                    </div>
+                                    <div style="font-size:.72rem;color:var(--gray);line-height:1.5;margin-top:.4rem;">
+                                        <b>轮次/个</b>＝每个子智能体内部最多跑几轮工具循环；<br>
+                                        <b>并发上限</b>＝同时最多并行运行几个子智能体（其余排队等待）；<br>
+                                        <b>最多子任务</b>＝一次 delegate 最多接受几个子任务，超出的会被丢弃。
+                                    </div>
+                                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem .6rem;margin-top:.6rem;">
+                                        <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">催促(秒)
+                                            <input type="number" id="subagent-nudge" min="0" max="3600" step="10" value="60"
+                                                   class="neo4j-input" style="width:100%;box-sizing:border-box;">
+                                        </label>
+                                        <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">警告(秒)
+                                            <input type="number" id="subagent-warn" min="0" max="3600" step="10" value="150"
+                                                   class="neo4j-input" style="width:100%;box-sizing:border-box;">
+                                        </label>
+                                        <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">终止(秒)
+                                            <input type="number" id="subagent-abort" min="30" max="3600" step="10" value="300"
+                                                   class="neo4j-input" style="width:100%;box-sizing:border-box;">
+                                        </label>
+                                    </div>
+                                    <div style="font-size:.72rem;color:var(--gray);line-height:1.5;margin-top:.4rem;">
+                                        子智能体三级超时（秒，0=关闭该级，每个子智能体独立计时）：催促→注入「尽快收尾」；警告→注入「立即给结论」；终止→中断并返回已完成部分。
                                     </div>
                                 </div>
                                 <div class="config-section">
@@ -674,8 +786,12 @@
                                         <span class="config-option-label">search_history <span class="config-option-desc">🆕 搜索历史对话</span></span>
                                     </label>
                                     <label class="config-option">
-                                        <input type="checkbox" id="tool-search-knowledge" checked>
-                                        <span class="config-option-label">search_knowledge <span class="config-option-desc">🆕 搜索知识库</span></span>
+                                        <input type="checkbox" id="tool-shared-search" checked>
+                                        <span class="config-option-label">shared_search <span class="config-option-desc">🔍 检索共享数据库（云端 RAG）</span></span>
+                                    </label>
+                                    <label class="config-option">
+                                        <input type="checkbox" id="tool-shared-upload" checked>
+                                        <span class="config-option-label">shared_upload <span class="config-option-desc">⬆️ 上传文件到共享数据库</span></span>
                                     </label>
                                     <label class="config-option">
                                         <input type="checkbox" id="tool-mineru" checked>
@@ -757,28 +873,33 @@
 
 
     <!-- 脚本文件 (按依赖顺序) -->
-    <script src="js/state.js?v=1"></script>
-    <script src="js/dom.js?v=1"></script>
-    <script src="js/settings.js?v=1"></script>
-    <script src="js/image_tools.js"></script>
-    <script src="js/api.js?v=1"></script>
-    <script src="js/database.js?v=1"></script>
-    <script src="js/sidebar.js?v=2"></script>
-    <script src="js/branching.js?v=1"></script>
-    <script src="js/provider.js?v=1"></script>
-    <script src="js/messages.js?v=1"></script>
-    <script src="js/editing.js?v=1"></script>
-    <script src="js/formatting.js?v=1"></script>
-    <script src="js/tools.js?v=1"></script>
-    <script src="js/graph_rag.js?v=1"></script>
-    <script src="js/agent_tools.js?v=1"></script>
-    <script src="js/skill_system.js?v=1"></script>
-    <script src="js/agent_config.js?v=1"></script>
-    <script src="js/ui.js?v=1"></script>
-    <script src="js/bubbles.js?v=1"></script>
-    <script src="js/bubble_actions.js?v=1"></script>
-    <script src="js/utils.js?v=1"></script>
-    <script src="js/main.js?v=1"></script>
+    <script src="js/state.js?v=6"></script>
+    <script src="js/dom.js?v=3"></script>
+    <script src="js/settings.js?v=7"></script>
+    <script src="js/image_tools.js?v=3"></script>
+    <script src="js/file_preview.js?v=4"></script>
+    <script src="js/auth.js?v=12"></script>
+    <script src="js/api.js?v=4"></script>
+    <script src="js/database.js?v=11"></script>
+    <script src="js/sidebar.js?v=8"></script>
+    <script src="js/branching.js?v=8"></script>
+    <script src="js/provider.js?v=4"></script>
+    <script src="js/messages.js?v=6"></script>
+    <script src="js/editing.js?v=2"></script>
+    <script src="js/formatting.js?v=4"></script>
+    <script src="js/tools.js?v=2"></script>
+    <script src="js/graph_rag.js?v=11"></script>
+    <script src="js/note_refs.js?v=2"></script>
+    <script src="js/subagent_view.js?v=3"></script>
+    <!-- 前端工具注册表已删除（工具全部由后端提供） -->
+    <script src="js/skill_system.js?v=3"></script>
+    <script src="js/agent_config.js?v=7"></script>
+    <script src="js/ui.js?v=2"></script>
+    <script src="js/bubbles.js?v=4"></script>
+    <script src="js/bubble_actions.js?v=2"></script>
+    <script src="js/utils.js?v=2"></script>
+    <script src="js/main.js?v=4"></script>
+    <script src="js/xiaoe.js?v=7"></script>
 
     <div class="popup-panel bubble-context-menu" id="bubble-context-menu">
         <button class="menu-item" data-action="open-file">📂 打开文件</button>
@@ -838,6 +959,8 @@
             <button class="fe-btn" title="行内代码" onclick="window.__feWrap('`','`')">&lt;代码&gt;</button>
             <button class="fe-btn" title="代码块" onclick="window.__feWrap('```\n','\n```')">代码块</button>
             <button class="fe-btn" title="插入图片" onclick="window.__feInsertImage && window.__feInsertImage()">图片</button>
+            <button class="fe-btn" title="插入文档附件（pdf/docx/xlsx 等任意文件）" onclick="window.__feInsertFile && window.__feInsertFile()">📎 附件</button>
+            <button class="fe-btn" title="插入表格" onclick="window.__feInsertTable && window.__feInsertTable()">▦ 表格</button>
             <button class="fe-btn" title="编辑选中的图片" onclick="window.__feEditImage && window.__feEditImage()">✂️编辑图片</button>
             <button class="fe-btn" title="链接" onclick="window.__feLink()">链接</button>
             <span class="fe-sep"></span>
@@ -871,6 +994,19 @@
             <button class="fe-cancel" onclick="window.__feCancel && window.__feCancel()">取消</button>
             <button class="fe-save" onclick="window.__feSave && window.__feSave()">保存</button>
         </div>
+    </div>
+
+    <!-- 文件浮窗预览（应用内打开，可拖动/缩放/记忆位置，仿笔记浮窗） -->
+    <div class="file-preview-panel" id="file-preview-panel">
+        <div class="file-preview-header" id="file-preview-header">
+            <span class="file-preview-title" id="file-preview-title">文件预览</span>
+            <div class="file-preview-actions">
+                <button id="file-preview-open-native" title="用本机默认应用打开">🖥️</button>
+                <button id="file-preview-download" title="下载">⬇️</button>
+                <button id="file-preview-close-btn" class="file-preview-close-btn" title="关闭">×</button>
+            </div>
+        </div>
+        <div class="file-preview-body" id="file-preview-body"></div>
     </div>
 </body>
 

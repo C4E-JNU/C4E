@@ -1,4 +1,17 @@
         /* 基础重置与变量 */
+        /* 顶栏实际高度（登录/管理遮罩据此避开顶栏，避免吃掉顶栏点击） */
+        :root {
+            --c4e-header-h: 56px;
+        }
+
+        /* 认证遮罩兜底：即使某处仍写了 inset:0，也不吃顶栏的点击 */
+        [data-auth-mask] {
+            pointer-events: none !important;
+        }
+        [data-auth-mask] > * {
+            pointer-events: auto;
+        }
+
         :root {
             --primary: #4361ee;
             --secondary: #3a0ca3;

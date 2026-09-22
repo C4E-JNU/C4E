@@ -552,3 +552,148 @@
             justify-content: center;
             gap: 8px;
         }
+
+        /* ==================== 文件打开方式：三选一分段控件 ==================== */
+        .mode-seg {
+            display: inline-flex;
+            margin-top: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .mode-seg .mode-seg-btn {
+            appearance: none;
+            background: transparent;
+            border: none;
+            border-right: 1px solid var(--border-color);
+            padding: 0.32rem 0.7rem;
+            font-size: 0.78rem;
+            color: var(--gray);
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background 0.15s, color 0.15s;
+        }
+        .mode-seg .mode-seg-btn:last-child { border-right: none; }
+        .mode-seg .mode-seg-btn:hover { background: var(--primary-soft); color: var(--dark); }
+        .mode-seg .mode-seg-btn.active {
+            background: var(--primary);
+            color: #fff;
+            font-weight: 600;
+        }
+
+        /* ==================== 文件浮窗预览（仿笔记浮窗：可拖/可缩放/记忆位置） ==================== */
+        .file-preview-panel {
+            display: none;
+            position: fixed;
+            z-index: 1600;
+            top: 100px;
+            left: 80px;
+            width: 760px;
+            height: 620px;
+            min-width: 380px;
+            min-height: 300px;
+            max-width: calc(100vw - 20px);
+            max-height: calc(100vh - 20px);
+            flex-direction: column;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.34);
+            overflow: hidden;
+        }
+        .file-preview-panel.active { display: flex; }
+        .file-preview-panel .file-preview-header {
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.6rem;
+            cursor: move;
+            user-select: none;
+            padding: 0.5rem 0.7rem;
+            background: var(--light);
+            border-bottom: 1px solid var(--border-color);
+        }
+        .file-preview-panel .file-preview-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--dark);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .file-preview-panel .file-preview-actions { display: flex; gap: 0.3rem; flex-shrink: 0; }
+        .file-preview-panel .file-preview-actions button {
+            background: none;
+            border: none;
+            font-size: 1rem;
+            line-height: 1;
+            padding: 0.15rem 0.3rem;
+            cursor: pointer;
+            border-radius: 6px;
+            color: var(--gray);
+        }
+        .file-preview-panel .file-preview-actions button:hover { background: var(--primary-soft); }
+        .file-preview-panel .file-preview-close-btn { font-size: 1.2rem; }
+        .file-preview-panel .file-preview-close-btn:hover { color: var(--error); }
+        .file-preview-panel .file-preview-body {
+            flex: 1;
+            min-height: 0;
+            overflow: auto;
+            padding: 0;
+            background: var(--card-bg);
+            display: flex;
+            flex-direction: column;
+        }
+        .file-preview-panel .file-preview-note {
+            flex-shrink: 0;
+            font-size: 0.78rem;
+            color: var(--dark);
+            background: rgba(245, 158, 11, 0.14);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.45rem 0.7rem;
+        }
+        .file-preview-panel .file-preview-hint {
+            padding: 2rem 1rem;
+            text-align: center;
+            color: var(--gray);
+            font-size: 0.85rem;
+        }
+        .file-preview-panel .file-preview-center {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.6rem;
+            overflow: auto;
+        }
+        .file-preview-panel .file-preview-img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            border-radius: 6px;
+        }
+        .file-preview-panel .file-preview-frame {
+            flex: 1;
+            width: 100%;
+            min-height: 100%;
+            border: none;
+            background: #fff;
+        }
+        .file-preview-panel .file-preview-text {
+            margin: 0;
+            padding: 0.8rem 0.9rem;
+            font-family: Consolas, Monaco, "Courier New", monospace;
+            font-size: 0.78rem;
+            line-height: 1.55;
+            white-space: pre-wrap;
+            word-break: break-word;
+            color: var(--dark);
+        }
+        /* 四角缩放热区 */
+        .file-preview-resize { position: absolute; z-index: 6; background: transparent; pointer-events: auto; }
+        .file-preview-resize.se { right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize; }
+        .file-preview-resize.nw { left: 0; top: 0; width: 18px; height: 18px; cursor: nwse-resize; }
+        .file-preview-resize.ne { right: 0; top: 0; width: 18px; height: 18px; cursor: nesw-resize; }
+        .file-preview-resize.sw { left: 0; bottom: 0; width: 18px; height: 18px; cursor: nesw-resize; }
