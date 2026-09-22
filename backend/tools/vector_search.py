@@ -6,9 +6,30 @@ import json, os, time, numpy as np
 from pathlib import Path
 
 _WORKSPACE = Path(__file__).parent.parent.parent / "workspace"
-_HISTORY_INDEX_FILE = _WORKSPACE / "_vector_history.json"
-_KNOWLEDGE_INDEX_FILE = _WORKSPACE / "_vector_knowledge.json"
-_META_FILE = _WORKSPACE / "_vector_meta.json"
+# 知识库索引唯一在共享池 pool/（仅云端共享库使用；本地实例无数据库）
+_KNOWLEDGE_INDEX_FILE = _WORKSPACE / "pool" / "_vector_knowledge.json"
+# 聊天历史索引/元数据按身份分文件：_vector_history_<key>.json / _vector_meta_<key>.json（key 空=旧版全局）
+_META_FILE_LEGACY = _WORKSPACE / "_vector_meta.json"
+
+
+def _user_key_vs(username: str) -> str:
+    u = (username or "").strip()
+    if not u or u == "guest":
+        return "_guest"
+    k = "".join(c for c in u if (c.isalnum() or c in "-_@.·"))
+    return k or "_guest"
+
+
+def _history_index_file(user: str = ""):
+    if not user:
+        return _WORKSPACE / "_vector_history.json"   # 旧版全局
+    return _WORKSPACE / f"_vector_history_{_user_key_vs(user)}.json"
+
+
+def _meta_file(user: str = ""):
+    if not user:
+        return _META_FILE_LEGACY
+    return _WORKSPACE / f"_vector_meta_{_user_key_vs(user)}.json"
 
 # ── 全局单例 ───────────────────────────────────────
 _model = None
@@ -85,37 +106,39 @@ def _save_index(file_path: Path, index: list[dict]):
         json.dump(index, f, ensure_ascii=False, indent=2)
 
 
-def _load_meta() -> dict:
-    """加载索引元数据（last_indexed_id 等）"""
-    if not _META_FILE.exists():
+def _load_meta(user: str = "") -> dict:
+    """加载索引元数据（last_indexed_id 等），按身份分文件"""
+    mf = _meta_file(user)
+    if not mf.exists():
         return {"last_indexed_id": None, "history_chunks": 0, "knowledge_chunks": 0}
     try:
-        with open(_META_FILE, "r", encoding="utf-8") as f:
+        with open(mf, "r", encoding="utf-8") as f:
             return json.load(f)
     except:
         return {"last_indexed_id": None, "history_chunks": 0, "knowledge_chunks": 0}
 
 
-def _save_meta(meta: dict):
+def _save_meta(meta: dict, user: str = ""):
     _WORKSPACE.mkdir(parents=True, exist_ok=True)
-    with open(_META_FILE, "w", encoding="utf-8") as f:
+    with open(_meta_file(user), "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)
 
 
 # ── 公开 API ──────────────────────────────────────
 
-def add_to_history_index(chunks: list[dict]):
-    """追加新的历史对话块到索引"""
-    index = _load_index(_HISTORY_INDEX_FILE)
+def add_to_history_index(chunks: list[dict], user: str = ""):
+    """追加新的历史对话块到索引（按身份）"""
+    hf = _history_index_file(user)
+    index = _load_index(hf)
     index.extend(chunks)
-    _save_index(_HISTORY_INDEX_FILE, index)
-    meta = _load_meta()
+    _save_index(hf, index)
+    meta = _load_meta(user)
     meta["history_chunks"] = len(index)
-    _save_meta(meta)
+    _save_meta(meta, user)
 
 
 def add_to_knowledge_index(chunks: list[dict]):
-    """追加新的知识库块到索引"""
+    """追加新的知识库块到共享池索引"""
     index = _load_index(_KNOWLEDGE_INDEX_FILE)
     index.extend(chunks)
     _save_index(_KNOWLEDGE_INDEX_FILE, index)
@@ -124,9 +147,42 @@ def add_to_knowledge_index(chunks: list[dict]):
     _save_meta(meta)
 
 
-async def search_history(query: str, top_k: int = 3, scope: str = None) -> str:
-    """搜索历史对话，返回 JSON 字符串"""
-    index = _load_index(_HISTORY_INDEX_FILE)
+def ingest_text_to_knowledge(text: str, doc_name: str, file_id: str = None) -> int:
+    """把文档文本切块 + 向量化 + 写入知识索引（上传流水线调用）。
+    返回入库的块数；空文本返回 0。入库失败抛异常，由调用方决定是否吞掉。"""
+    chunks = chunk_text(text)
+    if not chunks:
+        return 0
+    vecs = embed_texts(chunks)
+    now = time.strftime("%Y-%m-%d %H:%M:%S")
+    items = [{
+        "text": c,
+        "vector": vecs[i].tolist(),
+        "doc_name": doc_name,
+        "source": "knowledge",
+        "file_id": file_id or "",
+        "created": now,
+    } for i, c in enumerate(chunks)]
+    add_to_knowledge_index(items)
+    return len(items)
+
+
+def remove_from_knowledge_index(file_id: str) -> int:
+    """按 file_id 从知识索引里移除该文件的所有块（删除文件时调用），返回移除块数。"""
+    index = _load_index(_KNOWLEDGE_INDEX_FILE)
+    kept = [c for c in index if c.get("file_id") != file_id]
+    removed = len(index) - len(kept)
+    if removed:
+        _save_index(_KNOWLEDGE_INDEX_FILE, kept)
+        meta = _load_meta()
+        meta["knowledge_chunks"] = len(kept)
+        _save_meta(meta)
+    return removed
+
+
+async def search_history(query: str, top_k: int = 3, scope: str = None, user: str = "") -> str:
+    """搜索历史对话（按身份分索引），返回 JSON 字符串"""
+    index = _load_index(_history_index_file(user))
     if not index:
         return json.dumps({"status": "ok", "count": 0, "results": []})
 
@@ -181,12 +237,13 @@ async def search_knowledge(query: str, top_k: int = 3, scope: str = None) -> str
 
 # ── 增量索引（供 agent.py 回调）────────────────────
 
-def index_new_history(history_file: str, last_id: str | None) -> str:
-    """读取历史文件，找到 last_id 之后的新增内容，切块向量化
+def index_new_history(history_file: str, last_id: str | None, user: str = "") -> str:
+    """读取历史文件，找到 last_id 之后的新增内容，切块向量化（按身份分索引）
 
     Args:
-        history_file: workspace/_history.jsonl 路径
+        history_file: workspace 下历史文件名（如 _history_guest.jsonl / _history.jsonl）
         last_id: 上次索引到的消息 id
+        user: 身份（空=旧版全局索引）
 
     Returns:
         新的 last_indexed_id
@@ -195,7 +252,7 @@ def index_new_history(history_file: str, last_id: str | None) -> str:
     if not hist_path.exists():
         return last_id
 
-    meta = _load_meta()
+    meta = _load_meta(user)
     last_id = last_id or meta.get("last_indexed_id")
 
     new_chunks = []
@@ -232,8 +289,8 @@ def index_new_history(history_file: str, last_id: str | None) -> str:
             new_last_id = msg_id
 
     if new_chunks:
-        add_to_history_index(new_chunks)
+        add_to_history_index(new_chunks, user)
         meta["last_indexed_id"] = new_last_id
-        _save_meta(meta)
+        _save_meta(meta, user)
 
     return new_last_id

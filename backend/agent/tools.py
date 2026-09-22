@@ -20,7 +20,8 @@ from tools.skill_tools import skill_list as _skill_list, skill_view as _skill_vi
 from tools.code_sandbox import run_python as _run_python
 from tools.terminal_tool import terminal as _terminal
 from tools.file_tools import read_file as _read_file, write_file as _write_file, list_files as _list_files
-from tools.vector_search import search_history as _search_history, search_knowledge as _search_knowledge
+from tools.vector_search import search_history as _search_history
+from tools.shared_hub import shared_upload as _shared_upload, shared_search as _shared_search
 from tools.mineru_tools import parse_pdfs, load_token
 
 
@@ -66,16 +67,24 @@ class TodoParams(BaseModel):
     task_id: Optional[int] = Field(default=None, description="任务编号（complete/remove 操作时需要）")
 
 class NotesParams(BaseModel):
-    action: str = Field(description="操作类型: list=列表, add=添加, update=更新, delete=删除")
-    note_id: Optional[str] = Field(default=None, description="笔记ID（update/delete时需要）")
+    action: str = Field(description="操作类型: list=列表, read=读取单条, add=添加, append=向已有条目末尾追加内容, update=更新, delete=删除")
+    scope: str = Field(
+        default="notes",
+        description="目标存储，必须按用户意图明确选择："
+                    "scope='notes' = 本地对话笔记（用户说「我的笔记」「笔记」「刚记的」）；"
+                    "scope='database' = 云端共享数据库条目（用户说「数据库」「共享库」「组里的条目」「共享数据库」）。"
+                    "两者格式相同但存储不同，改错地方是不可逆错误：拿不准时先 list 确认，或直接问用户。"
+    )
+    note_id: Optional[str] = Field(default=None, description="条目ID（read/append/update/delete时需要；数据库条目的 id 形如 note-1234567890）")
     title: Optional[str] = Field(default=None, description="笔记标题（add时需要）")
     content: Optional[str] = Field(
         default=None,
-        description="笔记内容（add/update时需要）。必须使用完整 Markdown 富文本，充分利用排版与可视化能力："
+        description="笔记内容（add/append/update时需要）。必须使用完整 Markdown 富文本，充分利用排版与可视化能力："
                     "① 用 #/##/### 分级标题组织结构；② 用 - / 1. / **加粗** / *斜体* 等列表与强调；"
                     "③ 数据对比用 Markdown 表格；④ 流程图、时序图、甘特图等用 ```mermaid 代码块；"
                     "⑤ 数学公式用 $$...$$ 块级 / $...$ 行内 LaTeX；⑥ 代码用 ```语言 代码块。"
                     "让笔记图文并茂、结构清晰、可视化丰富。"
+                    "【长度纪律】单次调用建议不超过 6000 字：长文先 add 首部，再用 append 分段追加；超过 2 万字符的写入会被拒绝。"
     )
 
 class ListFilesParams(BaseModel):
@@ -89,6 +98,15 @@ class SkillWriteParams(BaseModel):
 class SearchMemoryParams(BaseModel):
     query: str = Field(description="搜索关键词，例如: 'CIP 光催化降解 TiO2'")
     scope: str = Field(default="auto", description="搜索范围: auto=自动判断, history=历史对话, knowledge=知识库")
+
+class SharedUploadParams(BaseModel):
+    file_id: str = Field(default="", description="本地上传文件的 file_id（8 位 id，上传后返回的）")
+    path: str = Field(default="", description="或 workspace 内相对路径/绝对路径。file_id 与 path 二选一必填")
+
+
+class SharedSearchParams(BaseModel):
+    query: str = Field(description="搜索关键词或自然语言问题，例如: 'Fenton 催化剂制备条件'")
+    top_k: int = Field(default=5, description="返回最相关的条数，默认 5")
 
 
 # ── 工具工厂函数 ─────────────────────────────────
@@ -228,6 +246,16 @@ tools_registry["skill_write"] = _make_async_tool(
 
 _WORKSPACE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "workspace"))
 
+# 单条笔记内容硬上限：超过即拒绝并提示拆分/追加（防止模型单次生成过长内容被输出上限截断）
+MAX_NOTE_CHARS = 20000
+
+
+def _note_too_long(content: str) -> str:
+    if content and len(content) > MAX_NOTE_CHARS:
+        return (f"单次写入内容 {len(content)} 字符，超过上限 {MAX_NOTE_CHARS}，已拒绝（强行写入会在生成端被截断）。"
+                f"请拆分为多条笔记，或先写入前半部分、再用 append 动作分段追加。")
+    return ""
+
 def _get_todo_path():
     os.makedirs(_WORKSPACE, exist_ok=True)
     return os.path.join(_WORKSPACE, "_todos.json")
@@ -296,46 +324,197 @@ def _write_notes(notes):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(notes, f, ensure_ascii=False, indent=2)
 
-async def _exec_notes(action: str, note_id: str = None, title: str = None, content: str = None) -> str:
-    from agent.agent import _current_branch_id
-    notes = _read_notes()
+async def _exec_notes(action: str, note_id: str = None, title: str = None, content: str = None,
+                      scope: str = "notes") -> str:
+    """笔记/数据库条目统一入口。
+
+    scope='notes'    → 本地对话笔记 users/<身份>/notes.json（按当前对话分支）
+    scope='database' → 云端共享数据库条目（branch=__db__；本地实例自动转发云端）
+    """
+    from agent.agent import _current_branch_id, _current_user
+    from tools import file_tools as _ft
+    owner = _current_user or "guest"
+    now = str(__import__("datetime").datetime.now())
+
+    # ── 数据库条目：走云端（云端实例直接本地库；本地实例转发 hub）──
+    if (scope or "notes").strip().lower() in ("database", "db", "__db__", "cloud", "shared"):
+        from tools.shared_hub import db_notes
+        act = action
+        r = await db_notes(act, note_id or "", title or "", content or "", owner)
+        if "error" in r:
+            return json.dumps(r, ensure_ascii=False)
+        if act == "list":
+            entries = r.get("entries", [])
+            # 数据库 list 已是目录形态（id/title/owner/content_len/preview，无正文），直接透传
+            slim = [{"id": e.get("id"), "title": e.get("title"), "owner": e.get("owner", ""),
+                     "content_len": e.get("content_len", 0), "preview": e.get("preview", "")}
+                    for e in entries]
+            return json.dumps({"status": "ok", "scope": "database", "total": len(slim),
+                               "note": "以上仅为目录（不含正文，避免撑爆上下文）。需要正文用 action=read 按 id 读取；"
+                                       "增删改用 update/delete/add",
+                               "entries": slim}, ensure_ascii=False, indent=2)
+        if act == "read":
+            return json.dumps({"status": "ok", "scope": "database", "entry": r.get("entry")},
+                              ensure_ascii=False, indent=2)
+        msg = {"add": "已在数据库新建条目", "append": "已追加到数据库条目",
+               "update": "已更新数据库条目", "delete": "已删除数据库条目"}.get(act, "完成")
+        return json.dumps({"status": "ok", "scope": "database", "id": r.get("id", ""),
+                           "message": f"{msg}（id={r.get('id','')}）"}, ensure_ascii=False)
+
+    # ── 本地对话笔记 ──
     if action == "add":
         if not title and not content:
             return json.dumps({"error": "标题和内容不能同时为空"})
-        new_note = {
-            "id": "note-" + str(__import__("time").time()).replace(".", ""),
-            "title": title or "新笔记",
-            "content": content or "",
-            "branch_id": _current_branch_id,
-            "createdAt": str(__import__("datetime").datetime.now()),
-            "updatedAt": str(__import__("datetime").datetime.now()),
-        }
-        notes.append(new_note)
-        _write_notes(notes)
-        return json.dumps({"status": "ok", "message": f"已添加笔记: {title}", "note_id": new_note["id"]}, ensure_ascii=False)
-    elif action == "update":
+        too_long = _note_too_long(content)
+        if too_long:
+            return json.dumps({"error": too_long}, ensure_ascii=False)
+        r = json.loads(await _ft.add_note(title, content, _current_branch_id, owner))
+        return json.dumps({"status": "ok", "message": f"已添加笔记: {title}（{len(content or '')} 字符）",
+                           "note_id": r.get("note_id")}, ensure_ascii=False)
+
+    if action == "append":
+        if not note_id:
+            return json.dumps({"error": "append 需要提供 note_id"})
+        if not content:
+            return json.dumps({"error": "append 的内容不能为空"})
+        too_long = _note_too_long(content)
+        if too_long:
+            return json.dumps({"error": too_long}, ensure_ascii=False)
+        notes = _ft._read_notes(owner)
         for n in notes:
-            if n["id"] == note_id:
-                if title is not None:
-                    n["title"] = title or "未命名笔记"
-                if content is not None:
-                    n["content"] = content
-                n["updatedAt"] = str(__import__("datetime").datetime.now())
-                _write_notes(notes)
-                return json.dumps({"status": "ok", "message": f"已更新笔记: {n['title']}"}, ensure_ascii=False)
+            if n.get("id") == note_id:
+                n["content"] = (n.get("content", "") + "\n\n" + content) if n.get("content") else content
+                n["updatedAt"] = now
+                _ft._write_notes(owner, notes)
+                return json.dumps({"status": "ok", "message": f"已追加到笔记: {n['title']}（现共 {len(n['content'])} 字符）"}, ensure_ascii=False)
         return json.dumps({"error": "笔记不存在"})
-    elif action == "delete":
-        new_notes = [n for n in notes if n["id"] != note_id]
-        if len(new_notes) == len(notes):
-            return json.dumps({"error": "笔记不存在"})
-        _write_notes(new_notes)
-        return json.dumps({"status": "ok", "message": "已删除笔记"})
-    else:  # list
-        notes = [n for n in notes if n.get("branch_id", "") == _current_branch_id]
-        return json.dumps({
-            "status": "ok", "total": len(notes),
-            "notes": [{"id": n["id"], "title": n["title"], "content": n.get("content", "")} for n in notes]
-        }, ensure_ascii=False, indent=2)
+
+    if action == "update":
+        too_long = _note_too_long(content) if content is not None else None
+        if too_long:
+            return json.dumps({"error": too_long}, ensure_ascii=False)
+        r = json.loads(await _ft.update_note(note_id, title, content, owner))
+        if "error" in r:
+            return json.dumps(r, ensure_ascii=False)
+        notes = _ft._read_notes(owner)
+        t = next((n for n in notes if n.get("id") == note_id), {})
+        return json.dumps({"status": "ok", "message": f"已更新笔记: {t.get('title','')}（{len(t.get('content',''))} 字符）"}, ensure_ascii=False)
+
+    if action == "delete":
+        r = json.loads(await _ft.delete_note(note_id, owner))
+        if "error" in r:
+            return json.dumps(r, ensure_ascii=False)
+        return json.dumps({"status": "ok", "message": "已删除笔记"}, ensure_ascii=False)
+
+    # read：按 id 读单条本地笔记
+    if action == "read":
+        n, _ = _ft._find_note(owner, note_id)
+        if n is None:
+            return json.dumps({"error": "笔记不存在"}, ensure_ascii=False)
+        return json.dumps({"status": "ok", "scope": "notes",
+                           "entry": {"id": n["id"], "title": n.get("title", ""),
+                                     "content": (n.get("content") or "")[:20000],
+                                     "content_len": len(n.get("content") or ""),
+                                     "truncated": len(n.get("content") or "") > 20000,
+                                     "branch_id": n.get("branch_id", ""),
+                                     "owner": n.get("owner", owner)}}, ensure_ascii=False, indent=2)
+
+    # list：当前对话(branch)的本地笔记 —— 只给目录，不含正文（正文可能极大，全量返回会撑爆上下文）
+    notes = [n for n in _ft._read_notes(owner) if n.get("branch_id", "") == _current_branch_id]
+    def _slim_local(n):
+        c = n.get("content") or ""
+        return {"id": n["id"], "title": n.get("title", ""), "content_len": len(c),
+                "preview": c[:120].replace("\n", " ") + ("…" if len(c) > 120 else "")}
+    return json.dumps({
+        "status": "ok", "total": len(notes),
+        "note": "以上仅为笔记目录（不含正文）。需要正文请用 action=read 按 id 读取。",
+        "notes": [_slim_local(n) for n in notes]
+    }, ensure_ascii=False, indent=2)
+
+# ── 子智能体（delegate_task）──────────────────────
+
+class DelegateTaskParams(BaseModel):
+    tasks: list[dict] = Field(
+        description="要派发的子任务列表（1-4 个）。每个元素形如 "
+                    "{\"goal\": \"这个子任务要达成的目标（必填，具体可执行）\", "
+                    "\"context\": \"必要的背景信息（可选，把主对话里相关的关键事实写进来，子智能体看不到主对话）\", "
+                    "\"tools\": [\"可选：限定该子智能体可用的工具名\"], "
+                    "\"role\": \"可选：专有角色预设 contradiction=文献矛盾核查 / extraction=数据提取 / verify=数据核查，注入领域系统提示，同类任务建议使用\"}"
+    )
+
+
+def delegate_prepare(tasks) -> tuple:
+    """校验并裁剪子任务列表。返回 (valid_tasks, error_json_str 或 None)。
+
+    供两条路径复用：① _exec_delegate（非流式 / LangChain 工具路径）；
+    ② agent.stream_agent 的自定义引擎流式路径（边跑边流）。
+    """
+    from agent.agent import get_subagent_options, get_current_model_config
+    from agent.subagent import SUBAGENT_MAX_TASKS
+
+    opts = get_subagent_options()
+    if not opts.get("enabled", True):
+        return [], json.dumps({"error": "子智能体功能已在设置中关闭"}, ensure_ascii=False)
+    if not get_current_model_config().get("model"):
+        return [], json.dumps({"error": "子智能体无法启动：缺少模型配置（请先选择模型）"}, ensure_ascii=False)
+    if not isinstance(tasks, list) or not tasks:
+        return [], json.dumps({"error": "tasks 不能为空"}, ensure_ascii=False)
+    limit = int(opts.get("max_tasks", SUBAGENT_MAX_TASKS) or SUBAGENT_MAX_TASKS)
+    valid = [t for t in tasks if isinstance(t, dict) and (t.get("goal") or "").strip()][:limit]
+    if not valid:
+        return [], json.dumps({"error": "每个子任务都必须提供非空 goal"}, ensure_ascii=False)
+    return valid, None
+
+
+async def _exec_delegate(tasks: list[dict], max_rounds: int = None, timeout: int = None) -> str:
+    """派发子智能体（并发上限 & 三级超时由设置决定；失败即失败，不重试）。
+
+    非流式路径（LangChain 引擎 / /api/agent/run）：跑完再一次性回传。
+    自定义引擎的流式路径在 agent.stream_agent 中直接调用 run_subagents_parallel(emit=...)。
+    """
+    from agent.agent import (get_subagent_options,
+                             set_delegate_tasks, set_delegate_results)
+    from agent.subagent import (run_subagents_parallel, SUBAGENT_MAX_ROUNDS_DEFAULT,
+                                SUBAGENT_TIMEOUT_DEFAULT)
+
+    valid, err = delegate_prepare(tasks)
+    if err is not None:
+        return err
+    opts = get_subagent_options()
+    mr = max_rounds if max_rounds else opts.get("max_rounds", SUBAGENT_MAX_ROUNDS_DEFAULT)
+    to = timeout if timeout else opts.get("timeout", SUBAGENT_TIMEOUT_DEFAULT)
+    sub_timeouts = {"nudge": opts.get("nudge"), "warn": opts.get("warn"), "abort": opts.get("abort")}
+    # 把任务清单放进事件槽 → 主循环立刻能向前端流 subagent_start（引擎无关）
+    set_delegate_tasks(valid)
+    results = await run_subagents_parallel(valid, max_rounds=mr, timeout=to,
+                                           max_parallel=int(opts.get("max_parallel", 2) or 2),
+                                           timeouts=sub_timeouts)
+    # 结果放进槽 → 主循环流 subagent_end（含完整步骤/结论）
+    set_delegate_results(results)
+    return json.dumps({"status": "ok", "count": len(results), "results": results},
+                      ensure_ascii=False)
+
+
+tools_registry["delegate_task"] = _make_async_tool(
+    name="delegate_task",
+    description=(
+        "派发子智能体（子智能体=独立上下文的小助手）并行去做**互相独立的子任务**，你负责汇总它们的结论。"
+        "【什么时候用】任务可以切成 2-4 块彼此独立、且每块都需要多步检索/阅读时（例如"
+        "「分别查 A、B、C 三种污染物的降解条件」「一篇文章读结构、一篇文章读数据」）；"
+        "或者需要并行搜集多方资料以节省时间时。"
+        "【什么时候不要用】① 一个问题就能答完（自己调工具更快）；② 子任务之间存在前后依赖（必须先拿到前一个结果才能定下一个）——"
+        "这种情况应你自己按顺序做；③ 只是想写笔记/改数据库（用 conversation_notes）；④ 不要为了「显得正式」而派子智能体。"
+        "【硬限制】子智能体不能再派子智能体（深度=1）；单次可派的子任务数与并发数、每个子智能体的轮次与三级超时，"
+        "都以用户在设置里的「子智能体」配置为准（默认 4 个任务 / 并发 2 / 轮次 4 / 超时 300s）；"
+        "子智能体只能使用只读/检索类工具，不能写文件、不能执行终端命令。"
+        "【怎么用】每个子任务的 goal 要写明「做什么+要产出什么」，context 里带上它需要的背景"
+        "（子智能体看不到我们的对话历史，不写它就只能自己瞎猜）；拿到 results 后，你**必须**把它们综合成给用户的最终答案，"
+        "不要只是把子智能体的原文拼贴返回。"
+    ),
+    args_schema=DelegateTaskParams,
+    func=_exec_delegate,
+)
+
 
 # ── 注册新工具 ───────────────────────────────────
 
@@ -355,33 +534,63 @@ tools_registry["todo"] = _make_async_tool(
 
 tools_registry["conversation_notes"] = _make_async_tool(
     name="conversation_notes",
-    description="管理当前对话的笔记。可以列出、添加、更新、删除笔记。笔记会保存到服务器。"
-                "【重要】写入笔记内容时，必须充分利用 Markdown 富文本能力，做到图文并茂、结构清晰、可视化丰富："
+    description="管理「笔记」与「数据库条目」两套同格式存储，用 scope 参数明确指定目标（必填判断）："
+                "scope='notes'=本地对话笔记（用户说「笔记」「我的笔记」）；"
+                "scope='database'=云端共享数据库条目（用户说「数据库」「共享库」「组里的条目」）。"
+                "支持 list=列表, read=按id读取, add=新建, append=末尾追加, update=更新, delete=删除。"
+                "【读取纪律·重要】list 只返回**目录**（id/标题/owner/正文长度/前120字预览），**不含正文**——"
+                "这是为了防止大条目（有的几十万字）一次性撑爆上下文。要看某条正文，必须再用 read 按 id 取；"
+                "read 单次最多返回 20000 字（超出会标记 truncated=true 并告知原文总长），"
+                "不要反复 read 同一超长条目，需要时请让用户分段查看或指定要看哪部分。"
+                "【意图识别铁律】用户提到「数据库/共享库/组里」→ scope='database'；只提「笔记/记一下」→ scope='notes'；"
+                "拿不准时先用 list 看两边内容再决定，或直接问用户，绝不要猜。"
+                "【重要·长度纪律】单次写入的 content 不要超过约 6000 字：超出模型单轮输出上限的内容会被截断。"
+                "长内容必须分步构建——先 add 写入第一部分，随后用 append 逐段追加（每次约 2000-5000 字）；"
+                "或拆分为多条并在标题中标注（上/中/下、卷一/卷二等）。绝对不要试图一次写完全文。"
+                "【排版要求】充分利用 Markdown 富文本能力，做到图文并茂、结构清晰、可视化丰富："
                 "① 用 #/##/### 分级标题组织长文结构；"
                 "② 用有序/无序列表、**加粗**、*斜体*、> 引用等增强可读性；"
                 "③ 涉及数据对比、参数、结果汇总时，用 Markdown 表格呈现；"
                 "④ 需要展示流程、架构、时序、甘特图时，用 ```mermaid 代码块（flowchart / sequenceDiagram / gantt / pie 等）；"
                 "⑤ 涉及数学公式时，用 $$...$$ 块级、$...$ 行内 LaTeX；"
                 "⑥ 代码示例用 ```语言 代码块。"
-                "让每条笔记都像一份排版精良的图文报告，而不是纯文本。",
+                "让每条内容都像一份排版精良的图文报告，而不是纯文本。",
     args_schema=NotesParams,
     func=_exec_notes,
 )
 
 # ── 搜索工具 ─────────────────────────────────────
 
+async def _search_history_wrapped(query: str, top_k: int = 3, scope: str = None) -> str:
+    """按当前登录身份搜索本人聊天历史（游客=guest 空间）。"""
+    from agent.agent import _current_user
+    return await _search_history(query, top_k, scope, user=_current_user)
+
+
 tools_registry["search_history"] = _make_async_tool(
     name="search_history",
-    description="从所有历史对话中搜索相关信息。当你需要回顾之前讨论过的内容、数据、结论时使用。返回最相关的片段及相似度分数。",
+    description="从当前用户的历史对话中搜索相关信息（按登录身份隔离，每人只搜到自己的）。当你需要回顾之前讨论过的内容、数据、结论时使用。返回最相关的片段及相似度分数。",
     args_schema=SearchMemoryParams,
-    func=_search_history,
+    func=_search_history_wrapped,
 )
 
-tools_registry["search_knowledge"] = _make_async_tool(
-    name="search_knowledge",
-    description="从上传的知识库文档中搜索信息。当用户问到已上传文档中的内容时使用。返回最相关的片段及相似度分数。",
-    args_schema=SearchMemoryParams,
-    func=_search_knowledge,
+# search_knowledge 已移除：本地实例无数据库；检索共享数据库统一用 shared_search。
+
+tools_registry["shared_upload"] = _make_async_tool(
+    name="shared_upload",
+    description="把本地文件上传到组内共享库（局域网服务器上的 C4EAI 实例）。上传后服务器自动解析文本并入知识索引，"
+                "全组人都能用 shared_search 搜到。当用户说「共享」「传到服务器」「给组里用」等意图时使用。"
+                "参数给 file_id（本地上传的文件）或 path（workspace 内路径）之一。",
+    args_schema=SharedUploadParams,
+    func=_shared_upload,
+)
+
+tools_registry["shared_search"] = _make_async_tool(
+    name="shared_search",
+    description="在组内共享库中做语义搜索（服务器上所有人上传的文献/文档）。当问题可能涉及组内共享资料、"
+                "别人上传的文献、或本地知识库里没有的背景资料时使用。返回相关片段、来源文档名及相似度。",
+    args_schema=SharedSearchParams,
+    func=_shared_search,
 )
 
 # ── MinerU PDF 解析工具 ──────────────────────────
