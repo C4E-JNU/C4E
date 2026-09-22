@@ -189,6 +189,12 @@ async def execute_cypher(cypher: str, params: dict = None):
         return json.dumps({"error": "Neo4j 未连接"})
     if not cypher or not cypher.strip():
         return json.dumps({"error": "Cypher 查询不能为空"})
+    try:
+        import role_policy as _rp
+        if _rp.agent_cypher_denied(cypher):
+            return json.dumps({"error": "图谱删除类语句（DELETE/DETACH/DROP）需管理员权限。"})
+    except Exception:
+        pass
 
     params = params or {}
     try:

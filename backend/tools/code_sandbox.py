@@ -4,9 +4,19 @@
 """
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import asyncio
+
+
+def _python_exe() -> str:
+    """跨平台探测 Python 可执行文件名：Linux 服务器通常只有 python3"""
+    for cand in ("python", "python3"):
+        p = shutil.which(cand)
+        if p:
+            return p
+    return "python3"  # 兜底，让报错信息清晰
 
 
 async def run_python(code: str, timeout: int = 30):
@@ -40,7 +50,7 @@ async def run_python(code: str, timeout: int = 30):
 
             # 在子进程中执行
             process = await asyncio.create_subprocess_exec(
-                "python", "-u", script_path,
+                _python_exe(), "-u", script_path,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=tmpdir,

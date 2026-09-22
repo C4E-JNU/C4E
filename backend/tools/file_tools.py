@@ -6,7 +6,14 @@ import json
 import os
 import uuid
 import shutil
+import threading
 from datetime import datetime
+
+# 单次读取/注入返回给模型的正文字符封顶：防止长行 JSON / 超大文档一次撑爆模型上下文
+READ_FILE_MAX_CHARS = 20000
+# 历史拼装时，单条消息与总上下文的字符预算（1 token ≈ 2~3 汉字 / 4 英文，留足安全余量）
+HISTORY_MSG_MAX_CHARS = 8000
+HISTORY_TOTAL_MAX_CHARS = 300000
 
 
 def _get_workspace_dir():
@@ -18,12 +25,19 @@ def _get_workspace_dir():
 
 # 当前请求的文件访问模式：safe=仅workspace；ask=读任意+写workspace/skills；full=任意读写
 _PERMISSION_MODE = "safe"
+# 云端共享库：普通成员(未授权/approved)的文件基座锁到本人目录+pool；None=不额外限制
+_USER_SCOPE = None
 
 def set_permission_mode(mode: str):
     """设置当前请求的文件访问模式。由 agent 每次运行前调用。"""
     global _PERMISSION_MODE
     if mode in ("safe", "ask", "full"):
         _PERMISSION_MODE = mode
+
+def set_user_scope(scope):
+    """云端按身份注入沙盒：{'user': 名} → 仅 users/<名>/ 与 pool/ 可读；None 解除。"""
+    global _USER_SCOPE
+    _USER_SCOPE = scope if isinstance(scope, dict) else None
 
 def _get_project_root():
     return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -63,6 +77,13 @@ def _resolve_safe_path(relative_path: str, write: bool = False) -> str:
         # 仅 workspace
         if not _within(workspace_abs, full_path):
             raise PermissionError(f"安全模式下仅允许访问 workspace 目录: {relative_path}")
+        # 云端共享库：普通成员进一步锁到本人目录 users/<u>/ 与共享 pool/
+        if _USER_SCOPE:
+            u = (_USER_SCOPE.get("user") or "guest").replace("..", "_")
+            me = os.path.abspath(os.path.join(workspace_abs, "users", u))
+            pool = os.path.abspath(os.path.join(workspace_abs, "pool"))
+            if not (_within(me, full_path) or _within(pool, full_path) or full_path == me):
+                raise PermissionError(f"云端实例仅可访问自己的文件与共享库: {relative_path}")
         return full_path
 
     # ask 询问模式
@@ -88,6 +109,7 @@ async def read_file(path: str = "", file_id: str = "", as_base64: bool = False, 
         as_base64: 当按 file_id 且是文档时，仍尝试返回原始字节 base64（图片默认返回 base64）
         offset: 起始行号 (1-indexed)
         limit: 最多返回多少行
+    注意：单次返回【按字符数封顶】(READ_FILE_MAX_CHARS)，防止长行 JSON/大文档一次撑爆模型上下文。
     """
     # 附件模式：按 file_id 读上传的文件
     if (file_id or "").strip():
@@ -95,10 +117,20 @@ async def read_file(path: str = "", file_id: str = "", as_base64: bool = False, 
         # 图片 → 返回 base64(dataURL)；文档 → 返回解析全文
         data_url = await image_to_base64(fid)
         if data_url:
+            if len(data_url) > READ_FILE_MAX_CHARS:
+                return json.dumps({"ok": True, "source": "attachment", "file_id": fid, "mode": "image_too_large",
+                                   "hint": f"图片 base64 过大（{len(data_url)} 字符），未内联返回以免撑爆上下文；"
+                                           f"如需读取内容请用 vision/OCR 或指定更小图片。"}, ensure_ascii=False)
             return json.dumps({"ok": True, "source": "attachment", "file_id": fid, "mode": "base64", "data_url": data_url}, ensure_ascii=False)
-        text = await get_file_text(fid)
+        text = await get_upload_text(fid)
         if text:
-            return json.dumps({"ok": True, "source": "attachment", "file_id": fid, "mode": "text", "content": text}, ensure_ascii=False)
+            clipped = text[:READ_FILE_MAX_CHARS]
+            truncated = len(text) > READ_FILE_MAX_CHARS
+            return json.dumps({"ok": True, "source": "attachment", "file_id": fid, "mode": "text",
+                               "truncated": truncated,
+                               "note": (f"文件正文 {len(text)} 字符，已截断至 {READ_FILE_MAX_CHARS} 字符；"
+                                        "如需后续内容请改用 offset/limit 分页读取，或告诉我需要的具体段落。") if truncated else "",
+                               "content": clipped}, ensure_ascii=False)
         return json.dumps({"ok": False, "error": f"附件 {fid} 无内容"})
 
     path = (path or "").strip()
@@ -119,13 +151,36 @@ async def read_file(path: str = "", file_id: str = "", as_base64: bool = False, 
         end = min(total_lines, start + limit)
 
         content = "".join(lines[start:end])
+        # 字符封顶：即便命中行数少、但单行超长（如整份 JSON 一行），也不会一次吐出超大文本
+        total_chars = len("".join(lines))
+        clipped = content[:READ_FILE_MAX_CHARS]
+        truncated = len(content) > READ_FILE_MAX_CHARS
+        next_offset = None
+        note = ""
+        if truncated:
+            # 找到截断点所在行，告诉模型下次从哪行继续（分页续读）
+            acc = 0
+            consumed = 0
+            for ln in lines[start:end]:
+                if acc + len(ln) > READ_FILE_MAX_CHARS:
+                    break
+                acc += len(ln)
+                consumed += 1
+            next_offset = start + consumed + 1
+            note = (f"本段 {len(content)} 字符已截断至 {READ_FILE_MAX_CHARS}。"
+                    f"该文件共 {total_lines} 行 / {total_chars} 字符。"
+                    f"要继续读，请用 offset={next_offset} 再次调用（limit 建议 ≤500）。"
+                    "注意：勿整读巨型 JSON（layout.json / *_model.json / *_content_list_v2.json），正文用 00_full_cleaned.md。")
 
         return json.dumps({
             "path": path,
             "total_lines": total_lines,
             "offset": offset,
             "limit": limit,
-            "content": content,
+            "truncated": truncated,
+            "next_offset": next_offset,
+            "note": note,
+            "content": clipped,
         }, ensure_ascii=False)
 
     except PermissionError as e:
@@ -195,33 +250,126 @@ async def list_files(subdir: str = ""):
 
 
 # ═══════════════════════════════════════════════
-# 文件上传管理
+# 文件上传管理 —— v2：物理分目录
+#   users/<用户>/uploads/   私人聊天附件（不入索引）
+#   pool/uploads/           共享数据库（入向量索引）
 # ═══════════════════════════════════════════════
 
-_UPLOADS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "workspace", "uploads")
+_WORKSPACE_ABS = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "workspace"))
 
-def _get_upload_dir():
-    os.makedirs(_UPLOADS_DIR, exist_ok=True)
-    return _UPLOADS_DIR
+# 旧版单一目录（兼容解析存量 file_id）
+_UPLOADS_DIR = os.path.join(_WORKSPACE_ABS, "uploads")
+
+
+def _user_key(username: str) -> str:
+    """用户名→安全目录名。游客/空 → _guest。"""
+    u = (username or "").strip() or "guest"
+    if u == "guest":
+        return "_guest"
+    k = "".join(c for c in u if (c.isalnum() or c in "-_@.·"))
+    return k or "_guest"
+
+
+def _users_root() -> str:
+    d = os.path.join(_WORKSPACE_ABS, "users")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _user_dir(username: str) -> str:
+    d = os.path.join(_users_root(), _user_key(username))
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _user_uploads_dir(username: str) -> str:
+    d = os.path.join(_user_dir(username), "uploads")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _user_notes_path(username: str) -> str:
+    return os.path.join(_user_dir(username), "notes.json")
+
+
+def _pool_dir() -> str:
+    d = os.path.join(_WORKSPACE_ABS, "pool")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _pool_uploads_dir() -> str:
+    d = os.path.join(_pool_dir(), "uploads")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _pool_index_path() -> str:
+    return os.path.join(_pool_dir(), "_vector_knowledge.json")
+
+
+def _upload_roots() -> list:
+    """全部可能的上传根目录（解析 file_id 用）：pool → 各用户 → 旧版单一目录"""
+    roots = [_pool_uploads_dir()]
+    uroot = _users_root()
+    try:
+        for name in sorted(os.listdir(uroot)):
+            upd = os.path.join(uroot, name, "uploads")
+            if os.path.isdir(upd):
+                roots.append(upd)
+    except Exception:
+        pass
+    if os.path.isdir(_UPLOADS_DIR):
+        roots.append(_UPLOADS_DIR)
+    return roots
+
+
+def _resolve_upload(file_id: str):
+    """在 pool / users/* / 旧目录中定位 file_id，返回 (dir, meta, orig_path) 或 (None,None,None)。"""
+    fid = (file_id or "").strip()
+    if not fid:
+        return None, None, None
+    for root in _upload_roots():
+        d = os.path.join(root, fid)
+        mp = os.path.join(d, "meta.json")
+        if not os.path.isfile(mp):
+            continue
+        try:
+            with open(mp, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+        except Exception:
+            continue
+        orig = os.path.join(d, meta.get("name", "file"))
+        return d, meta, orig
+    return None, None, None
+
 
 def _get_upload_meta(file_id: str) -> dict | None:
-    """读取上传文件的 metadata"""
-    meta_path = os.path.join(_UPLOADS_DIR, file_id, "meta.json")
-    if not os.path.isfile(meta_path):
-        return None
-    with open(meta_path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    _, meta, _ = _resolve_upload(file_id)
+    return meta
+
 
 def _save_upload_meta(file_id: str, meta: dict):
-    meta_dir = os.path.join(_UPLOADS_DIR, file_id)
-    os.makedirs(meta_dir, exist_ok=True)
-    with open(os.path.join(meta_dir, "meta.json"), "w", encoding="utf-8") as f:
+    # 直接按 source 定位目录（不能先 _resolve_upload：meta.json 尚不存在时解析不到，
+    # 会错误回退到用户目录——曾导致 pool 文件 meta 写丢）
+    if meta.get("source") == "database":
+        d = os.path.join(_pool_uploads_dir(), file_id)
+    else:
+        d = os.path.join(_user_uploads_dir(meta.get("owner", "guest")), file_id)
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "meta.json"), "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)
 
-async def upload_file(filename: str, content_bytes: bytes) -> str:
-    """上传文件，返回 JSON 字符串 { file_id, name, text, size }"""
-    file_id = str(uuid.uuid4())[:8]
-    file_dir = os.path.join(_UPLOADS_DIR, file_id)
+
+async def upload_file(filename: str, content_bytes: bytes, owner: str = "",
+                      source: str = "chat") -> str:
+    """上传文件，返回 JSON 字符串 { file_id, name, text, size }。
+    owner=归属用户；source=chat→users/<owner>/uploads（私人，不入索引）；
+    source=database→pool/uploads（共享，入向量索引，仅云端共享库用）。"""
+    owner = owner or "guest"
+    file_id = uuid.uuid4().hex  # 全量 uuid，防止被枚举他人文件
+    base_dir = _pool_uploads_dir() if source == "database" else _user_uploads_dir(owner)
+    file_dir = os.path.join(base_dir, file_id)
     os.makedirs(file_dir, exist_ok=True)
 
     # 保存原始文件（带扩展名，方便系统识别类型）
@@ -329,8 +477,22 @@ async def upload_file(filename: str, content_bytes: bytes) -> str:
         "mime": ext,
         "text_length": len(text_content),
         "created": str(datetime.now()),
+        "owner": owner,
+        "source": source,          # chat=私人附件 / database=共享数据库
     }
     _save_upload_meta(file_id, meta)
+
+    # 知识库入库：仅 database 来源（共享池）。聊天附件永不入索引。
+    # 图片占位/解析失败提示/过短文本不入库。
+    _t = (text_content or "").strip()
+    if source == "database" and len(_t) >= 50 and not (_t.startswith("[") and _t.rstrip().endswith("]")):
+        def _ingest(_fid=file_id, _name=filename, _text=_t):
+            try:
+                from tools.vector_search import ingest_text_to_knowledge
+                ingest_text_to_knowledge(_text, _name, _fid)
+            except Exception:
+                pass  # 入库失败不影响上传本身；重传同内容会重复入库（可接受，搜索按相似度排序）
+        threading.Thread(target=_ingest, daemon=True).start()
 
     return json.dumps({
         "file_id": file_id,
@@ -342,17 +504,26 @@ async def upload_file(filename: str, content_bytes: bytes) -> str:
 
 
 async def delete_upload(file_id: str) -> str:
-    """删除上传的文件"""
-    file_dir = os.path.join(_UPLOADS_DIR, file_id)
-    if os.path.isdir(file_dir):
-        shutil.rmtree(file_dir)
+    """删除上传的文件（并同步清理知识索引中该文件的块；私人附件不入索引无此步骤）"""
+    d, meta, _ = _resolve_upload(file_id)
+    if d and os.path.isdir(d):
+        shutil.rmtree(d)
+        if (meta or {}).get("source") == "database":
+            try:
+                from tools.vector_search import remove_from_knowledge_index
+                remove_from_knowledge_index(file_id)
+            except Exception:
+                pass
         return json.dumps({"status": "ok", "file_id": file_id})
     return json.dumps({"error": f"文件 {file_id} 不存在"})
 
 
 async def get_upload_text(file_id: str) -> str:
-    """获取上传文件的完整文本内容"""
-    text_path = os.path.join(_UPLOADS_DIR, file_id, "text.txt")
+    """获取上传文件的完整文本内容（跨 pool/私人区/旧目录解析）"""
+    d, _, _ = _resolve_upload(file_id)
+    if not d:
+        return ""
+    text_path = os.path.join(d, "text.txt")
     if not os.path.isfile(text_path):
         return ""
     with open(text_path, "r", encoding="utf-8") as f:
@@ -360,67 +531,141 @@ async def get_upload_text(file_id: str) -> str:
 
 
 # ═══════════════════════════════════════════════
-# 笔记 CRUD
+# 笔记 CRUD —— v2：按用户物理分文件 users/<用户>/notes.json
 # ═══════════════════════════════════════════════
 
-_NOTES_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "workspace", "_notes.json")
+_NOTES_PATH_LEGACY = os.path.join(_WORKSPACE_ABS, "_notes.json")
 
-def _read_notes():
-    os.makedirs(os.path.dirname(_NOTES_PATH), exist_ok=True)
-    if not os.path.isfile(_NOTES_PATH):
+
+def _read_notes(owner: str = "guest") -> list:
+    p = _user_notes_path(owner) if owner else _NOTES_PATH_LEGACY
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    if not os.path.isfile(p):
         return []
-    with open(_NOTES_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
 
-def _write_notes(notes: list):
-    with open(_NOTES_PATH, "w", encoding="utf-8") as f:
+
+def _write_notes(owner: str, notes: list):
+    p = _user_notes_path(owner)
+    with open(p, "w", encoding="utf-8") as f:
         json.dump(notes, f, ensure_ascii=False, indent=2)
 
-async def list_notes(branch_id: str = "") -> str:
-    notes = _read_notes()
+
+def list_all_users_notes() -> list:
+    """admin 用：汇总 users/*/notes.json，每条补 owner 字段。旧版 _notes.json 视为 admin。"""
+    out = []
+    uroot = _users_root()
+    try:
+        for name in sorted(os.listdir(uroot)):
+            np_ = os.path.join(uroot, name, "notes.json")
+            if not os.path.isfile(np_):
+                continue
+            try:
+                with open(np_, "r", encoding="utf-8") as f:
+                    for n in json.load(f):
+                        n = dict(n)
+                        n.setdefault("owner", "_guest" if name == "_guest" else name)
+                        out.append(n)
+            except Exception:
+                pass
+    except Exception:
+        pass
+    if os.path.isfile(_NOTES_PATH_LEGACY):
+        try:
+            with open(_NOTES_PATH_LEGACY, "r", encoding="utf-8") as f:
+                for n in json.load(f):
+                    n = dict(n)
+                    n.setdefault("owner", "admin")
+                    out.append(n)
+        except Exception:
+            pass
+    return out
+
+
+def get_note_owner(note_id: str, owner: str = "guest") -> str:
+    """笔记归属用户；先查自己，再全库兜底（app.py 越权校验用）"""
+    for n in _read_notes(owner):
+        if n.get("id") == note_id:
+            return owner
+    for n in list_all_users_notes():
+        if n.get("id") == note_id:
+            return n.get("owner", "admin")
+    return owner
+
+
+async def list_notes(branch_id: str = "", owner: str = "guest") -> str:
+    notes = _read_notes(owner)
     if branch_id:
         notes = [n for n in notes if n.get("branch_id", "") == branch_id]
     return json.dumps({"status": "ok", "total": len(notes), "notes": notes}, ensure_ascii=False)
 
-async def add_note(title: str, content: str, branch_id: str = "") -> str:
-    notes = _read_notes()
+
+async def add_note(title: str, content: str, branch_id: str = "", owner: str = "guest") -> str:
+    owner = owner or "guest"
+    notes = _read_notes(owner)
     note = {
         "id": "note-" + str(int(__import__("time").time() * 1000)),
         "title": title or "新笔记",
         "content": content or "",
         "branch_id": branch_id,
+        "owner": owner,
         "createdAt": str(datetime.now()),
         "updatedAt": str(datetime.now()),
     }
     notes.append(note)
-    _write_notes(notes)
+    _write_notes(owner, notes)
     return json.dumps({"status": "ok", "note_id": note["id"]}, ensure_ascii=False)
 
-async def update_note(note_id: str, title: str = None, content: str = None) -> str:
-    notes = _read_notes()
-    for n in notes:
-        if n["id"] == note_id:
+
+def _find_note(owner: str, note_id: str):
+    """先在自己笔记里找；找不到全库兜底。返回 (note, owner_key) 或 (None, None)。"""
+    for n in _read_notes(owner):
+        if n.get("id") == note_id:
+            return n, owner
+    for n in list_all_users_notes():
+        if n.get("id") == note_id:
+            return n, n.get("owner", "admin")
+    return None, None
+
+
+async def update_note(note_id: str, title: str = None, content: str = None,
+                      owner: str = "guest") -> str:
+    n, okey = _find_note(owner, note_id)
+    if n is None:
+        return json.dumps({"error": "笔记不存在"})
+    notes = _read_notes(okey)
+    for x in notes:
+        if x.get("id") == note_id:
             if title is not None:
-                n["title"] = title
+                x["title"] = title
             if content is not None:
-                n["content"] = content
-            n["updatedAt"] = str(datetime.now())
-            _write_notes(notes)
+                x["content"] = content
+            x["updatedAt"] = str(datetime.now())
+            _write_notes(okey, notes)
             return json.dumps({"status": "ok"}, ensure_ascii=False)
     return json.dumps({"error": "笔记不存在"})
 
-async def delete_note(note_id: str) -> str:
-    notes = _read_notes()
-    new_notes = [n for n in notes if n["id"] != note_id]
-    if len(new_notes) == len(notes):
+
+async def delete_note(note_id: str, owner: str = "guest") -> str:
+    n, okey = _find_note(owner, note_id)
+    if n is None:
         return json.dumps({"error": "笔记不存在"})
-    _write_notes(new_notes)
+    notes = [x for x in _read_notes(okey) if x.get("id") != note_id]
+    _write_notes(okey, notes)
     return json.dumps({"status": "ok"}, ensure_ascii=False)
 
-async def move_note(note_id: str, direction: int) -> str:
+
+async def move_note(note_id: str, direction: int, owner: str = "guest") -> str:
     """在所属对话(branch)内移动笔记顺序。direction<0 上移, >0 下移。"""
-    notes = _read_notes()
-    idx = next((i for i, n in enumerate(notes) if n.get("id") == note_id), -1)
+    n, okey = _find_note(owner, note_id)
+    if n is None:
+        return json.dumps({"error": "笔记不存在"})
+    notes = _read_notes(okey)
+    idx = next((i for i, x in enumerate(notes) if x.get("id") == note_id), -1)
     if idx == -1:
         return json.dumps({"error": "笔记不存在"})
     branch_id = notes[idx].get("branch_id", "")
@@ -428,33 +673,13 @@ async def move_note(note_id: str, direction: int) -> str:
     for j in rng:
         if notes[j].get("branch_id", "") == branch_id:
             notes[idx], notes[j] = notes[j], notes[idx]
-            _write_notes(notes)
+            _write_notes(okey, notes)
             return json.dumps({"status": "ok"}, ensure_ascii=False)
     msg = "已经是第一条" if direction < 0 else "已经是最后一条"
     return json.dumps({"status": "ok", "message": msg}, ensure_ascii=False)
 
 
-# ═══════════════ 后端化：按 file_id 读取文件内容（供 agent 后续轮次调取） ═══════════════
-
-def _resolve_upload(file_id: str):
-    """返回 (dir, meta, orig_path) 或 (None,None,None)。"""
-    d = os.path.join(_UPLOADS_DIR, file_id)
-    mp = os.path.join(d, "meta.json")
-    if not os.path.isfile(mp):
-        return None, None, None
-    with open(mp, "r", encoding="utf-8") as f:
-        meta = json.load(f)
-    orig = os.path.join(d, meta.get("name", "file"))
-    return d, meta, orig
-
-
-async def get_file_text(file_id: str) -> str:
-    """按 file_id 读取后端已解析的文本（text.txt）。若没有则返回空串。"""
-    tp = os.path.join(_UPLOADS_DIR, file_id, "text.txt")
-    if os.path.isfile(tp):
-        with open(tp, "r", encoding="utf-8") as f:
-            return f.read()
-    return ""
+# ═══════════════ 后端化：按 file_id 读取（_resolve_upload 已在上方统一定义，跨 pool/用户区/旧目录） ═══════════════
 
 
 async def image_to_base64(file_id: str) -> str:
