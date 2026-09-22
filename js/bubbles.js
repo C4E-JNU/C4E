@@ -561,9 +561,19 @@
             let _bubbleAddPanelText = '';
 
             bubbleFileInput.addEventListener('change', async (e) => {
-                const file = e.target.files?.[0];
-                if (file && _bubbleAddBranchId) {
-                    const text = _bubbleAddPanelText || file.name;
+                // 支持多选：逐个文件各生成一个气泡
+                const files = Array.from(e.target.files || []);
+                e.target.value = '';          // 允许再次选同一文件
+                if (!files.length || !_bubbleAddBranchId) return;
+
+                const branch = state.branches[_bubbleAddBranchId];
+                if (!branch) return;
+                if (!branch._bubbles) branch._bubbles = [];
+
+                for (let idx = 0; idx < files.length; idx++) {
+                    const file = files[idx];
+                    // 首个气泡用面板里填的文字；多选时其余用各自文件名
+                    const text = (idx === 0 && _bubbleAddPanelText) ? _bubbleAddPanelText : file.name;
                     const bubbleId = 'bub-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
 
                     // 上传到后端
@@ -578,24 +588,25 @@
                         console.warn('Bubble file upload failed:', err);
                     }
 
-                    const branch = state.branches[_bubbleAddBranchId];
-                    if (branch) {
-                        if (!branch._bubbles) branch._bubbles = [];
-                        branch._bubbles.push({
-                            id: bubbleId,
-                            text: text,
-                            filePath: file.name,
-                            fileType: file.type || 'application/octet-stream',
-                            fileSize: file.size,
-                            icon: getFileIcon(file.name),
-                            fileId: fileId,   // 后端文件 ID
-                            hasFile: true
-                        });
-                        saveBranches();
-                        updateHistoryList();
-                    }
+                    branch._bubbles.push({
+                        id: bubbleId,
+                        text: text,
+                        filePath: file.name,
+                        fileType: file.type || 'application/octet-stream',
+                        fileSize: file.size,
+                        icon: getFileIcon(file.name),
+                        fileId: fileId,   // 后端文件 ID
+                        hasFile: true
+                    });
                 }
-                bubbleFileInput.value = '';
+
+                // 全部文件处理完，统一保存 + 刷新一次（避免多选时反复渲染）
+                saveBranches();
+                updateHistoryList();
+                if (typeof renderBubbles === 'function') {
+                    try { renderBubbles(_bubbleAddBranchId); } catch (err) {}
+                }
+                _bubbleAddPanelText = '';
             });
         });
 

@@ -147,10 +147,21 @@ function initDatabase() {
     var addEntryBtn = document.getElementById('db-add-entry-btn');
     if (addEntryBtn) addEntryBtn.addEventListener('click', dbAddEntry);
     document.getElementById('db-file-input').addEventListener('change', async (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        await uploadDocument(file);
+        // 支持多选：逐个上传（每个文件各自建立一个条目）
+        const files = Array.from(e.target.files || []);
         e.target.value = ''; // 允许重复选择同一文件
+        if (!files.length) return;
+        for (const f of files) {
+            try {
+                await uploadDocument(f);
+            } catch (err) {
+                console.warn('数据库上传失败:', f.name, err);
+                if (typeof showToast === 'function') showToast('上传失败：' + f.name, 'error');
+            }
+        }
+        if (files.length > 1 && typeof showToast === 'function') {
+            showToast('已上传 ' + files.length + ' 个文件', 'success');
+        }
     });
 }
 

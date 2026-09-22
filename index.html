@@ -105,7 +105,7 @@
                 <button id="db-close-btn" class="notes-close-btn" title="关闭">×</button>
             </div>
         </div>
-        <input type="file" id="db-file-input" style="display:none;"
+        <input type="file" id="db-file-input" style="display:none;" multiple
             accept="image/*,.txt,.md,.js,.py,.c,.cpp,.h,.html,.css,.json,.csv,.log,.yaml,.yml,.sql,.sh,.xml,.ts,.java,.go,.rs,.docx,.pdf,.pptx,.odt,.rtf,.toml,.ini,.tex">
         <div class="notes-empty" id="db-empty" style="display:none;">
             <span>暂无条目</span>
@@ -919,8 +919,8 @@
         </div>
     </div>
 
-    <!-- 隐藏的文件选择器用于气泡链接文件 -->
-    <input type="file" id="bubble-file-input" style="display:none">
+    <!-- 隐藏的文件选择器用于气泡链接文件（支持多选） -->
+    <input type="file" id="bubble-file-input" style="display:none" multiple>
 
     <!-- 气泡编辑小浮层 -->
     <div class="popup-panel" id="bubble-edit-modal">
