@@ -10,107 +10,136 @@
 
 @media (max-width: 768px) {
 
-    /* ========== ① 顶栏精简：logo + 汉堡 + 身份芯片（其余收进抽屉） ========== */
+    /* ========== ① 顶栏：只留 汉堡 + 主题 + 数据库 + 登录（logo 去掉） ========== */
     .nav-container {
-        padding: 0 10px !important;
-        min-height: 52px !important;
-        height: auto !important;
+        padding: 0 8px !important;
+        min-height: 46px !important;
+        height: 46px !important;
         display: flex !important;
         flex-wrap: nowrap !important;
         align-items: center !important;
+        justify-content: flex-start !important;   /* 汉堡贴左；控件组用 margin-left:auto 贴右 */
         gap: 6px !important;
         position: sticky !important;
         top: 0 !important;
         z-index: 2200 !important;
         background: var(--card-bg, #fff) !important;
         border-bottom: 1px solid var(--border, #eee) !important;
+        overflow: visible !important;
+        box-sizing: border-box !important;
+        width: 100% !important;
+        max-width: 100% !important;
     }
-    /* 汉堡按钮：手机上显示 */
+    /* 汉堡按钮 */
     .mobile-menu-btn {
         display: inline-flex !important;
         align-items: center;
         justify-content: center;
-        width: 40px; height: 40px;
+        width: 36px; height: 36px;
         border: none; background: none; cursor: pointer;
-        font-size: 1.4rem; color: var(--text-secondary, #555);
+        font-size: 1.3rem; color: var(--text-secondary, #555);
         flex: 0 0 auto; border-radius: 8px;
-        order: 0;
-        padding: 0;
-        line-height: 1;
+        padding: 0; line-height: 1;
     }
     .mobile-menu-btn:active { background: var(--hover, #f0f2f5); }
-    /* logo 区：允许收缩，不换行 */
-    .logo-area {
-        flex: 0 1 auto !important;          /* 按内容宽收缩，不抢占右侧空间 */
-        min-width: 0 !important;
-        gap: 6px !important;
-        flex-wrap: nowrap !important;
-        overflow: hidden !important;
-    }
-    .logo-area .c4e-art-logo {
-        width: 28px !important; height: 28px !important;
-        font-size: .58rem !important; flex: 0 0 auto !important;
-    }
-    .logo-text-wrapper { min-width: 0 !important; overflow: hidden !important; }
-    .logo-area .logo { font-size: .95rem !important; white-space: nowrap; }
-    .company-tagline { display: none !important; }
-    /* logo 外圈椭圆边框在手机上很占位、还会压住右侧按钮 → 去掉 */
-    /* 诊断实证：.logo-area 有 border:1px solid + border-radius:50px，宽 188px，
-       与 .db-analysis-btn(x=188) 重叠。手机上必须去掉边框并让其收缩。 */
-    .logo-area,
-    .logo-area * {
-        background-image: none !important;
-        box-shadow: none !important;
-    }
-    .logo-area {
-        border: none !important;
-        background: transparent !important;
-        padding: 0 !important;
-        max-width: 42vw !important;
-        border-radius: 0 !important;
-    }
-    .logo-area .c4e-art-logo {
-        border: none !important;
-        background: transparent !important;
-        box-shadow: none !important;
-    }
-    /* 右侧控件：不换行、可横向滚动兜底 */
+    /* ⚠️ 手机上不要 C4EAI logo（用户要求），把整块藏掉，省下的空间给按钮 */
+    .logo-area { display: none !important; }
+    /* 右侧控件组：不抢占、不换行、末尾贴右 */
     .nav-controls {
         flex: 0 0 auto !important;
         display: flex !important;
         flex-wrap: nowrap !important;
         align-items: center !important;
-        gap: 5px !important;
-        margin: 0 0 0 auto !important;    /* 推到最右，与 logo 区拉开 */
-        max-width: 62vw !important;
-        overflow-x: auto !important;
-        scrollbar-width: none;
+        justify-content: flex-end !important;
+        gap: 6px !important;
+        margin: 0 0 0 auto !important;
+        max-width: none !important;
+        min-width: 0 !important;
+        overflow: visible !important;
     }
-    .nav-controls::-webkit-scrollbar { display: none; }
+    /* 主题圆点：手机上保留但缩小（用户要求可用）。不换行、定宽，避免疯长 */
     .header-theme-switcher,
-    .global-theme-switcher { display: none !important; }
-    /* 顶栏按钮瘦身（含图标和文字都压缩） */
-    .nav-controls .db-analysis-btn {
-        font-size: .7rem !important;
-        padding: .3rem .5rem !important;
-        margin-right: 0 !important;
-        white-space: nowrap !important;
+    .global-theme-switcher {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        align-items: center !important;
+        align-content: center !important;
+        justify-content: flex-start !important;
+        gap: 3px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 92px !important;
+        min-width: 92px !important;
+        max-width: 92px !important;
+        height: 30px !important;
+        max-height: 30px !important;
+        flex: 0 0 auto !important;
+        overflow: hidden !important;
+    }
+    .header-theme-switcher .theme-dot,
+    .global-theme-switcher .theme-dot {
+        width: 12px !important;
+        height: 12px !important;
+        min-width: 12px !important;
+        max-width: 12px !important;
+        margin: 0 !important;
+        border-width: 1px !important;
         flex: 0 0 auto !important;
     }
-    #auth-chip-slot { flex: 0 0 auto !important; }
-    #auth-user-chip {
-        font-size: .7rem !important;
-        padding: .24rem .5rem !important;
+    /* 数据库按钮：定宽 + 缩小 + 不换行 */
+    .nav-controls .db-analysis-btn {
+        font-size: .68rem !important;
+        padding: .3rem .45rem !important;
+        margin: 0 !important;
         white-space: nowrap !important;
+        flex: 0 0 auto !important;
+        width: auto !important;
+        max-width: 88px !important;
+        border-radius: 14px !important;
+        min-height: 28px !important;
+        height: 28px !important;
+        line-height: 1 !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+    /* 身份芯片：定宽不消失 */
+    #auth-chip-slot {
+        flex: 0 0 auto !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        min-width: 0 !important;
+    }
+    #auth-user-chip {
+        font-size: .68rem !important;
+        padding: .26rem .45rem !important;
+        white-space: nowrap !important;
+        min-height: 28px !important;
+        height: 28px !important;
+        line-height: 1.2 !important;
+        max-width: 92px !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
     }
 
     /* ========== ② 主体：去掉长滚动，让对话区占满 ========== */
     html, body {
         overflow-x: hidden !important;
     }
-    /* 欢迎/功能展示区在手机上隐藏（手机上不需要滚 3 屏才到对话）
-       注意实际类名：.hero（欢迎）、.models-section（模型配置）、
-       以及各类展示卡片容器。用「除 chat-section 外全部隐藏」兜底更稳。 */
+    /* 关键：用 dvh 而不是 vh，避开移动端浏览器地址栏导致的"底部空白"。
+       安卓 Chrome / 红米自带浏览器都支持 dvh（不支持时回退到 vh）。 */
+    html, body {
+        height: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    body {
+        display: flex !important;
+        flex-direction: column !important;
+        min-height: 100vh !important;
+        min-height: 100dvh !important;
+    }
+    /* 欢迎/功能展示区在手机上隐藏
+       注意实际类名：.hero（欢迎）、.models-section（模型配置） */
     .hero,
     .hero-section,
     .models-section,
@@ -122,39 +151,66 @@
     .decor-tile {
         display: none !important;
     }
-    /* 兜底：main.container 的直接子元素里，除了 chat-section 全隐藏
-       （避免漏掉某个装饰区块导致对话区被顶到页面下方） */
+    /* 兜底：main.container 的直接子元素里，除了 chat-section 全隐藏 */
     main.container > section:not(.chat-section),
     main.container > div:not(.chat-section):not(.popup-panel) {
         display: none !important;
     }
-    /* 顶栏 sticky，主区紧接其后 */
     main.container {
         margin: 0 !important;
         padding: 0 !important;
         max-width: 100% !important;
+        flex: 1 1 auto !important;        /* 撑满 body 剩余高度 */
+        display: flex !important;
+        flex-direction: column !important;
+        min-height: 0 !important;
     }
 
-    /* 对话区占满视口 */
+    /* 对话区：填满顶栏以下全部空间
+       ⚠️ 不要再给 min-height:calc(100dvh - Npx)！父级 main.container 已是
+       flex:1 撑满 body（诊断实测 main=792 正好到底），再加 min-height 会撑破
+       父容器，导致 input-area 的 sticky 提前停住、下方留白。 */
     .chat-section {
-        display: block !important;
+        display: flex !important;
+        flex-direction: column !important;
+        flex: 1 1 auto !important;
         padding: 0 !important;
         margin: 0 !important;
-        height: calc(100vh - 52px) !important;
+        height: 100% !important;
         min-height: 0 !important;
+        max-height: 100% !important;
         position: relative !important;
         overflow: hidden !important;
+        box-sizing: border-box !important;
     }
     .chat-main {
         width: 100% !important;
-        height: 100% !important;
+        flex: 1 1 auto !important;
+        height: auto !important;
+        min-height: 0 !important;
         margin: 0 !important;
         padding: 0 !important;
         display: flex !important;
         flex-direction: column !important;
     }
+    /* ⚠️ 关键中间层：chat-main > .chat-container（诊断实测 flex:0 1 auto 只占 600px，
+       导致下方 192px 空白）。必须让它伸展填满。 */
+    .chat-main > .chat-container,
+    .chat-container {
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+        height: 100% !important;
+        max-height: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        box-sizing: border-box !important;
+        width: 100% !important;
+    }
     .messages-container {
         flex: 1 1 auto !important;
+        min-height: 0 !important;
         overflow-y: auto !important;
         -webkit-overflow-scrolling: touch;
         padding: 10px 12px !important;
@@ -201,7 +257,7 @@
     /* 输入区：贴底、留出安全区（iPhone 底部横条） */
     .input-area {
         flex: 0 0 auto !important;
-        padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)) 10px !important;
+        padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px)) 8px !important;
         margin: 0 !important;
         border-top: 1px solid var(--border, #eee) !important;
         background: var(--card-bg, #fff) !important;
@@ -209,10 +265,117 @@
         bottom: 0 !important;
         z-index: 100 !important;
     }
-    .input-area textarea,
-    .input-area input[type="text"] {
-        font-size: 16px !important;   /* ≥16px 防止 iOS 自动放大 */
-        max-height: 30vh !important;
+    /* 输入条：单行布局 —— 附件 | 输入框 | 模型小按钮 + 工具 + 发送
+       （不再换行，避免下方多出一行占高度） */
+    .modern-input-bar {
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        align-items: center !important;
+        gap: 4px !important;
+        padding: 5px 6px !important;
+        border-radius: 18px !important;
+        min-height: 0 !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+    /* 文字输入区（.input-field-container 的宽度规则见下） */
+    .modern-input,
+    textarea#message-input,
+    .input-area textarea {
+        width: 100% !important;
+        min-width: 0 !important;
+        font-size: 16px !important;       /* ≥16px 防止 iOS/安卓自动放大 */
+        max-height: 26vh !important;
+        padding: 8px 6px !important;
+        min-height: 34px !important;
+        height: 34px !important;          /* 覆盖桌面的 24px 定高，避免出现缝隙 */
+        max-height: 26vh !important;
+        line-height: 1.4 !important;
+        box-sizing: border-box !important;
+        resize: none !important;
+        overflow-y: auto !important;
+        scrollbar-width: none;            /* 手机上藏掉细滚动条（那个灰色竖条） */
+    }
+    .modern-input::-webkit-scrollbar,
+    textarea#message-input::-webkit-scrollbar {
+        width: 0 !important;
+        display: none !important;
+    }
+    /* 输入框容器：占满剩余宽度 + 垂直居中、无多余伪元素 */
+    .input-field-container {
+        flex: 1 1 auto !important;
+        min-width: 0 !important;
+        width: auto !important;
+        order: 1 !important;
+        display: flex !important;
+        align-items: center !important;
+        overflow: hidden !important;
+    }
+    .input-field-container::before,
+    .input-field-container::after {
+        display: none !important;
+        content: none !important;
+    }
+    /* 左侧附件 + 展开按钮：缩小 */
+    #attachment-btn,
+    #expand-btn {
+        flex: 0 0 auto !important;
+        width: 30px !important;
+        height: 30px !important;
+        min-width: 30px !important;
+        font-size: .9rem !important;
+        order: 0 !important;
+    }
+    /* 右侧按钮群：与输入框同排，不换行 */
+    .input-actions-right {
+        flex: 0 0 auto !important;
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        align-items: center !important;
+        gap: 3px !important;
+        order: 2 !important;
+        width: auto !important;
+        min-width: 0 !important;
+    }
+    /* ⚠️ 核心：手机上模型选择只留一个小按钮（不显示完整模型名）
+       —— 原为 127px 宽的下拉，挤没了输入框 */
+    .compact-model-select,
+    .compact-model-select > * {
+        max-width: 78px !important;
+        flex: 0 0 auto !important;
+    }
+    #chat-model-selector {
+        width: 66px !important;
+        max-width: 66px !important;
+        min-width: 44px !important;
+        font-size: .68rem !important;
+        padding: 3px 2px !important;
+        height: 30px !important;
+        text-overflow: ellipsis !important;
+        background-position: right 2px center !important;
+    }
+    /* 上下文长度显示：手机上藏掉（省空间） */
+    .context-size-display,
+    #context-size-display {
+        display: none !important;
+    }
+    /* 其余工具按钮（智能体配置 / 设置 / 发送）统一缩小 */
+    .input-actions-right .tool-icon-btn,
+    #agent-config-toggle,
+    #settings-btn,
+    .send-circle-btn,
+    #send-btn {
+        width: 30px !important;
+        height: 30px !important;
+        min-width: 30px !important;
+        flex: 0 0 auto !important;
+        font-size: .92rem !important;
+        padding: 0 !important;
+    }
+    .input-actions-right .tool-icon-btn span,
+    #agent-config-toggle span,
+    #settings-btn span {
+        font-size: .92rem !important;
     }
 
     /* ========== ③ 侧栏抽屉（默认隐藏，汉堡按钮滑出） ========== */
@@ -224,6 +387,7 @@
         width: 82vw !important;
         max-width: 320px !important;
         height: 100vh !important;
+        height: 100dvh !important;
         z-index: 3000 !important;
         transform: translateX(-102%) !important;
         transition: transform .26s cubic-bezier(.4, 0, .2, 1) !important;
@@ -350,7 +514,7 @@
 
 /* ========== 横屏手机（矮屏）：压缩竖向留白 ========== */
 @media (max-width: 900px) and (max-height: 480px) {
-    .chat-section { height: calc(100vh - 48px) !important; }
+    /* 竖屏规则里 chat-section 已由 flex 伸展，这里只压缩输入区与面板 */
     .input-area textarea { max-height: 22vh !important; }
     .notes-panel, #database-panel { height: 94vh !important; }
 }

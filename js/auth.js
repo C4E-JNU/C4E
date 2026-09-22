@@ -450,7 +450,21 @@
         if (!tok || tok === 'guest') {
             clearAuth();
             window.fetch('/api/auth/me').then(function (r) {
-                if (r.status === 401) { _loginOpen = true; _openLogin(true); return null; }  // 共享库：必须登录（可关闭）
+                if (r.status === 401) {
+                    // 未登录：弹登录框。
+                    // ⚠️ 手机端 _openLogin 会被守卫拦掉（不遮屏），此时必须渲染
+                    // 「🔑 登录」芯片，否则顶栏没有任何登录入口（用户要求保证登录按钮可用）。
+                    _loginOpen = true;
+                    var _mob = false;
+                    try { _mob = window.matchMedia('(max-width: 768px)').matches; } catch (e) {}
+                    if (_mob) {
+                        setAuth('guest', { username: 'guest', role: 'guest' });
+                        _renderChip();
+                    } else {
+                        _openLogin(true);
+                    }
+                    return null;
+                }
                 return r.json();
             }).then(function (d) {
                 if (!d) return;
