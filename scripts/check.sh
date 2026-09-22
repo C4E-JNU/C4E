@@ -38,6 +38,11 @@ chk js/xiaoe.js  'pointercancel'        'xiaoe.js pointercancel 兜底'
 chk js/xiaoe.js  'WEATHER_CHANCE = 0.025' 'xiaoe.js 概率 0.025'
 # 免密钥聊天：只查 model 字段
 chk backend/app.py 'req.model.get("model")' 'app.py 免密钥判据'
+# 附件多选：笔记编辑器动态 input 必须 multiple（曾漏改 → 用户无法多选）
+chk js/messages.js 'inp.multiple = true' 'messages.js 笔记附件支持多选'
+# 全仓不应再有只取 files[0] 的附件上传（image_tools 单图工具例外）
+_stray="$(grep -rn 'files\[0\]\|files?\.\[0\]' js/*.js 2>/dev/null | grep -v '^js/image_tools.js' || true)"
+if [ -z "$_stray" ]; then ok '无遗漏的单选 files[0]'; else bad "仍有单选: $_stray"; fi
 
 echo
 if [ "$fail" -eq 0 ]; then echo "ALL_PASS ✅"; else echo "FAILED ($fail)"; fi

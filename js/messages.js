@@ -936,7 +936,16 @@
                 ta.focus();
                 const inp = document.createElement('input');
                 inp.type = 'file';
-                inp.onchange = function () { const f = inp.files[0]; if (f) _uploadAndInsert(f); };
+                // 支持多选：逐个上传并依次插入（用户要求笔记附件可一次选多个）
+                inp.multiple = true;
+                inp.onchange = function () {
+                    const files = Array.from(inp.files || []);
+                    if (!files.length) return;
+                    // 顺序串行上传，保证插入顺序与选择顺序一致
+                    files.reduce(function (chain, f) {
+                        return chain.then(function () { return _uploadAndInsert(f); });
+                    }, Promise.resolve());
+                };
                 inp.click();
             }
 
