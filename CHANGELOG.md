@@ -6,6 +6,58 @@
 
 ---
 
+## [2026-09-22] fix(mobile+xiaoe): 隐藏侧栏箭头 / 修复手机端小e 拖动 / 降低惊喜概率
+
+**为什么**：红米 K50 实测反馈三个问题。
+
+**① 手机端隐藏「展开/收缩侧栏」箭头**
+- 手机改用汉堡抽屉后，`.sidebar-toggle-btn` 会与抽屉行为打架（bug）
+- `css/mobile.css`：≤768px 时 `.sidebar-toggle-btn, #sidebar-toggle-btn { display: none }`
+- 桌面端保持不变（实测仍为 `flex`）
+
+**② 修复手机端小e 拖不动（真因：缺 `touch-action: none`）**
+- 现象：手指按住小e 滑动 → 被浏览器识别为**页面滚动** → 触发 `pointercancel`
+  → `pointermove` 收不到 → 小e 纹丝不动
+- 三处修复：
+  1. `css/xiaoe.css`：`#xiaoe-root` 及其 `.xiaoe-stage`/`svg`/`.xiaoe-body` 加
+     `touch-action: none` + `-webkit-touch-callout: none`
+  2. `js/xiaoe.js`：`pointerdown` 里 `if (e.button !== 0) return` → 改为
+     `if (typeof e.button === 'number' && e.button > 0) return`
+     （触摸事件的 `button` 可能是 `-1`/`undefined`，原写法直接 return 导致拖不动）；
+     `setPointerCapture` 包 try；`cancelable` 时 `preventDefault()`
+  3. `js/xiaoe.js`：新增 `pointercancel` 兜底，手势被打断时安全收尾（不残留拖拽态）
+
+**③ 降低惊喜概率 + 去掉屏幕备注**
+- `WEATHER_CHANCE`：`0.05` → **`0.025`**（降低一半）
+- toast 文案：去掉「（随机惊喜✨）」，只留天气本身提示
+
+**实测**（红米 K50 393×852，真实触摸事件序列）：**22/22 PASS**
+- 箭头 `display=none`；桌面端仍 `flex`
+- 小e 触摸拖动 `(305,690) → (305,530)` 成功，`style.left` 落定、无拖拽残留
+- 界面与 toast 均无「随机惊喜」；源码概率 = `0.025`
+
+---
+
+## [2026-09-22] fix(mobile): 手机端返工 —— 底部空白/输入区/顶栏（针对红米 K50）
+
+**为什么**：用户红米 K50 实测反馈 4 点（详见当次提交信息）。
+
+**① 底部空白真凶** = 中间层 `.chat-container` 的 `flex: 0 1 auto` 只占 600px
+→ 改 `flex: 1 1 auto` 撑满；并移除 `.chat-section` 上撑破父容器的
+`min-height: calc(100dvh - Npx)`。实测输入区贴底 gap=1px（原 193px 空白）
+
+**② 输入区**：模型选择 `127px → 66px`；上下文长度显示隐藏；输入框 `8px → 122px`；
+附件/配置/设置/发送统一 30px，输入条 `flex-wrap: nowrap` 单行同排
+
+**③④ 顶栏**：`52px → 46px`；`logo-area` 整体隐藏（用户要求）；主题圆点保留并缩到
+12px 定宽 92px；数据库按钮 65px；身份芯片 54px；三段互不重叠
+（theme 162-254 / db 260-325 / login 331-385）
+
+**js/auth.js**：手机端不自动弹登录框后，401 分支改为**渲染「🔑 登录」芯片**
+（否则顶栏没有任何登录入口）；用户主动点击仍可打开登录框
+
+---
+
 ## [2026-09-22] feat(mobile): 手机端适配（抽屉式侧栏）+ 注册默认 L1 蓝色
 
 **为什么**：主界面按桌面设计，手机上是一条超长竖向流（对话区在 y=2385，要滚 3 屏才到聊天），顶栏还挤成两行。
