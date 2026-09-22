@@ -6,6 +6,41 @@
 
 ---
 
+## [2026-09-22] fix(upload): 笔记编辑器附件支持多选（真正根因：动态 input 漏改）
+
+**用户反馈**：「笔记和共享数据库的附件上传与编辑时候进行附件上传，打开管理器选择界面时候无法选择多个文件一起上传」
+
+**根因**（上次修复不彻底）：上次只给 `index.html` 里 3 个**静态** input 加了 `multiple`，
+漏了笔记编辑器「插入文件」**运行时动态创建**的 input：
+
+```js
+// js/messages.js  insertFile()   —— 修复前
+inp.type = 'file';                                   // ❌ 无 multiple → 系统选择器只能选 1 个
+inp.onchange = () => { const f = inp.files[0]; … }   // ❌ 且只取第一个
+```
+
+**修复**
+- `js/messages.js`：`inp.multiple = true`；改为遍历全部文件，用 `files.reduce` **串行上传**
+  （保证插入顺序与选择顺序一致）
+- `index.html`：`js/messages.js?v=5`
+
+**排查确认（全仓扫描）**
+- 三个静态 input（`db-file-input` / `bubble-file-input` / `file-attachment-input`）均已有 `multiple`
+- 唯一剩余的 `files[0]` 在 `js/image_tools.js:45` —— 单图编辑工具的 `chooseFile`，
+  `accept='image/*'` 且回调处理单个 blob，**语义上就该单选**，保持不变
+
+**实测**（真机 + 云端，18/19 PASS；唯一 FAIL 是临时探针未清理，已删）
+- 笔记编辑器塞 3 文件 → **3 次上传** `['n1.pdf','n2.pdf','n3.pdf']`
+- 数据库塞 2 文件 → **2 次上传** `['d1.pdf','d2.pdf']`
+
+**新增 canonical 不变量**（`scripts/check.sh`，防回归）
+- `messages.js` 含 `inp.multiple = true`
+- 全仓无遗漏的 `files[0]`（`image_tools` 例外）
+
+**教训**：`multiple` 要查**动态创建的 input**，不能只改 HTML 静态标签。
+
+---
+
 ## [2026-09-22] fix(mobile+xiaoe): 隐藏侧栏箭头 / 修复手机端小e 拖动 / 降低惊喜概率
 
 **为什么**：红米 K50 实测反馈三个问题。
