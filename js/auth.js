@@ -54,7 +54,10 @@
             }
         } catch (e) {}
         return _origFetch(url, opts).then(function (r) {
-            if (r.status === 401 && !_loginOpen) { _loginOpen = true; _openLogin(true); }   // 可关闭：否则遮罩挡住顶栏
+            // 401 自动弹登录框：桌面端保留（方便），手机端不弹（会遮屏，改为点顶栏「登录」）
+            var _isMobile = false;
+            try { _isMobile = window.matchMedia('(max-width: 768px)').matches; } catch (e) {}
+            if (r.status === 401 && !_loginOpen && !_isMobile) { _loginOpen = true; _openLogin(true); }
             return r;
         });
     };
@@ -96,6 +99,15 @@
         'z-index:4000;display:flex;align-items:center;justify-content:center;pointer-events:none;';
     var OV_CARD_STYLE = 'pointer-events:auto;';
     function _openLogin(closable) {
+        // ── 手机端：只有「用户主动点登录」才弹框 ──
+        // 自动弹（401 触发、切账号等）在手机上传参 closable=true 且非用户手势，
+        // 会遮住整屏严重影响体验 → 手机端直接跳过，用户可点顶栏「登录」。
+        try {
+            if (window.matchMedia('(max-width: 768px)').matches && !window.__userAskedLogin) {
+                return;
+            }
+        } catch (e) {}
+        window.__userAskedLogin = false;   // 用完即清，避免影响后续
         var old = document.getElementById('auth-login-overlay');
         if (old) old.remove();
         var mode = 'login';   // login | register
@@ -117,7 +129,7 @@
                     '<input id="auth-login-pass" type="password" placeholder="密码" autocomplete="current-password" style="width:100%;padding:.5rem .6rem;border:1px solid var(--border,#ddd);border-radius:8px;margin-bottom:.6rem;box-sizing:border-box;">' +
                     '<div id="auth-login-err" style="color:var(--danger,#d33);font-size:.82rem;min-height:1.1em;margin-bottom:.4rem;"></div>' +
                     '<button id="auth-login-btn" style="width:100%;padding:.55rem;border:none;border-radius:8px;background:var(--primary,#4a7dff);color:#fff;cursor:pointer;font-size:.95rem;">登 录</button>' +
-                    '<div id="auth-login-hint" style="font-size:.78rem;color:var(--gray,#888);margin-top:.7rem;text-align:center;">登录后可使用共享库；数据库权限需管理员开通</div>' +
+                    '<div id="auth-login-hint" style="font-size:.78rem;color:var(--gray,#888);margin-top:.7rem;text-align:center;">登录后可使用共享库与自己的数据库</div>' +
                 '</div>' +
             '</div>';
         document.body.appendChild(ov);
@@ -152,7 +164,7 @@
             title.textContent = m === 'login' ? '登录 C4EAI 共享库' : '注册新账号';
             btn.textContent = m === 'login' ? '登 录' : '注 册';
             hint.textContent = m === 'login'
-                ? '登录后可使用共享库；数据库权限需管理员开通'
+                ? '登录后可使用共享库与自己的数据库'
                 : '自由注册；注册后私人功能立即可用，数据库需管理员授权';
             err.textContent = '';
             ov.querySelectorAll('.auth-tab').forEach(function (b) {
@@ -203,7 +215,7 @@
         [u, p].forEach(function (el) { el.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); }); });
         setTimeout(function () { u.focus(); }, 50);
     }
-    window.openLoginModal = function () { _loginOpen = true; _openLogin(true); };
+    window.openLoginModal = function () { window.__userAskedLogin = true; _loginOpen = true; _openLogin(true); };
 
     // ── 管理员面板：用户列表 / 建号 / 重置密码 ──
     function _openAdminPanel() {
@@ -393,7 +405,7 @@
         function _closeMenu() { if (menu) { menu.remove(); menu = null; } }
         chip.addEventListener('click', function () {
             // 游客：弹登录框（可选登录，可关闭）
-            if (isGuest) { _openLogin(true); return; }
+            if (isGuest) { window.__userAskedLogin = true; _openLogin(true); return; }
             // 已登录（含 admin）：小菜单
             if (menu) { _closeMenu(); return; }
             var r = chip.getBoundingClientRect();

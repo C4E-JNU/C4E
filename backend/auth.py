@@ -213,13 +213,22 @@ def create_user(username: str, password: str, role: str = "user",
 
 
 def register_user(username: str, password: str) -> tuple[bool, str]:
-    """自由注册：默认游客态(L0)，需管理员/金色开通数据库权限（升到 L1+）。"""
+    """自由注册：默认 L1 蓝色（注册即可用自己数据库）。
+    等级由 role_policy.default_level_for_new_user() 决定，便于日后调整。"""
     username = (username or "").strip()
     if not username:
         return False, "用户名不能为空"
     if any(c in username for c in ('/', '\\', '..', ' ')):
         return False, "用户名不能包含 / \\ .. 空格"
-    ok, msg = create_user(username, password, role="user", approved=False, level=0)
+    # 默认等级：L1 蓝色（集中配置在 role_policy，避免多处写死）
+    try:
+        import role_policy as _rp
+        lv = _rp.default_level_for_new_user()
+    except Exception:
+        lv = 1
+    ok, msg = create_user(username, password, role="user", approved=(lv >= 1), level=lv)
+    if ok:
+        msg = "注册成功，可用自己的数据库"
     return ok, msg
 
 

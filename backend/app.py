@@ -246,7 +246,7 @@ async def api_auth_login(req: LoginReq):
 
 @app.post("/api/auth/register")
 async def api_auth_register(req: RegisterReq):
-    """自由注册：人人可注册，默认未授权（数据库权限需 admin 开通）。"""
+    """自由注册：人人可注册，默认 L1 蓝色（注册即可用自己数据库）。"""
     if not _AUTH_ENABLED:
         res = await _hub_api("POST", "/api/auth/register", {"username": req.username, "password": req.password})
         if res is None:
@@ -259,7 +259,7 @@ async def api_auth_register(req: RegisterReq):
     ok, msg = _auth.register_user(req.username, req.password)
     if not ok:
         return JSONResponse({"error": msg}, status_code=400)
-    return {"status": "ok", "message": "注册成功，数据库权限需管理员开通"}
+    return {"status": "ok", "message": "注册成功，可用自己的数据库"}
 
 @app.post("/api/auth/logout")
 async def api_auth_logout(request: Request):
@@ -1058,7 +1058,8 @@ async def api_xiaoe_ask(req: XiaoeAskReq, request: Request):
         "   支持 📌 引用给智能体、浮窗预览/下载原件、删除；上传后全组可检索（向量检索 shared_search）。\n"
         "4) 图谱检索：Neo4j 图谱（graph_schema/execute_cypher）；需要先在配置里连库。\n"
         "5) 设置：模型/服务商配置、界面字号、打开方式、显示小e 开关等。\n"
-        "6) 账号：登录后可用共享库；数据库权限需管理员开通（admin 可在用户管理里开通）。\n"
+        "6) 账号：可用自己的数据库（注册即蓝色 L1）；查询所有人数据库需橙色 L3 起，"
+        "身份等级由金色(L5)或主管理员在用户管理里调整。\n"
         "7) 子智能体：主智能体可派发子任务（delegate_task），并行处理、有超时保护。\n"
         "8) 技能：智能体可读取技能库（skill_view）按流程做事。\n"
     )

@@ -38,6 +38,7 @@
     <link rel="stylesheet" href="css/input.css?v=7">
     <link rel="stylesheet" href="css/modals.css?v=4">
     <link rel="stylesheet" href="css/xiaoe.css?v=5">
+    <link rel="stylesheet" href="css/mobile.css?v=7">
     <link rel="stylesheet" href="css/components.css?v=5">
     <link rel="stylesheet" href="css/agent.css?v=4">
 
@@ -47,6 +48,8 @@
     <!-- 导航栏 -->
     <header>
         <div class="container nav-container">
+            <!-- 手机端汉堡按钮（桌面端 CSS 隐藏） -->
+            <button class="mobile-menu-btn" id="mobile-menu-btn" title="对话管理" aria-label="打开对话管理">☰</button>
             <div class="logo-area">
                 <div class="c4e-art-logo">C4E</div>
                 <div class="logo-text-wrapper">
@@ -878,7 +881,7 @@
     <script src="js/settings.js?v=7"></script>
     <script src="js/image_tools.js?v=3"></script>
     <script src="js/file_preview.js?v=4"></script>
-    <script src="js/auth.js?v=14"></script>
+    <script src="js/auth.js?v=17"></script>
     <script src="js/api.js?v=4"></script>
     <script src="js/database.js?v=11"></script>
     <script src="js/sidebar.js?v=8"></script>
@@ -900,6 +903,7 @@
     <script src="js/utils.js?v=2"></script>
     <script src="js/main.js?v=4"></script>
     <script src="js/xiaoe.js?v=7"></script>
+    <script src="js/mobile.js?v=1"></script>
 
     <div class="popup-panel bubble-context-menu" id="bubble-context-menu">
         <button class="menu-item" data-action="open-file">📂 打开文件</button>

@@ -279,6 +279,6 @@ def can_set_level(actor: dict, target_username: str, new_level: int) -> tuple[bo
 
 
 def default_level_for_new_user() -> int:
-    """自由注册的默认等级 = L0 游客态（需管理员/金色开通数据库权限）。
-    若希望注册即 L1，把返回值改为 L_BLUE。"""
-    return L_GUEST
+    """自由注册的默认等级 = L1 蓝色（用户 2026-09-22 定：注册即可用自己数据库）。
+    如需改回"注册后需开通"，把返回值改为 L_GUEST。"""
+    return L_BLUE
