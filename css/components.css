@@ -585,21 +585,21 @@
         .file-preview-panel {
             display: none;
             position: fixed;
-            z-index: 1600;
-            top: 100px;
-            left: 80px;
-            width: 760px;
-            height: 620px;
-            min-width: 380px;
-            min-height: 300px;
-            max-width: calc(100vw - 20px);
-            max-height: calc(100vh - 20px);
+            z-index: 9997;                 /* 与笔记编辑浮窗(9999)接近，同层级浮窗 */
+            top: 110px;
+            left: 110px;
+            width: 660px;                  /* 与笔记编辑浮窗初始尺寸一致（同款观感） */
+            height: 480px;
+            min-width: 320px;              /* 与 .floating-editor 相同的最小尺寸 */
+            min-height: 240px;
+            max-width: calc(100vw - 24px);
+            max-height: calc(100vh - 24px);
             flex-direction: column;
             background: var(--card-bg);
             border: 1px solid var(--border-color);
-            border-radius: 14px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.34);
-            overflow: hidden;
+            border-radius: 12px;           /* 与 .floating-editor 一致的圆角 */
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;              /* 与笔记编辑浮窗一致，避免内容溢出圆角 */
         }
         .file-preview-panel.active { display: flex; }
         .file-preview-panel .file-preview-header {
@@ -691,9 +691,10 @@
             word-break: break-word;
             color: var(--dark);
         }
-        /* 四角缩放热区 */
+        /* 四角缩放热区（功能保留，但不显示角标视觉 —— 用户 2026-09-22 要求去掉角标）
+           尺寸与笔记编辑浮窗的 .fe-resize 统一为 16px，手感一致 */
         .file-preview-resize { position: absolute; z-index: 6; background: transparent; pointer-events: auto; }
-        .file-preview-resize.se { right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize; }
-        .file-preview-resize.nw { left: 0; top: 0; width: 18px; height: 18px; cursor: nwse-resize; }
-        .file-preview-resize.ne { right: 0; top: 0; width: 18px; height: 18px; cursor: nesw-resize; }
-        .file-preview-resize.sw { left: 0; bottom: 0; width: 18px; height: 18px; cursor: nesw-resize; }
+        .file-preview-resize.se { right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize; }
+        .file-preview-resize.nw { left: 0; top: 0; width: 16px; height: 16px; cursor: nwse-resize; }
+        .file-preview-resize.ne { right: 0; top: 0; width: 16px; height: 16px; cursor: nesw-resize; }
+        .file-preview-resize.sw { left: 0; bottom: 0; width: 16px; height: 16px; cursor: nesw-resize; }

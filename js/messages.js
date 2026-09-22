@@ -616,8 +616,9 @@
                     var h = document.createElement('div');
                     h.className = 'fe-resize ' + c;
                     h.dataset.corner = c;
-                    // 只负责定位；外观由 CSS .fe-resize 用细 L 形边角线控制
-                    h.style.cssText = 'position:absolute;width:14px;height:14px;z-index:5;' +
+                    // 只负责定位；外观由 CSS .fe-resize 控制（角标视觉已按要求移除）
+                    // 尺寸 16px，与数据库文件预览浮窗的 .file-preview-resize 统一
+                    h.style.cssText = 'position:absolute;width:16px;height:16px;z-index:5;background:transparent;pointer-events:auto;' +
                         (c === 'se' ? 'right:2px;bottom:2px;cursor:nwse-resize;' :
                          c === 'nw' ? 'left:2px;top:2px;cursor:nwse-resize;' :
                          c === 'ne' ? 'right:2px;top:2px;cursor:nesw-resize;' :

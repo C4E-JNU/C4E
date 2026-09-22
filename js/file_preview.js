@@ -14,7 +14,8 @@
     'use strict';
 
     var _FP_KEY = 'c4eai-file-preview-window';   // localStorage: {x,y,w,h}
-    var _FP_MIN_W = 380, _FP_MIN_H = 300;
+    // 最小尺寸与 .file-preview-panel 的 CSS min-width/min-height 保持一致（320×240）
+    var _FP_MIN_W = 320, _FP_MIN_H = 240;
     var _fpInited = false;
     var _cur = { fileId: '', name: '' };
 
@@ -113,10 +114,14 @@
     }
 
     /* ── 几何：保存 / 夹紧 / 恢复 ───────────────────────── */
+    // 几何版本号：样式/默认尺寸变更时 +1，让旧的 localStorage 记忆失效
+    // （2026-09-22 v2：默认尺寸与笔记编辑浮窗统一为 660×480、最小 320×240、圆角 12px）
+    var _FP_VER = 2;
     function _saveRect() {
         var p = _el(); if (!p) return;
         try {
             localStorage.setItem(_FP_KEY, JSON.stringify({
+                v: _FP_VER,
                 x: parseInt(p.style.left, 10) || 0,
                 y: parseInt(p.style.top, 10) || 0,
                 w: p.offsetWidth,
@@ -140,8 +145,10 @@
         var vw = window.innerWidth, vh = window.innerHeight;
         var saved = null;
         try { saved = JSON.parse(localStorage.getItem(_FP_KEY) || 'null'); } catch (e) {}
-        if (saved && saved.w && saved.h) return saved;
-        var w = Math.min(760, vw - 24), h = Math.min(620, vh - 24);
+        // 仅当几何版本一致时才复用记忆（样式变更后旧的 760×620 不再生效）
+        if (saved && saved.w && saved.h && saved.v === _FP_VER) return saved;
+        // 默认尺寸与笔记编辑浮窗（660×480）对齐
+        var w = Math.min(660, vw - 24), h = Math.min(480, vh - 24);
         return { x: Math.max(8, (vw - w) / 2), y: Math.max(8, (vh - h) / 2), w: w, h: h };
     }
 

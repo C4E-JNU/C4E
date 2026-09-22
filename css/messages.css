@@ -567,19 +567,10 @@
             overflow: hidden;
         }
         /* 文字编辑浮窗四角缩放手柄：细 L 形边角线（不占大片背景） */
+        /* 四角缩放把手：热区保留（功能可用），但不画 L 形角标（用户 2026-09-22 要求去掉角标视觉） */
         .fe-resize { background: transparent; pointer-events: auto; }
-        .fe-resize::before {
-            content: '';
-            position: absolute;
-            width: 7px;
-            height: 7px;
-            box-sizing: border-box;
-        }
-        .fe-resize.se::before { right: 0; bottom: 0; border-right: 2px solid var(--primary); border-bottom: 2px solid var(--primary); }
-        .fe-resize.nw::before { left: 0; top: 0; border-left: 2px solid var(--primary); border-top: 2px solid var(--primary); }
-        .fe-resize.ne::before { right: 0; top: 0; border-right: 2px solid var(--primary); border-top: 2px solid var(--primary); }
-        .fe-resize.sw::before { left: 0; bottom: 0; border-left: 2px solid var(--primary); border-bottom: 2px solid var(--primary); }
-        .fe-resize:hover::before { border-color: #e02020; }
+        /* 角标视觉已按用户要求移除；如需恢复，把下面的 display:none 去掉即可 */
+        .fe-resize::before { content: none; display: none; }
         .fe-combo .fe-btn {
             border: none;
             border-radius: 0;
