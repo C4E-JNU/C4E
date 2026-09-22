@@ -200,7 +200,10 @@
                       return;
                   }
                   if (res.status === 200 && res.data.token) {
-                      setAuth(res.data.token, { username: res.data.username, role: res.data.role, approved: !!res.data.approved });
+                      setAuth(res.data.token, { username: res.data.username, role: res.data.role,
+                                                level: (typeof res.data.level === 'number') ? res.data.level
+                                                       : (res.data.role === 'admin' ? 5 : (res.data.approved ? 1 : 0)),
+                                                approved: !!res.data.approved });
                       location.reload();
                   } else {
                       err.textContent = res.data.error || '登录失败';
@@ -494,7 +497,13 @@
         }).then(function (d) {
             if (!d) return;
             if (!d.auth_enabled) { clearAuth(); return; }  // 本地实例且未连共享库：不显示芯片
-            setAuth(window.getAuthToken(), { username: d.username, role: d.role, approved: !!d.approved });
+            // ⚠️ 必须带上 level：刷新页面走这条路径，漏 level 会让顶栏芯片退回蓝色
+            setAuth(window.getAuthToken(), {
+                username: d.username, role: d.role,
+                level: (typeof d.level === 'number') ? d.level
+                       : (d.role === 'admin' ? 5 : (d.approved ? 1 : 0)),
+                approved: !!d.approved
+            });
             _renderChip();
         }).catch(function () {});
     }

@@ -241,8 +241,11 @@ async def api_auth_login(req: LoginReq):
     if not token:
         return JSONResponse({"error": "用户名或密码错误"}, status_code=401)
     u = _auth.user_by_token(token)
+    # ⚠️ 必须返回 level：前端登录后把身份存进 localStorage（顶栏芯片据此上色），
+    #    漏掉 level 会导致芯片只能按 approved 兜底显示蓝色（与用户管理面板不一致）。
     return {"status": "ok", "token": token, "username": u["username"],
-            "role": u["role"], "approved": u["approved"]}
+            "role": u["role"], "level": u.get("level", 0),
+            "approved": u["approved"]}
 
 @app.post("/api/auth/register")
 async def api_auth_register(req: RegisterReq):
