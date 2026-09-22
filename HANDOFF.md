@@ -56,10 +56,13 @@ C4EAI —— 催化降解研究智能体（江南大学）。前端纯 HTML/JS�
 ## 3. 开发环境与命令
 
 ```bash
+# 快速自检（canonical check）—— 提交前跑一次，秒级完成
+bash scripts/check.sh            # Python/JS 语法 + 关键不变量，ALL_PASS ✅ / FAILED
+
 # Python 编译检查（必须 env -u PYTHONPATH，否则 anaconda 环境冲突）
 env -u PYTHONPATH <ANACONDA-DIR>/python.exe -m py_compile backend/app.py
 
-# JS 语法检查（中文/括号路径先拷到临时目录）
+# JS 语法检查（中文/括号路径先拷到临时目录；node 是 Windows 程序，需 Windows 风格路径）
 cp js/auth.js <USER-HOME>/AppData/Local/Temp/x.js && cd <USER-HOME>/AppData/Local/Temp && node --check x.js
 
 # 本地测试实例（端口 8100；8080 是用户自己的，别动）
@@ -69,7 +72,13 @@ cd <CACHE-DIR>/tmp && env -u PYTHONPATH <ANACONDA-DIR>/python.exe run_test_8097.
 cd <CACHE-DIR>/tmp && env -u PYTHONPATH uv run --quiet --with websocket-client python <脚本>.py
 ```
 
-**没有 canonical 的 test/lint/build 命令** —— 这是本项目已知缺口。验证方式是**针对改动行为写断言脚本**，跑完即删。
+**验证纪律（血泪教训，务必遵守）**
+- canonical check = `bash scripts/check.sh`（2026-09-22 新增）；它只覆盖**静态**语法与不变量，
+  **行为验证仍需**针对改动写断言脚本（Edge CDP 真机），跑完即删
+- 只改前端（css/js/html）**也必须部署**到云端 —— 否则线上仍是旧版，用户看到的没变
+- 验证**以线上文件内容为准**，不能只看版本号（曾出现版本号相同、内容不同）
+- 改了文件**必须重新部署**（DRY 清理后漏部署过一次）
+- 后端 `.py` 不热加载：改完要让用户**手动重启** `start.bat`（绝不代重启）
 
 ---
 
