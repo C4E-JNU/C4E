@@ -224,7 +224,7 @@
                         '<div style="display:flex;gap:.4rem;flex-wrap:wrap;">' +
                             '<input id="auth-admin-newuser" placeholder="用户名" style="flex:1;min-width:90px;padding:.4rem .5rem;border:1px solid var(--border,#ddd);border-radius:6px;">' +
                             '<input id="auth-admin-newpw" placeholder="密码(≥6位)" style="flex:1;min-width:90px;padding:.4rem .5rem;border:1px solid var(--border,#ddd);border-radius:6px;">' +
-                            '<select id="auth-admin-newrole" style="padding:.4rem;border:1px solid var(--border,#ddd);border-radius:6px;"><option value="user">用户</option><option value="admin">管理员</option></select>' +
+                            '<select id="auth-admin-newrole" style="padding:.4rem;border:1px solid var(--border,#ddd);border-radius:6px;"><option value="0">0·游客</option><option value="1">1·蓝色</option><option value="2">2·紫色</option><option value="3">3·橙色</option><option value="4">4·红色</option><option value="5">5·金色</option></select>' +
                             '<button id="auth-admin-create" style="padding:.4rem .8rem;border:none;border-radius:6px;background:var(--primary,#4a7dff);color:#fff;cursor:pointer;">创建</button>' +
                         '</div>' +
                         '<div id="auth-admin-msg" style="font-size:.8rem;min-height:1.1em;margin-top:.4rem;"></div>' +
@@ -251,37 +251,54 @@
                 if (!el) return;
                 if (d.error) { el.innerHTML = '<span style="color:var(--danger,#d33);">' + _esc(d.error) + '</span>'; return; }
                 var isSuper = !!d.is_super;
+                // 等级元数据（颜色/名称）
+                var LV = [
+                    { n: '游客', c: '#9aa9be' }, { n: '蓝色', c: '#3b82f6' }, { n: '紫色', c: '#a855f7' },
+                    { n: '橙色', c: '#f59e0b' }, { n: '红色', c: '#ef4444' }, { n: '金色', c: '#eab308' }
+                ];
                 el.innerHTML = (d.users || []).map(function (u) {
-                    var appr = u.approved ? '✅ 已授权' : '⏳ 未授权';
+                    var isRoot = (u.username === 'admin');
+                    var lv = (typeof u.level === 'number') ? u.level : (isRoot ? 5 : (u.approved ? 1 : 0));
+                    var meta = LV[lv] || LV[0];
                     var ops = '';
-                    if (u.role !== 'admin') {
-                        ops = '<button class="auth-appr" data-u="' + _esc(u.username) + '" data-a="' + (u.approved ? '0' : '1') + '" style="background:none;border:none;cursor:pointer;font-size:.78rem;color:var(--primary,#4a7dff);">' + (u.approved ? '收回授权' : '开通数据库') + '</button>' +
-                              '<button class="auth-del" data-u="' + _esc(u.username) + '" style="background:none;border:none;cursor:pointer;font-size:.78rem;color:var(--danger,#d33);">删除</button>';
+                    if (!isRoot) {
+                        ops = '<button class="auth-del" data-u="' + _esc(u.username) + '" style="background:none;border:none;cursor:pointer;font-size:.78rem;color:var(--danger,#d33);">删除</button>';
                     }
-                    // 仅主管理员可切换角色；admin 自身不可改
-                    var roleBtn = '';
-                    if (isSuper && u.username !== 'admin') {
-                        roleBtn = '<button class="auth-role" data-u="' + _esc(u.username) + '" data-r="' + (u.role === 'admin' ? 'user' : 'admin') + '" style="background:none;border:none;cursor:pointer;font-size:.78rem;color:#b8860b;">' + (u.role === 'admin' ? '降为用户' : '设为管理员') + '</button>';
+                    // 等级选择器：主管理员可选 0-5；金色(L5) 可选 0-4；其他不可选
+                    var lvSel = '';
+                    var myLv = (typeof d.my_level === 'number') ? d.my_level : (isSuper ? 5 : 0);
+                    if (!isRoot && (isSuper || myLv >= 5)) {
+                        var maxLv = isSuper ? 5 : 4;
+                        var opts = '';
+                        for (var i = 0; i <= maxLv; i++) {
+                            opts += '<option value="' + i + '"' + (i === lv ? ' selected' : '') + '>' +
+                                    i + '·' + LV[i].n + '</option>';
+                        }
+                        lvSel = '<select class="auth-lv" data-u="' + _esc(u.username) + '" style="padding:.15rem .3rem;border:1px solid var(--border,#ddd);border-radius:5px;font-size:.75rem;">' + opts + '</select>';
                     }
                     var usage = (u.qwen_tokens_today != null && u.qwen_tokens_today > 0)
                         ? '<span style="font-size:.7rem;color:var(--gray,#999);">千问' + (u.qwen_tokens_today >= 1e6 ? (u.qwen_tokens_today/1e6).toFixed(1)+'M' : Math.round(u.qwen_tokens_today/1e3)+'k') + '/日</span>' : '';
+                    // 彩色圆点头像 + 用户名 + 等级名
                     return '<div style="display:flex;align-items:center;gap:.5rem;padding:.35rem 0;border-bottom:1px dashed var(--border,#eee);flex-wrap:wrap;">' +
-                        '<span style="flex:1;min-width:80px;">👤 ' + _esc(u.username) + '</span>' +
+                        '<span title="' + meta.n + '" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:' + meta.c + ';color:#fff;font-size:.7rem;font-weight:600;flex:0 0 auto;">' + _esc(u.username.slice(0, 1).toUpperCase()) + '</span>' +
+                        '<span style="flex:1;min-width:70px;">' + _esc(u.username) + (isRoot ? ' <span style="font-size:.7rem;color:#b8860b;">主管理员</span>' : '') + '</span>' +
                         usage +
-                        '<span style="font-size:.72rem;color:var(--gray,#999);">' + appr + '</span>' +
-                        (u.role === 'admin' ? '<span style="font-size:.75rem;color:#b8860b;">' + (u.username === 'admin' ? '主管理员' : '管理员') + '</span>' : '') +
-                        roleBtn + ops +
+                        '<span style="font-size:.72rem;color:' + meta.c + ';font-weight:600;">' + meta.n + '</span>' +
+                        lvSel + ops +
                         '<button class="auth-rpw" data-u="' + _esc(u.username) + '" style="background:none;border:none;cursor:pointer;font-size:.78rem;color:var(--primary,#4a7dff);">重置密码</button>' +
                         '</div>';
                 }).join('');
-                el.querySelectorAll('.auth-role').forEach(function (b) {
-                    b.addEventListener('click', function () {
-                        window.fetch('/api/auth/users/role', {
+                // 等级调整
+                el.querySelectorAll('.auth-lv').forEach(function (sel) {
+                    sel.addEventListener('change', function () {
+                        var nlv = parseInt(sel.value, 10);
+                        window.fetch('/api/auth/users/level', {
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ username: b.dataset.u, role: b.dataset.r })
+                            body: JSON.stringify({ username: sel.dataset.u, level: nlv })
                         }).then(function (r) { return r.json(); }).then(function (d2) {
                             var m = document.getElementById('auth-admin-msg');
-                            if (m) m.textContent = d2.error ? ('⚠️ ' + d2.error) : ('✅ 已将 ' + b.dataset.u + ' 设为' + (b.dataset.r === 'admin' ? '管理员' : '普通用户'));
+                            if (m) m.textContent = d2.error ? ('⚠️ ' + d2.error)
+                                : ('✅ 已将 ' + sel.dataset.u + ' 调整为 ' + nlv + '·' + LV[nlv].n);
                             reload();
                         });
                     });
@@ -299,18 +316,7 @@
                         });
                     });
                 });
-                el.querySelectorAll('.auth-appr').forEach(function (b) {
-                    b.addEventListener('click', function () {
-                        window.fetch('/api/auth/users/approve', {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ username: b.dataset.u, approved: b.dataset.a === '1' })
-                        }).then(function (r) { return r.json(); }).then(function (d2) {
-                            var m = document.getElementById('auth-admin-msg');
-                            if (m) m.textContent = d2.error ? ('⚠️ ' + d2.error) : '✅ 操作成功';
-                            reload();
-                        });
-                    });
-                });
+                // 注：原「开通/收回数据库授权」按钮已由等级选择器取代（L1+ 即可用数据库）
                 el.querySelectorAll('.auth-del').forEach(function (b) {
                     b.addEventListener('click', function () {
                         if (!confirm('确定删除账号 ' + b.dataset.u + '？其云端个人目录（笔记/附件）将一并删除，不可恢复。')) return;
@@ -332,13 +338,14 @@
         document.getElementById('auth-admin-create').addEventListener('click', function () {
             var u = document.getElementById('auth-admin-newuser').value.trim();
             var pw = document.getElementById('auth-admin-newpw').value;
-            var role = document.getElementById('auth-admin-newrole').value;
+            var lv = parseInt(document.getElementById('auth-admin-newrole').value, 10);
+            var LVN2 = ['游客', '蓝色', '紫色', '橙色', '红色', '金色'];
             var m = document.getElementById('auth-admin-msg');
             window.fetch('/api/auth/users', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: u, password: pw, role: role })
+                body: JSON.stringify({ username: u, password: pw, level: lv })
             }).then(function (r) { return r.json(); }).then(function (d) {
-                if (m) m.textContent = d.error ? ('⚠️ ' + d.error) : ('✅ 已创建 ' + u);
+                if (m) m.textContent = d.error ? ('⚠️ ' + d.error) : ('✅ 已创建 ' + u + '（' + (LVN2[lv] || lv) + '）');
                 if (!d.error) { document.getElementById('auth-admin-newuser').value = ''; document.getElementById('auth-admin-newpw').value = ''; reload(); }
             });
         });
@@ -354,14 +361,31 @@
         var chip = document.createElement('button');
         chip.id = 'auth-user-chip';
         var isGuest = me.username === 'guest';
+        // 等级（0-5）→ 颜色/名称；缺省按 role/approved 推导
+        var LVN = ['游客', '蓝色', '紫色', '橙色', '红色', '金色'];
+        var LVC = ['#9aa9be', '#3b82f6', '#a855f7', '#f59e0b', '#ef4444', '#eab308'];
+        var isRoot = (me.username === 'admin');
+        var lv = (typeof me.level === 'number') ? me.level
+               : (isRoot ? 5 : (me.approved ? 1 : 0));
+        var lvColor = LVC[lv] || LVC[0];
+        var lvName = LVN[lv] || '游客';
         chip.title = isGuest ? '未登录：本地功能照常用；登录后可使用共享库工具与数据库'
-                             : (me.role === 'admin' ? '账号（管理员）' : '账号');
+                             : ('账号 · ' + lvName + (isRoot ? '（主管理员）' : ''));
         chip.textContent = isGuest ? '🔑 登录'
-            : '👤 ' + me.username + (me.role === 'admin' ? ' ▾' : (me.approved ? ' ▾' : ' ⏳'));
-        chip.style.cssText = 'font-size:.78rem;padding:.28rem .7rem;border:1px solid var(--border);' +
+            : '👤 ' + me.username + (isRoot ? ' ▾' : ' ▾');
+        // 用左侧彩色圆点标识等级
+        chip.style.cssText = 'display:inline-flex;align-items:center;gap:.35rem;' +
+            'font-size:.78rem;padding:.28rem .7rem;border:1px solid var(--border);' +
             'border-radius:999px;background:var(--card-bg,#fff);color:var(--text-secondary,inherit);' +
             'cursor:pointer;line-height:1.5;white-space:nowrap;';
-        chip.onmouseover = function () { chip.style.borderColor = 'var(--primary)'; };
+        if (!isGuest) {
+            var dot = document.createElement('span');
+            dot.style.cssText = 'width:8px;height:8px;border-radius:50%;background:' + lvColor +
+                ';flex:0 0 auto;box-shadow:0 0 0 1.5px ' + lvColor + '33;';
+            dot.title = lvName;
+            chip.insertBefore(dot, chip.firstChild);
+        }
+        chip.onmouseover = function () { chip.style.borderColor = lvColor; };
         chip.onmouseout = function () { chip.style.borderColor = 'var(--border)'; };
         slot.appendChild(chip);
 
@@ -377,7 +401,10 @@
             menu.style.cssText = 'position:fixed;top:' + (r.bottom + 6) + 'px;right:' +
                 (window.innerWidth - r.right) + 'px;background:var(--card-bg,#fff);border:1px solid var(--border,#ddd);' +
                 'border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);z-index:3600;min-width:160px;overflow:hidden;';
-            var items = (me.role === 'admin' ? '<div data-a="admin" style="padding:.5rem .9rem;cursor:pointer;font-size:.88rem;">👥 用户管理</div>' : '') +
+            // 用户管理入口：主管理员 或 金色(L5) 可见
+            var _myLv = (typeof me.level === 'number') ? me.level : (me.username === 'admin' ? 5 : 0);
+            var _canManage = (me.username === 'admin') || (me.role === 'admin') || _myLv >= 5;
+            var items = (_canManage ? '<div data-a="admin" style="padding:.5rem .9rem;cursor:pointer;font-size:.88rem;">👥 用户管理</div>' : '') +
                 '<div data-a="switch" style="padding:.5rem .9rem;cursor:pointer;font-size:.88rem;">🔁 切换账号</div>' +
                 '<div data-a="logout" style="padding:.5rem .9rem;cursor:pointer;font-size:.88rem;">🚪 退出登录</div>';
             menu.innerHTML = items;

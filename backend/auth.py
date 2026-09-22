@@ -88,20 +88,29 @@ def init_auth():
                 "salt": salt,
                 "hash": _hash_password(pw, salt),
                 "role": "admin",
+                "level": 5,                    # 主管理员 = 金色(L5) + 额外特权
                 "approved": True,
                 "created": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             }
             _save_users(users)
             print(f"[auth] 初始管理员账号已创建：admin / {pw}（仅显示一次，请立即记录）")
         else:
-            # 存量用户补 approved 字段（缺省视为未授权，admin 恒为已授权）
+            # 存量用户补 level 字段（按旧的 role/approved 推导等级）
             for name, u in users.items():
+                if "level" not in u:
+                    if name == "admin" or u.get("role") == "admin":
+                        u["level"] = 5
+                    elif u.get("approved"):
+                        u["level"] = 1          # 旧 approved → 蓝色(L1)
+                    else:
+                        u["level"] = 0          # 未授权 → 游客(L0)
+                    changed = True
                 if "approved" not in u:
-                    u["approved"] = (u.get("role") == "admin")
+                    u["approved"] = (u.get("level", 0) >= 1)
                     changed = True
             if changed:
                 _save_users(users)
-                print("[auth] 存量用户已补 approved 字段")
+                print("[auth] 存量用户已补 level 字段（金5/蓝1/游0）")
 
 
 # ── 会话 ──
@@ -127,7 +136,7 @@ def logout(token: str):
 
 
 def user_by_token(token: str) -> dict | None:
-    """返回 {username, role} 或 None。"""
+    """返回 {username, role, level, approved} 或 None。"""
     with _lock:
         rec = _sessions.get(token)
     username = rec.get("username") if isinstance(rec, dict) else rec
@@ -136,8 +145,32 @@ def user_by_token(token: str) -> dict | None:
     u = _load_users().get(username)
     if not u:
         return None
+    lv = u.get("level")
+    if not isinstance(lv, int):
+        # 兼容未迁移的数据
+        lv = 5 if (username == "admin" or u.get("role") == "admin") else (1 if u.get("approved") else 0)
     return {"username": username, "role": u.get("role", "user"),
-            "approved": bool(u.get("approved", False))}
+            "level": lv, "approved": bool(u.get("approved")) or lv >= 1}
+
+
+def set_level(username: str, level: int) -> tuple[bool, str]:
+    """设置用户等级（L0-L5）。admin 账号不可被改。调用处已做权限检查。"""
+    if not isinstance(level, int) or not (0 <= level <= 5):
+        return False, "等级必须是 0-5 的整数"
+    if username == "admin":
+        return False, "主管理员不可被调整"
+    with _lock:
+        users = _load_users()
+        if username not in users:
+            return False, "用户不存在"
+        users[username]["level"] = level
+        # 同步 approved（L1+ 视为已授权，用于兼容旧逻辑）
+        users[username]["approved"] = level >= 1
+        # role 保持 user（除非是 admin），颜色代表身份
+        if username != "admin":
+            users[username]["role"] = "user"
+        _save_users(users)
+    return True, f"已将 {username} 调整为 {level} 级"
 
 
 def extract_token(headers) -> str:
@@ -150,13 +183,18 @@ def extract_token(headers) -> str:
 # ── 用户管理（仅 admin 调用，调用处已鉴权）──
 
 def create_user(username: str, password: str, role: str = "user",
-                approved: bool = False) -> tuple[bool, str]:
+                approved: bool = False, level: int | None = None) -> tuple[bool, str]:
     if not username or not password:
         return False, "用户名和密码不能为空"
     if role not in ("user", "admin"):
         return False, "角色必须是 user 或 admin"
     if len(password) < 4:
         return False, "密码至少 4 位"
+    if level is None:
+        # 未显式指定：admin→5(金)，approved→1(蓝)，否则 0(游)
+        level = 5 if role == "admin" else (1 if approved else 0)
+    if not isinstance(level, int) or not (0 <= level <= 5):
+        return False, "等级必须是 0-5 的整数"
     with _lock:
         users = _load_users()
         if username in users:
@@ -166,7 +204,8 @@ def create_user(username: str, password: str, role: str = "user",
             "salt": salt,
             "hash": _hash_password(password, salt),
             "role": role,
-            "approved": bool(approved) or role == "admin",
+            "level": level,
+            "approved": bool(approved) or level >= 1,
             "created": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
         _save_users(users)
@@ -174,13 +213,13 @@ def create_user(username: str, password: str, role: str = "user",
 
 
 def register_user(username: str, password: str) -> tuple[bool, str]:
-    """自由注册：一律普通角色、未授权（需 admin 开通数据库权限）。"""
+    """自由注册：默认游客态(L0)，需管理员/金色开通数据库权限（升到 L1+）。"""
     username = (username or "").strip()
     if not username:
         return False, "用户名不能为空"
     if any(c in username for c in ('/', '\\', '..', ' ')):
         return False, "用户名不能包含 / \\ .. 空格"
-    ok, msg = create_user(username, password, role="user", approved=False)
+    ok, msg = create_user(username, password, role="user", approved=False, level=0)
     return ok, msg
 
 
@@ -239,10 +278,19 @@ def delete_user(username: str) -> tuple[bool, str]:
 
 def list_users() -> list:
     users = _load_users()
-    return [{"username": n, "role": u.get("role", "user"),
-             "approved": bool(u.get("approved", False)),
-             "created": u.get("created", "")}
-            for n, u in sorted(users.items())]
+    out = []
+    for n, u in sorted(users.items()):
+        lv = u.get("level")
+        if not isinstance(lv, int):
+            lv = 5 if (n == "admin" or u.get("role") == "admin") else (1 if u.get("approved") else 0)
+        out.append({
+            "username": n,
+            "role": u.get("role", "user"),
+            "level": lv,
+            "approved": bool(u.get("approved")) or lv >= 1,
+            "created": u.get("created", ""),
+        })
+    return out
 
 
 def set_password(username: str, new_password: str) -> tuple[bool, str]:

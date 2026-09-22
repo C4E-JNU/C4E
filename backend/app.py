@@ -69,10 +69,13 @@ def _cur_user(request: Request) -> dict:
     if not _AUTH_ENABLED:
         s = _load_hub_session()
         if s.get("token"):
+            lv = s.get("level")
+            if not isinstance(lv, int):
+                lv = 5 if (s.get("username") == "admin" or s.get("role") == "admin") else (1 if s.get("approved") else 0)
             return {"username": s.get("username", "guest"), "role": s.get("role", "guest"),
-                    "approved": bool(s.get("approved", False))}
-        return {"username": "guest", "role": "guest", "approved": False}
-    return {"username": "guest", "role": "guest"}
+                    "level": lv, "approved": bool(s.get("approved", False)) or lv >= 1}
+        return {"username": "guest", "role": "guest", "level": 0, "approved": False}
+    return {"username": "guest", "role": "guest", "level": 0}
 
 @app.middleware("http")
 async def auth_no_cache_middleware(request, call_next):
@@ -203,7 +206,7 @@ async def _hub_api(method: str, path: str, payload: dict = None, token: str = ""
 class LoginReq(BaseModel):
     username: str; password: str
 class CreateUserReq(BaseModel):
-    username: str; password: str; role: str = "user"
+    username: str; password: str; role: str = "user"; level: int | None = None
 class SetPwReq(BaseModel):
     username: str; password: str
 class RegisterReq(BaseModel):
@@ -212,6 +215,8 @@ class ApproveReq(BaseModel):
     username: str; approved: bool = True
 class RoleReq(BaseModel):
     username: str; role: str = "user"
+class LevelReq(BaseModel):
+    username: str; level: int = 0
 class DeleteUserReq(BaseModel):
     username: str
 
@@ -227,7 +232,10 @@ async def api_auth_login(req: LoginReq):
             return JSONResponse({"error": "用户名或密码错误"}, status_code=401)
         d = json.loads(text)
         _save_hub_session({"token": d["token"], "username": d["username"],
-                           "role": d.get("role", "user"), "approved": bool(d.get("approved", False))})
+                           "role": d.get("role", "user"),
+                           "level": d.get("level") if isinstance(d.get("level"), int)
+                                    else (5 if d.get("role") == "admin" else (1 if d.get("approved") else 0)),
+                           "approved": bool(d.get("approved", False))})
         return d
     token = _auth.login(req.username, req.password)
     if not token:
@@ -282,15 +290,29 @@ async def api_auth_me(request: Request):
     return {"status": "ok", **_cur_user(request), "auth_enabled": True}
 
 def _require_admin(request: Request):
+    """能否进入用户管理面板：主管理员 或 金色(L5)。"""
     u = getattr(request.state, "user", None)
     if not u and not _AUTH_ENABLED:
         # 本地实例：看共享库会话是否为 admin
         s = _load_hub_session()
         if s.get("token"):
-            u = {"username": s.get("username"), "role": s.get("role")}
-    if not u or u.get("role") != "admin":
+            u = {"username": s.get("username"), "role": s.get("role"), "level": s.get("level")}
+    if not u:
         return False
-    return True
+    if u.get("role") == "admin":
+        return True
+    # 金色(L5) 也可管理面板（但只能调 L0-L4，见 /api/auth/users/level）
+    return _RP.level_of(u) >= _RP.L_GOLD
+
+
+def _require_super(request: Request) -> bool:
+    """仅主管理员（admin 账号）。"""
+    u = getattr(request.state, "user", None)
+    if not u and not _AUTH_ENABLED:
+        s = _load_hub_session()
+        if s.get("token"):
+            u = {"username": s.get("username"), "role": s.get("role")}
+    return bool(u) and u.get("username") == "admin"
 
 def _req_dump(req) -> dict:
     d = getattr(req, "model_dump", None)
@@ -317,7 +339,12 @@ async def api_auth_users(request: Request):
     users = _auth.list_users()
     for u in users:
         u["qwen_tokens_today"] = usage.get(u["username"], 0)
-    return {"status": "ok", "users": users, "is_super": (_cur_user(request).get("username") == "admin")}
+    _cu = _cur_user(request)
+    return {"status": "ok", "users": users,
+            "is_super": (_cu.get("username") == "admin"),
+            "my_level": _RP.level_of(_cu),
+            "levels": [{"level": i, "name": _RP.LEVEL_NAMES[i], "color": _RP.LEVEL_COLORS[i]}
+                       for i in range(6)]}
 
 @app.post("/api/auth/users")
 async def api_auth_users_create(req: CreateUserReq, request: Request):
@@ -325,12 +352,53 @@ async def api_auth_users_create(req: CreateUserReq, request: Request):
         return await _proxy_admin_api("POST", "/api/auth/users", _req_dump(req))
     if not _require_admin(request):
         return JSONResponse({"error": "需要管理员权限"}, status_code=403)
-    # 仅主管理员可创建 admin；其余强制普通账号
-    role = req.role if (_cur_user(request).get("username") == "admin" and req.role == "admin") else "user"
-    ok, msg = _auth.create_user(req.username, req.password, role)
+    cu = _cur_user(request)
+    # 等级：仅主管理员可创建 L5(金)；金色(L5) 最多创建 L4
+    want_lv = req.level if isinstance(req.level, int) else 0
+    if cu.get("username") != "admin" and want_lv >= _RP.L_GOLD:
+        want_lv = _RP.L_ORANGE   # 非主管理员降级请求
+    # 仅主管理员可创建 admin 角色
+    role = req.role if (cu.get("username") == "admin" and req.role == "admin") else "user"
+    ok, msg = _auth.create_user(req.username, req.password, role, level=want_lv)
     if not ok:
         return JSONResponse({"error": msg}, status_code=400)
     return {"status": "ok"}
+
+@app.post("/api/auth/users/level")
+async def api_auth_users_level(req: LevelReq, request: Request):
+    """调整用户身份等级（L0-L5）。
+    - 主管理员：可调任何非 admin 用户（含授予 L5 金色）
+    - 金色(L5)：可调 L0-L4（不可授予金色）
+    - 其他：无权
+    """
+    if not _AUTH_ENABLED:
+        return await _proxy_admin_api("POST", "/api/auth/users/level", _req_dump(req))
+    cu = _cur_user(request)
+    if not _require_admin(request):
+        return JSONResponse({"error": "需要管理员或金色等级权限"}, status_code=403)
+    ok, msg = _RP.can_set_level(cu, req.username, req.level)
+    if not ok:
+        return JSONResponse({"error": msg}, status_code=403 if "权限" in msg else 400)
+    ok, msg = _auth.set_level(req.username, req.level)
+    if not ok:
+        return JSONResponse({"error": msg}, status_code=400)
+    return {"status": "ok", "message": msg}
+
+
+@app.get("/api/auth/levels")
+async def api_auth_levels():
+    """等级元数据（前端据此渲染头像颜色与名称）。"""
+    return {"status": "ok", "levels": [
+        {"level": i, "name": _RP.LEVEL_NAMES[i], "color": _RP.LEVEL_COLORS[i],
+         "desc": [
+             "游客：聊天可用；工具受限；不可用云端数据库；本地千问限量",
+             "蓝色：可用自己数据库（上传/查询/改/删）；工具全开；本地千问限量",
+             "紫色：同蓝色，颜色区分身份；本地千问限量",
+             "橙色：可查询所有人的数据库；仅能改/删自己的；本地千问限量",
+             "红色：同橙色权限，且本地千问**不限量**",
+             "金色：同橙色权限；可调整他人身份等级（不可授予金色）",
+         ][i]} for i in range(6)]}
+
 
 @app.post("/api/auth/users/role")
 async def api_auth_users_role(req: RoleReq, request: Request):

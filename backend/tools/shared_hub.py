@@ -219,7 +219,21 @@ async def db_notes(action: str, note_id: str = "", title: str = "", content: str
     if _os.environ.get("C4EAI_AUTH", "") == "1":
         from tools import file_tools as _ft
         if action == "list":
-            notes = [n for n in _ft._read_notes(owner) if n.get("branch_id", "") == db_branch]
+            # 权限：L3(橙) 起可查询**所有人**的条目；L0-L2 只能看自己的
+            try:
+                import role_policy as _rp
+                _can_all = _rp.can_query_all({"username": owner})
+            except Exception:
+                _can_all = False
+            if _can_all:
+                # 用现成的跨用户汇总函数（admin 面板同款），每条已带 owner
+                try:
+                    notes = [n for n in _ft.list_all_users_notes()
+                             if n.get("branch_id", "") == db_branch]
+                except Exception:
+                    notes = [n for n in _ft._read_notes(owner) if n.get("branch_id", "") == db_branch]
+            else:
+                notes = [n for n in _ft._read_notes(owner) if n.get("branch_id", "") == db_branch]
             # ⚠️ 只返回「目录」：不含正文（正文可能几十万字，全量返回会撑爆上下文）。
             # 智能体要正文必须再调 read（按 id），由 read 决定给多少。
             def _slim(n):
