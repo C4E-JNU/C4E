@@ -298,7 +298,9 @@ function _dbEntryBodyHtml(n) {
 function _enhanceFileCardDelete(container, getNote, onChanged) {
     var me = (typeof window.getAuthUser === 'function') ? window.getAuthUser() : null;
     if (!me) return;
-    var isAdmin = (me.role === 'admin');
+    // 仅 admin 可改他人内容（用户选 B：金色 L5 也不能）—— 用「当前登录名」而非 role
+    // （历史账号 xhq1/xhq2 的 role 仍写着 admin，按 role 判会误放行）
+    var isAdmin = (me.username === 'admin');
     container.querySelectorAll('.msg-file-card, .attachment-item[data-file-id]').forEach(function (card) {
         var noteEl = card.closest('[data-eid],[data-note-id]');
         if (!noteEl) return;
@@ -362,7 +364,7 @@ async function refreshDocumentList() {
             container.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--gray);font-size:0.9rem;">暂无条目<br><span style="font-size:.78rem;">点「📤 上传文档」自动建条目，或「＋ 新建条目」手写笔记</span></div>';
             return;
         }
-        var myName = me.username, isAdmin = (me.role === 'admin');
+        var myName = me.username, isAdmin = (me.username === 'admin');
         // 按 owner 分组：每组一个 "👤 用户名" 小标题（本人排最前）
         var groups = {};
         var order = [];

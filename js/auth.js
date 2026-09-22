@@ -266,6 +266,7 @@
                 if (!el) return;
                 if (d.error) { el.innerHTML = '<span style="color:var(--danger,#d33);">' + _esc(d.error) + '</span>'; return; }
                 var isSuper = !!d.is_super;
+                var isRootMe = !!d.is_root;   // 仅 admin：可删账号、可授 L5
                 // 等级元数据（颜色/名称）
                 var LV = [
                     { n: '游客', c: '#9aa9be' }, { n: '蓝色', c: '#3b82f6' }, { n: '紫色', c: '#a855f7' },
@@ -276,14 +277,15 @@
                     var lv = (typeof u.level === 'number') ? u.level : (isRoot ? 5 : (u.approved ? 1 : 0));
                     var meta = LV[lv] || LV[0];
                     var ops = '';
-                    if (!isRoot) {
+                    // 删除账号：仅主管理员（金色与管理员一致，但删账号排除）
+                    if (!isRoot && isRootMe) {
                         ops = '<button class="auth-del" data-u="' + _esc(u.username) + '" style="background:none;border:none;cursor:pointer;font-size:.78rem;color:var(--danger,#d33);">删除</button>';
                     }
                     // 等级选择器：主管理员可选 0-5；金色(L5) 可选 0-4；其他不可选
                     var lvSel = '';
                     var myLv = (typeof d.my_level === 'number') ? d.my_level : (isSuper ? 5 : 0);
                     if (!isRoot && (isSuper || myLv >= 5)) {
-                        var maxLv = isSuper ? 5 : 4;
+                        var maxLv = isRootMe ? 5 : 4;   // 只有 admin 能授予 L5
                         var opts = '';
                         for (var i = 0; i <= maxLv; i++) {
                             opts += '<option value="' + i + '"' + (i === lv ? ' selected' : '') + '>' +

@@ -292,6 +292,24 @@ async def api_auth_me(request: Request):
         return {"status": "ok", "username": "guest", "role": "guest", "auth_enabled": False}
     return {"status": "ok", **_cur_user(request), "auth_enabled": True}
 
+def _is_authorized(user: dict) -> bool:
+    """是否已开通数据库权限（L1 蓝色及以上，或 admin）。
+
+    用户 2026-09-22 定：注册即 L1，故等价于「非游客」。
+    """
+    return _RP.level_of(user) >= _RP.L_BLUE
+
+
+def _owns_or_root(user: dict, owner: str) -> bool:
+    """能否操作该资源：本人所有，或主管理员 admin。
+
+    ⚠️ 用户 2026-09-22 选 B：**金色 L5 也不能改/删他人数据库/笔记**。
+       数据管理权（改他人内容）保留给 admin 独占 —— 金色只是「人事权限」。
+       L4 红的「全读写」仅指**服务器文件**，不含他人的数据库条目。
+    """
+    return (owner or "") == (user.get("username") or "") or _RP.is_root(user)
+
+
 def _require_admin(request: Request):
     """能否进入用户管理面板：主管理员 或 金色(L5)。"""
     u = getattr(request.state, "user", None)
@@ -308,14 +326,20 @@ def _require_admin(request: Request):
     return _RP.level_of(u) >= _RP.L_GOLD
 
 
-def _require_super(request: Request) -> bool:
-    """仅主管理员（admin 账号）。"""
+def _require_root(request: Request):
+    """仅主管理员 admin：删除账号、授予 L5 等 admin 独有操作。
+
+    用户 2026-09-22 定：金色 L5 与管理员权限一致，但「删账号」排除在外。
+    """
     u = getattr(request.state, "user", None)
     if not u and not _AUTH_ENABLED:
         s = _load_hub_session()
         if s.get("token"):
-            u = {"username": s.get("username"), "role": s.get("role")}
-    return bool(u) and u.get("username") == "admin"
+            u = {"username": s.get("username"), "role": s.get("role"), "level": s.get("level")}
+    if not u:
+        return False
+    return u.get("username") == "admin" or u.get("role") == "admin"
+
 
 def _req_dump(req) -> dict:
     d = getattr(req, "model_dump", None)
@@ -344,7 +368,8 @@ async def api_auth_users(request: Request):
         u["qwen_tokens_today"] = usage.get(u["username"], 0)
     _cu = _cur_user(request)
     return {"status": "ok", "users": users,
-            "is_super": (_cu.get("username") == "admin"),
+            "is_super": (_cu.get("username") == "admin") or _RP.level_of(_cu) >= _RP.L_GOLD,
+            "is_root": (_cu.get("username") == "admin"),
             "my_level": _RP.level_of(_cu),
             "levels": [{"level": i, "name": _RP.LEVEL_NAMES[i], "color": _RP.LEVEL_COLORS[i]}
                        for i in range(6)]}
@@ -440,11 +465,14 @@ async def api_auth_users_approve(req: ApproveReq, request: Request):
 
 @app.post("/api/auth/users/delete")
 async def api_auth_users_delete(req: DeleteUserReq, request: Request):
-    """删号：连带删除 workspace/users/<名> 整个目录。"""
+    """删号：连带删除 workspace/users/<名> 整个目录。
+
+    ⚠️ 仅主管理员（用户 2026-09-22 定：金色与管理员一致，但「删账号」排除）。
+    """
     if not _AUTH_ENABLED:
         return await _proxy_admin_api("POST", "/api/auth/users/delete", _req_dump(req))
-    if not _require_admin(request):
-        return JSONResponse({"error": "需要管理员权限"}, status_code=403)
+    if not _require_root(request):
+        return JSONResponse({"error": "只有主管理员可以删除账号"}, status_code=403)
     ok, msg = _auth.delete_user(req.username)
     if not ok:
         return JSONResponse({"error": msg}, status_code=400)
@@ -615,7 +643,7 @@ async def api_file_upload(file: UploadFile = File(...), request: Request = None,
             except Exception as e:
                 return JSONResponse({"error": f"上传到共享服务器失败: {e}"}, status_code=502)
         # 云端共享库：数据库需 admin 已授权
-        if not user.get("approved") and user.get("role") != "admin":
+        if not _is_authorized(user):
             return JSONResponse({"error": "已注册，等待管理员开通数据库权限后即可上传"},
                                 status_code=403)
 
@@ -723,7 +751,7 @@ async def api_pool_list(request: Request):
             return JSONResponse(json.loads(text) if text else {}, status_code=code)
         except Exception:
             return JSONResponse({"error": text}, status_code=code)
-    if not user.get("approved") and user.get("role") != "admin":
+    if not _is_authorized(user):
         return JSONResponse({"error": "已注册，等待管理员开通数据库权限"}, status_code=403)
     from tools.file_tools import _pool_uploads_dir
     items = []
@@ -736,8 +764,8 @@ async def api_pool_list(request: Request):
                     items.append(json.load(f))
             except Exception:
                 pass
-    # 按身份过滤：admin 看全部；普通授权用户只看自己的
-    if user.get("role") != "admin":
+    # 按身份过滤：admin 看全部；其余（含金色 L5）只看自己的 —— 用户选 B
+    if not _RP.is_root(user):
         items = [m for m in items if m.get("owner", "admin") == user["username"]]
     return {"status": "ok", "files": items}
 
@@ -750,7 +778,7 @@ async def api_file_delete(req: FileIdRequest, request: Request):
     d, meta, _ = _resolve_upload(req.file_id)
     if d:
         owner = (meta or {}).get("owner", "admin")
-        if user.get("role") != "admin" and owner != user["username"]:
+        if not _owns_or_root(user, owner):
             return JSONResponse({"error": "只能删除自己的文件"}, status_code=403)
     return json.loads(await _delete_upload(req.file_id))
 
@@ -939,14 +967,14 @@ async def api_notes_publish(req: NotePublishReq, request: Request):
     user = _cur_user(request)
     if user["username"] == "guest" or user.get("role") == "guest":
         return JSONResponse({"error": "请先登录（右上角「登录」）后再上传数据库"}, status_code=401)
-    if not user.get("approved") and user.get("role") != "admin":
+    if not _is_authorized(user):
         return JSONResponse({"error": "已注册，等待管理员开通数据库权限后即可上传"}, status_code=403)
 
     from tools import file_tools as _ft
     note, _okey = _ft._find_note(user["username"], req.note_id)
     if note is None:
         return JSONResponse({"error": "笔记不存在"}, status_code=404)
-    if (note.get("owner", "admin") != user["username"]) and user.get("role") != "admin":
+    if not _owns_or_root(user, note.get("owner", "admin")):
         return JSONResponse({"error": "只能上传自己的笔记"}, status_code=403)
 
     if _AUTH_ENABLED:
@@ -1000,7 +1028,7 @@ async def api_notes_move(req: NoteMoveReq, request: Request):
     if (req.branch_id or "") == DB_BRANCH_ID and not _AUTH_ENABLED:
         p = await _notes_proxy("POST", "/api/notes/move", {"note_id": req.note_id, "direction": req.direction})
         return p if p is not None else JSONResponse({"error": "共享库不可达"}, status_code=502)
-    if get_note_owner(req.note_id, user["username"]) != user["username"] and user.get("role") != "admin":
+    if not _owns_or_root(user, get_note_owner(req.note_id, user["username"])):
         return JSONResponse({"error": "只能调整自己的笔记"}, status_code=403)
     return json.loads(await move_note(req.note_id, req.direction, user["username"]))
 @app.put("/api/notes")
@@ -1010,7 +1038,7 @@ async def api_notes_update(req: NoteUpdateReq, request: Request):
     if (req.branch_id or "") == DB_BRANCH_ID and not _AUTH_ENABLED:
         p = await _notes_proxy("PUT", "/api/notes", {"note_id": req.note_id, "title": req.title, "content": req.content})
         return p if p is not None else JSONResponse({"error": "共享库不可达"}, status_code=502)
-    if get_note_owner(req.note_id, user["username"]) != user["username"] and user.get("role") != "admin":
+    if not _owns_or_root(user, get_note_owner(req.note_id, user["username"])):
         return JSONResponse({"error": "只能修改自己的笔记"}, status_code=403)
     return json.loads(await update_note(req.note_id, req.title, req.content, user["username"]))
 @app.delete("/api/notes/{note_id}")
@@ -1020,7 +1048,7 @@ async def api_notes_delete(note_id: str, request: Request, source: Optional[str]
     if (source == "cloud" or source == DB_BRANCH_ID) and not _AUTH_ENABLED:
         p = await _notes_proxy("DELETE", f"/api/notes/{note_id}")
         return p if p is not None else JSONResponse({"error": "共享库不可达"}, status_code=502)
-    if get_note_owner(note_id, user["username"]) != user["username"] and user.get("role") != "admin":
+    if not _owns_or_root(user, get_note_owner(note_id, user["username"])):
         return JSONResponse({"error": "只能删除自己的笔记"}, status_code=403)
     return json.loads(await delete_note(note_id, user["username"]))
 
@@ -1138,7 +1166,7 @@ async def api_xiaoe_ask(req: XiaoeAskReq, request: Request):
 async def api_search_knowledge(req: SearchQueryReq, request: Request):
     """共享池语义检索（仅云端；需已授权）。"""
     user = _cur_user(request)
-    if _AUTH_ENABLED and not user.get("approved") and user.get("role") != "admin":
+    if _AUTH_ENABLED and not _is_authorized(user):
         return JSONResponse({"error": "已注册，等待管理员开通数据库权限"}, status_code=403)
     return json.loads(await search_knowledge(req.query, req.top_k or 3))
 

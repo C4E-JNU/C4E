@@ -66,7 +66,23 @@ def level_of(user: dict) -> int:
 
 
 def is_super(user: dict) -> bool:
-    """主管理员：全部权限 + 可改他人数据库 + 可删任何非 admin 账号。"""
+    """主管理员：全部权限 + 可改他人数据库 + 可删任何非 admin 账号。
+
+    ⚠️ 语义已扩展（用户 2026-09-22 定：金色 L5 与管理员权限一致）：
+       本函数现在表示「管理级权限」= 主管理员 admin **或** 金色 L5。
+       但有两个能力仍为 admin 独有，须用 is_root() 判断：
+         · 删除他人账号
+         · 授予/调整 L5 等级（防止金色互相提权、或批量造金色）
+    """
+    if not user:
+        return False
+    if (user.get("username") or "") == SUPER_USER:
+        return True
+    return level_of(user) >= L_GOLD
+
+
+def is_root(user: dict) -> bool:
+    """主管理员本体（admin）。用于 admin 独有的两项能力：删账号、授予 L5。"""
     return bool(user) and (user.get("username") or "") == SUPER_USER
 
 
@@ -134,29 +150,38 @@ def filter_tools(user: dict, requested: list) -> list:
     if lv == L_GUEST:
         # 游客：受限工具集，且不含数据库工具
         return sorted((t & GUEST_TOOLS) - DB_TOOLS)
-    if is_super(user):
-        return sorted(t)                                    # 主管理员：全部
+    if is_super(user) or lv >= L_RED:
+        # 主管理员 / L4红 / L5金：全部工具（用户 2026-09-22 定：红色以上给全部工具）
+        return sorted(t)
     if lv >= L_BLUE:
-        return sorted(t - EXEC_TOOLS)                       # L1-L5：除执行类
+        return sorted(t - EXEC_TOOLS)                       # L1-L3：除执行类
     return sorted(t & GUEST_TOOLS)
 
 
 def enforce_mode(user: dict, requested_mode: str) -> str:
-    """云端把非管理员的 permission_mode 钳到 safe（前端传什么都无效）。"""
+    """云端把非管理级的 permission_mode 钳到 safe（前端传什么都无效）。
+
+    L5 金 / 主管理员 → 保留用户所选模式（用户 2026-09-22 定：金色与管理员一致）。
+    """
     if not HUB:
         return requested_mode or "safe"
-    if not is_super(user):
-        return "safe"
-    return requested_mode or "safe"
+    if is_super(user):
+        return requested_mode or "safe"
+    return "safe"
 
 
 def user_sandbox(user: dict) -> dict | None:
-    """非主管理员的文件基座锁到本人目录 + pool；主管理员不锁（None）。"""
+    """文件基座：L0-L3 锁到本人目录 + pool；L4红/L5金/主管理员不锁（可读写全盘）。
+
+    用户 2026-09-22 定：
+      · 橙色 L3 及以下 → 锁定本人目录（不放开读写）
+      · 红色 L4 及以上 → 不锁，全部读写
+    """
     if not HUB:
         return None
-    if not is_super(user):
-        return {"user": user.get("username") or "guest"}
-    return None
+    if is_super(user) or level_of(user) >= L_RED:
+        return None
+    return {"user": user.get("username") or "guest"}
 
 
 def is_local_qwen(model_config: dict) -> bool:
@@ -169,19 +194,23 @@ def is_local_qwen(model_config: dict) -> bool:
 
 
 def cypher_denied(user: dict, cypher: str) -> bool:
-    """图谱删除类语句：非主管理员拒；主管理员放行；游客根本没有图谱工具。"""
+    """图谱删除类语句：管理级（L5金/admin）放行，其余（含 L4红）拒。"""
     if not HUB:
         return False
     return (not is_super(user)) and bool(_CYPHER_DEL.search(cypher or ""))
 
 
 def tool_denied(user: dict, tool: str) -> bool:
-    """直接面向前端的 /api/tool/* 端点的等级闸门。tool∈code/read-file/cypher/fetch/schema。"""
+    """直接面向前端的 /api/tool/* 端点的等级闸门。tool∈code/read-file/cypher/fetch/schema。
+
+    用户 2026-09-22 定：红色 L4 及以上可用全部工具（含执行类），须与 filter_tools 口径一致。
+    """
     if not HUB:
         return False
+    lv = level_of(user)
     if tool == "code":
-        return not is_super(user)                 # 执行类：仅主管理员
-    return level_of(user) == L_GUEST              # 其余工具类：游客一律拒
+        return not (is_super(user) or lv >= L_RED)   # 执行类：L4红/L5金/admin
+    return lv == L_GUEST                             # 其余工具类：游客一律拒
 
 
 def mineru_write_allowed(user: dict) -> bool:
@@ -269,7 +298,7 @@ def can_set_level(actor: dict, target_username: str, new_level: int) -> tuple[bo
         return False, "等级必须是 0-5 的整数"
     if target_username == SUPER_USER:
         return False, "主管理员不可被调整"
-    if is_super(actor):
+    if is_root(actor):
         return True, "ok"                       # 主管理员：可授任何等级（含 L5）
     if can_manage_levels(actor):
         if new_level >= L_GOLD:

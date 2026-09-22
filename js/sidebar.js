@@ -487,10 +487,12 @@
             var escapedTitle = escHtml(note.title || '未命名笔记');
             // 默认闭合，用 _noteCollapsedMap 记录手动展开/收起状态
             var isCollapsed = _noteCollapsedMap[note.id] !== undefined ? _noteCollapsedMap[note.id] : true;
-            // 归属：非本人且非管理员 → 只读（无编辑/删除/排序按钮）
+            // 归属：非本人且非 admin → 只读（无编辑/删除/排序按钮）
+            // ⚠️ 用户选 B：金色 L5 也不能改他人笔记，故按「登录名」判而非 role
+            //    （历史账号 xhq1/xhq2 的 role 仍写着 admin，按 role 判会误放行）
             var me = (typeof window.getAuthUser === 'function') ? window.getAuthUser() : null;
             var myName = me ? me.username : 'admin';
-            var isAdmin = me ? (me.role === 'admin') : true;
+            var isAdmin = me ? (me.username === 'admin') : true;
             var owner = note.owner || 'admin';
             var canEdit = (owner === myName) || isAdmin;
             var ownerTag = (owner !== myName)

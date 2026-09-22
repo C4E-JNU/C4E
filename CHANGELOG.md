@@ -6,7 +6,50 @@
 
 ---
 
-## [2026-09-22] fix(auth): 身份色点不跟随等级 —— 三处漏 level 导致顶栏芯片恒为蓝色
+## [2026-09-22] feat(perm): 权限体系细化 —— 红+全读写/全工具、金=管理员（方案 B）
+
+**用户裁定（三条）**
+1. 橙色 L3 **不允许**读写服务器文件
+2. 红色 L4 及以上 → **全部读写 + 全部工具**
+3. 金色 L5 = **管理员权限一致**，但「删账号」+「改他人数据」仍归 admin（**方案 B**）
+
+**改动**
+
+`backend/role_policy.py`
+- `is_super()` 语义扩展为**管理级**（L5 金 + admin）；新增 `is_root()` = 仅 admin
+  - 分离原因：金色要"与管理员一致"，但**删账号**和**授予 L5** 必须 admin 独占（防金色互相提权/批量造金）
+- `filter_tools`：`lv >= L_RED` 给全部工具（原仅 admin）
+- `user_sandbox`：`lv >= L_RED` 不锁目录（原仅 admin）→ 红+可读写全盘
+- `tool_denied("code")`：`lv >= L_RED` 放行（**修复**：原仅 admin，与 filter_tools 口径不一致 → 红色看得到工具却一用就 403）
+- `enforce_mode`：金色保留所选 permission_mode
+- `can_set_level`：改用 `is_root`（只有 admin 能授予 L5）
+
+`backend/app.py`
+- 新增 `_is_authorized()`（L1+ 授权门槛）、`_owns_or_root()`（本人 或 admin）
+- **10 处 `role != "admin"` 全部改为按 level 判断**（旧判断不认 level，且 xhq1/xhq2 的 role 恰为 admin → 会误放行金色）
+- 新增 `_require_root()`：删账号仅 admin（原 `_require_admin` 金色也能过）
+- 删除死代码 `_require_super()`（无调用点）
+- `/api/auth/users` 返回增加 `is_root`；`is_super` 改为反映 L5
+
+`js/auth.js`
+- 用户管理面板：删账号按钮 **仅 `is_root` 可见**；等级下拉 `maxLv` 按 `is_root` 判定（金色封顶 L4）
+
+`js/database.js` / `js/sidebar.js`
+- `isAdmin` 判定由 `me.role === 'admin'` 改为 **`me.username === 'admin'`**
+- 原因：历史账号 xhq1/xhq2 的 `role` 字段仍是 `admin`，按 role 判会让金色**看到**编辑/删除按钮（点了才被后端拒），体验割裂
+- 版本号：`database.js?v=11→12`、`sidebar.js?v=8→9`
+
+**实测**（云端真机，37/37 PASS）
+- 文件基座：L0/L1/L3 锁本人目录；**L4/L5/admin 不锁**（全盘读写）✅
+- 工具：L1-L3 六个（无执行类）；**L4/L5/admin 九个（含 run_code/terminal/skill_write）** ✅
+- `tool_denied(code)`：L3 拒 / L4 放 / L5 放 ✅
+- `is_super`=仅 L5+admin；`is_root`=仅 admin ✅
+- 金不能授 L5、可授 L4；admin 可授 L5、自身不可被调 ✅
+- **★ `_owns_or_root`：本人 True / 金色改他人 False / 红色改他人 False / admin True** ✅
+
+---
+
+## [2026-09-22] fix(auth): 身份色点不跟随等级 —— 三处漏 level 致顶栏芯片恒为蓝色
 
 **用户反馈**：「注册账号边上的点，我已经授予了对应权限，但是边上的点没有变成对应的颜色，
 比如 xhq1 还是蓝色」
