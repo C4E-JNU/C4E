@@ -32,6 +32,19 @@ mineru_processing.log
 # ── Node / 前端构建（如适用） ──
 node_modules/
 
+# ── 模型缓存（体积大，可重新下载，不入库） ──
+model_cache/
+**/model_cache/
+
+# ── 临时/备份目录 ──
+_syn/
+*.bak
+*.tmp
+
+# ── 翻译/批处理日志 ──
+run_translate_log.txt
+*_log.txt
+
 # ── 编辑器 / 系统 ──
 .DS_Store
 Thumbs.db

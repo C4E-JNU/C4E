@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>小e · 云朵团系方案（B 方向深化）</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(165deg, #eef7ff 0%, #f6f1ff 55%, #eefaf6 100%);
+    min-height: 100vh; padding: 40px 20px 60px; color: #2d3748;
+  }
+  h1 { text-align: center; font-size: 1.5rem; font-weight: 700; margin-bottom: 8px; letter-spacing: .5px; }
+  .sub { text-align: center; color: #7a8aa5; font-size: .88rem; margin-bottom: 40px; }
+  .grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 30px; max-width: 1180px; margin: 0 auto;
+  }
+  .card {
+    background: #fff; border-radius: 26px; padding: 26px 22px 22px;
+    box-shadow: 0 10px 32px rgba(122,148,200,.14);
+    border: 2px solid #f0f5fd; text-align: center; position: relative;
+    transition: transform .3s cubic-bezier(.34,1.56,.64,1), box-shadow .3s;
+  }
+  .card:hover { transform: translateY(-6px) scale(1.015); box-shadow: 0 18px 44px rgba(122,148,200,.22); }
+  .badge {
+    position: absolute; top: 14px; right: 14px; font-size: .7rem; font-weight: 700;
+    padding: 4px 11px; border-radius: 999px;
+  }
+  .b1 { background: #e6f4ff; color: #2b8fd6; }
+  .b2 { background: #ffedf3; color: #e05a8a; }
+  .b3 { background: #eafaf1; color: #1f9d63; }
+  .b4 { background: #f3edff; color: #7b5bd6; }
+  .stage { height: 200px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+  .name { font-size: 1.08rem; font-weight: 700; margin-bottom: 6px; }
+  .desc { font-size: .83rem; color: #7a8aa5; line-height: 1.7; }
+  .traits { margin-top: 12px; display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+  .t { font-size: .7rem; padding: 3px 10px; border-radius: 999px; background: #f3f6fc; color: #5a6b8c; }
+
+  /* ======== Q弹动效库 ======== */
+  /* 果冻弹：整体挤压伸展（卡通物理感） */
+  @keyframes jelly {
+    0%, 100% { transform: scale(1, 1); }
+    18% { transform: scale(1.14, .86); }
+    36% { transform: scale(.9, 1.12); }
+    54% { transform: scale(1.07, .95); }
+    72% { transform: scale(.97, 1.03); }
+    86% { transform: scale(1.01, .99); }
+  }
+  /* 缓浮 */
+  @keyframes floaty { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+  /* 呼吸（轻微伸缩） */
+  @keyframes breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.04, .97); } }
+  /* 眨眼 */
+  @keyframes blink { 0%,90%,100% { transform: scaleY(1); } 94% { transform: scaleY(.08); } }
+  /* 软摇 */
+  @keyframes swing { 0%,100% { transform: rotate(0deg); } 30% { transform: rotate(-5deg); } 70% { transform: rotate(5deg); } }
+  /* 腿脚摆动 */
+  @keyframes legL { 0%,100% { transform: rotate(-6deg); } 50% { transform: rotate(8deg); } }
+  @keyframes legR { 0%,100% { transform: rotate(6deg); } 50% { transform: rotate(-8deg); } }
+
+  .jelly { animation: jelly 2.6s ease-in-out infinite; transform-origin: center bottom; }
+  .floating { animation: floaty 3.4s ease-in-out infinite; }
+  .breathing { animation: breathe 2.8s ease-in-out infinite; transform-origin: center bottom; }
+  .eye { animation: blink 4.4s infinite; transform-origin: center; }
+  .swing { animation: swing 2.2s ease-in-out infinite; transform-origin: center top; }
+  .legL { animation: legL 1.8s ease-in-out infinite; transform-origin: top center; }
+  .legR { animation: legR 1.8s ease-in-out infinite; transform-origin: top center; }
+
+  .note {
+    max-width: 900px; margin: 44px auto 0; text-align: center;
+    font-size: .84rem; color: #8b9ab3; line-height: 1.9;
+    background: #fff; border-radius: 18px; padding: 20px 26px;
+    box-shadow: 0 6px 22px rgba(122,148,200,.1);
+  }
+  .note b { color: #5a6b8c; }
+</style>
+</head>
+<body>
+
+<h1>小e · 云朵团系（B 方向深化）</h1>
+<p class="sub">4 个方案，全部带 Q弹果冻动效 —— 悬停卡片可看放大细节</p>
+
+<div class="grid">
+
+  <!-- ===== B1：软云朵 + 小腿脚 ===== -->
+  <div class="card">
+    <span class="badge b1">最Q弹</span>
+    <div class="stage">
+      <svg class="jelly" width="170" height="170" viewBox="0 0 170 170">
+        <defs>
+          <radialGradient id="b1body" cx="38%" cy="28%">
+            <stop offset="0%" stop-color="#ffffff"/>
+            <stop offset="52%" stop-color="#ddefff"/>
+            <stop offset="100%" stop-color="#aed4fb"/>
+          </radialGradient>
+          <radialGradient id="b1cheek" cx="50%" cy="50%">
+            <stop offset="0%" stop-color="#8ec8ff" stop-opacity=".85"/>
+            <stop offset="100%" stop-color="#8ec8ff" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <ellipse cx="85" cy="158" rx="36" ry="6" fill="#b8c8dd" opacity=".2"/>
+        <!-- 小短腿（Q弹摆动） -->
+        <g class="legL"><ellipse cx="70" cy="140" rx="8.5" ry="11" fill="#c3e0fd"/></g>
+        <g class="legR"><ellipse cx="100" cy="140" rx="8.5" ry="11" fill="#c3e0fd"/></g>
+        <ellipse cx="70" cy="149" rx="9" ry="5" fill="#a8d4ff"/>
+        <ellipse cx="100" cy="149" rx="9" ry="5" fill="#a8d4ff"/>
+        <!-- 云朵身体 -->
+        <circle cx="55" cy="92" r="28" fill="url(#b1body)"/>
+        <circle cx="115" cy="92" r="28" fill="url(#b1body)"/>
+        <circle cx="85" cy="76" r="34" fill="url(#b1body)"/>
+        <ellipse cx="85" cy="102" rx="48" ry="32" fill="url(#b1body)"/>
+        <!-- 高光 -->
+        <ellipse cx="66" cy="56" rx="15" ry="10" fill="#fff" opacity=".85" transform="rotate(-22 66 56)"/>
+        <ellipse cx="104" cy="112" rx="10" ry="6" fill="#fff" opacity=".35"/>
+        <!-- 眼睛 -->
+        <g class="eye">
+          <ellipse cx="69" cy="90" rx="7" ry="8" fill="#2f3e52"/>
+          <ellipse cx="101" cy="90" rx="7" ry="8" fill="#2f3e52"/>
+          <circle cx="71.4" cy="86.6" r="2.6" fill="#fff"/>
+          <circle cx="103.4" cy="86.6" r="2.6" fill="#fff"/>
+        </g>
+        <!-- 腮红 -->
+        <ellipse cx="52" cy="103" rx="11" ry="7" fill="url(#b1cheek)"/>
+        <ellipse cx="118" cy="103" rx="11" ry="7" fill="url(#b1cheek)"/>
+        <!-- 嘴：小 w -->
+        <path d="M79 103 q6 6 12 0" stroke="#7aa8d6" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+        <!-- 小手 -->
+        <ellipse cx="40" cy="108" rx="8" ry="10" fill="#c8e3fd" transform="rotate(-20 40 108)"/>
+        <ellipse cx="130" cy="108" rx="8" ry="10" fill="#c8e3fd" transform="rotate(20 130 108)"/>
+        <!-- 小雨滴 -->
+        <circle cx="140" cy="52" r="4.5" fill="#a8d4ff" opacity=".75"/>
+        <circle cx="150" cy="70" r="3" fill="#a8d4ff" opacity=".55"/>
+      </svg>
+    </div>
+    <div class="name">B1 · 软云朵 · 带小腿脚</div>
+    <div class="desc">蓬松云朵 + 一双小短腿<br>走动时会左右摆脚，整体果冻弹</div>
+    <div class="traits"><span class="t">云朵</span><span class="t">小短腿</span><span class="t">果冻弹</span></div>
+  </div>
+
+  <!-- ===== B2：圆团子 + 长耳朵 ===== -->
+  <div class="card">
+    <span class="badge b2">最可爱</span>
+    <div class="stage">
+      <svg class="breathing" width="170" height="170" viewBox="0 0 170 170">
+        <defs>
+          <radialGradient id="b2body" cx="40%" cy="30%">
+            <stop offset="0%" stop-color="#ffffff"/>
+            <stop offset="55%" stop-color="#e4f2ff"/>
+            <stop offset="100%" stop-color="#c2e2ff"/>
+          </radialGradient>
+          <radialGradient id="b2inner" cx="50%" cy="60%">
+            <stop offset="0%" stop-color="#ffc9dc"/>
+            <stop offset="100%" stop-color="#ffd9e6"/>
+          </radialGradient>
+          <radialGradient id="b2cheek" cx="50%" cy="50%">
+            <stop offset="0%" stop-color="#ffa8c8" stop-opacity=".8"/>
+            <stop offset="100%" stop-color="#ffa8c8" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <ellipse cx="85" cy="158" rx="34" ry="6" fill="#c0cfe4" opacity=".2"/>
+        <!-- 长耳朵（微微摆动） -->
+        <g class="legL"><ellipse cx="62" cy="34" rx="11" ry="26" fill="url(#b2body)" transform="rotate(-14 62 34)"/>
+          <ellipse cx="62" cy="36" rx="5.5" ry="17" fill="url(#b2inner)" transform="rotate(-14 62 36)"/></g>
+        <g class="legR"><ellipse cx="108" cy="34" rx="11" ry="26" fill="url(#b2body)" transform="rotate(14 108 34)"/>
+          <ellipse cx="108" cy="36" rx="5.5" ry="17" fill="url(#b2inner)" transform="rotate(14 108 36)"/></g>
+        <!-- 团子身体 -->
+        <circle cx="85" cy="100" r="52" fill="url(#b2body)"/>
+        <!-- 高光 -->
+        <ellipse cx="63" cy="70" rx="17" ry="12" fill="#fff" opacity=".8" transform="rotate(-25 63 70)"/>
+        <ellipse cx="112" cy="126" rx="11" ry="7" fill="#fff" opacity=".3"/>
+        <!-- 眼睛 -->
+        <g class="eye">
+          <ellipse cx="67" cy="96" rx="7.5" ry="8.5" fill="#33415a"/>
+          <ellipse cx="103" cy="96" rx="7.5" ry="8.5" fill="#33415a"/>
+          <circle cx="69.6" cy="92.4" r="2.8" fill="#fff"/>
+          <circle cx="105.6" cy="92.4" r="2.8" fill="#fff"/>
+        </g>
+        <!-- 腮红 -->
+        <ellipse cx="48" cy="110" rx="12" ry="7.5" fill="url(#b2cheek)"/>
+        <ellipse cx="122" cy="110" rx="12" ry="7.5" fill="url(#b2cheek)"/>
+        <!-- 嘴：小三角（猫咪嘴） -->
+        <path d="M79 110 q6 7 6 0 q0 7 6 0" stroke="#86a8d0" stroke-width="2.3" fill="none" stroke-linecap="round"/>
+        <!-- 小爪 -->
+        <ellipse cx="42" cy="132" rx="10" ry="8" fill="#d5ebff"/>
+        <ellipse cx="128" cy="132" rx="10" ry="8" fill="#d5ebff"/>
+        <!-- 星星点缀 -->
+        <path d="M143 60 l2.5 6 6 2.5 -6 2.5 -2.5 6 -2.5 -6 -6 -2.5 6 -2.5z" fill="#c9e4ff" opacity=".8"/>
+      </svg>
+    </div>
+    <div class="name">B2 · 圆团子 · 长耳朵</div>
+    <div class="desc">兔子耳朵 + 圆滚滚团子身<br>耳朵会轻轻晃，最"想抱一下"</div>
+    <div class="traits"><span class="t">长耳</span><span class="t">圆团子</span><span class="t">猫嘴</span></div>
+  </div>
+
+  <!-- ===== B3：果冻水团（透明质感） ===== -->
+  <div class="card">
+    <span class="badge b3">最通透</span>
+    <div class="stage">
+      <svg class="jelly" width="165" height="170" viewBox="0 0 165 170" style="animation-delay:.5s">
+        <defs>
+          <linearGradient id="b3body" x1="0" y1="0" x2="0.3" y2="1">
+            <stop offset="0%" stop-color="#e8fbff" stop-opacity=".97"/>
+            <stop offset="45%" stop-color="#b9ecfb" stop-opacity=".93"/>
+            <stop offset="100%" stop-color="#8dd8f5" stop-opacity=".97"/>
+          </linearGradient>
+          <radialGradient id="b3gloss" cx="35%" cy="25%">
+            <stop offset="0%" stop-color="#fff" stop-opacity=".95"/>
+            <stop offset="100%" stop-color="#fff" stop-opacity="0"/>
+          </radialGradient>
+          <radialGradient id="b3cheek" cx="50%" cy="50%">
+            <stop offset="0%" stop-color="#69c9e8" stop-opacity=".75"/>
+            <stop offset="100%" stop-color="#69c9e8" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <ellipse cx="83" cy="158" rx="32" ry="6" fill="#a8c8d8" opacity=".22"/>
+        <!-- 水滴形身体（上尖下圆） -->
+        <path d="M83 26 C83 26 133 92 133 116 C133 143 111 158 83 158
+                 C55 158 33 143 33 116 C33 92 83 26 83 26 Z" fill="url(#b3body)"/>
+        <!-- 玻璃高光 -->
+        <ellipse cx="62" cy="74" rx="19" ry="26" fill="url(#b3gloss)" transform="rotate(-18 62 74)"/>
+        <ellipse cx="107" cy="126" rx="9" ry="6" fill="#fff" opacity=".45"/>
+        <!-- 眼睛 -->
+        <g class="eye">
+          <ellipse cx="67" cy="110" rx="7" ry="8" fill="#2a4a5e"/>
+          <ellipse cx="101" cy="110" rx="7" ry="8" fill="#2a4a5e"/>
+          <circle cx="69.4" cy="106.6" r="2.6" fill="#fff"/>
+          <circle cx="103.4" cy="106.6" r="2.6" fill="#fff"/>
+        </g>
+        <ellipse cx="50" cy="122" rx="11" ry="7" fill="url(#b3cheek)"/>
+        <ellipse cx="118" cy="122" rx="11" ry="7" fill="url(#b3cheek)"/>
+        <path d="M77 122 q6 6 12 0" stroke="#4a94b8" stroke-width="2.3" fill="none" stroke-linecap="round"/>
+        <!-- 内部小气泡 -->
+        <circle cx="74" cy="140" r="4" fill="#fff" opacity=".55"/>
+        <circle cx="96" cy="146" r="2.6" fill="#fff" opacity=".45"/>
+        <circle cx="88" cy="52" r="3" fill="#fff" opacity=".5"/>
+      </svg>
+    </div>
+    <div class="name">B3 · 果冻水团</div>
+    <div class="desc">半透明水滴造型，里面有气泡<br>弹起来像真的果冻在抖</div>
+    <div class="traits"><span class="t">半透明</span><span class="t">水感</span><span class="t">气泡</span></div>
+  </div>
+
+  <!-- ===== B4：云朵 + 小翅膀 + 可选腿 ===== -->
+  <div class="card">
+    <span class="badge b4">最灵动</span>
+    <div class="stage">
+      <svg class="floating" width="180" height="175" viewBox="0 0 180 175" style="animation-delay:.9s">
+        <defs>
+          <radialGradient id="b4body" cx="38%" cy="28%">
+            <stop offset="0%" stop-color="#ffffff"/>
+            <stop offset="50%" stop-color="#e6e2ff"/>
+            <stop offset="100%" stop-color="#c9c2f7"/>
+          </radialGradient>
+          <radialGradient id="b4wing" cx="50%" cy="40%">
+            <stop offset="0%" stop-color="#f4f0ff"/>
+            <stop offset="100%" stop-color="#d4ccfa"/>
+          </radialGradient>
+          <radialGradient id="b4cheek" cx="50%" cy="50%">
+            <stop offset="0%" stop-color="#b9a8f0" stop-opacity=".75"/>
+            <stop offset="100%" stop-color="#b9a8f0" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <ellipse cx="90" cy="163" rx="36" ry="6" fill="#c4bce0" opacity=".22"/>
+        <!-- 小翅膀（扇动） -->
+        <g class="legL" style="animation-duration:1.2s">
+          <ellipse cx="42" cy="92" rx="17" ry="24" fill="url(#b4wing)" transform="rotate(-28 42 92)"/>
+          <ellipse cx="42" cy="94" rx="8" ry="14" fill="#fff" opacity=".5" transform="rotate(-28 42 94)"/>
+        </g>
+        <g class="legR" style="animation-duration:1.2s">
+          <ellipse cx="138" cy="92" rx="17" ry="24" fill="url(#b4wing)" transform="rotate(28 138 92)"/>
+          <ellipse cx="138" cy="94" rx="8" ry="14" fill="#fff" opacity=".5" transform="rotate(28 138 94)"/>
+        </g>
+        <!-- 云朵身体 -->
+        <circle cx="64" cy="100" r="27" fill="url(#b4body)"/>
+        <circle cx="116" cy="100" r="27" fill="url(#b4body)"/>
+        <circle cx="90" cy="84" r="33" fill="url(#b4body)"/>
+        <ellipse cx="90" cy="110" rx="46" ry="31" fill="url(#b4body)"/>
+        <ellipse cx="72" cy="64" rx="15" ry="10" fill="#fff" opacity=".85" transform="rotate(-22 72 64)"/>
+        <!-- 眼睛（弯月笑眼会更可爱，这里用圆眼+高光） -->
+        <g class="eye">
+          <ellipse cx="74" cy="98" rx="7" ry="8" fill="#3a3358"/>
+          <ellipse cx="106" cy="98" rx="7" ry="8" fill="#3a3358"/>
+          <circle cx="76.4" cy="94.6" r="2.6" fill="#fff"/>
+          <circle cx="108.4" cy="94.6" r="2.6" fill="#fff"/>
+        </g>
+        <ellipse cx="57" cy="111" rx="11" ry="7" fill="url(#b4cheek)"/>
+        <ellipse cx="123" cy="111" rx="11" ry="7" fill="url(#b4cheek)"/>
+        <path d="M84 111 q6 6 12 0" stroke="#9b8fd0" stroke-width="2.3" fill="none" stroke-linecap="round"/>
+        <!-- 小脚（可选，做得很小） -->
+        <ellipse cx="74" cy="146" rx="8" ry="6" fill="#ddd6fb"/>
+        <ellipse cx="106" cy="146" rx="8" ry="6" fill="#ddd6fb"/>
+        <!-- 星光 -->
+        <path d="M152 56 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2z" fill="#d8d0ff" opacity=".9"/>
+        <circle cx="30" cy="52" r="3.5" fill="#d8d0ff" opacity=".7"/>
+      </svg>
+    </div>
+    <div class="name">B4 · 云朵天使 · 小翅膀</div>
+    <div class="desc">云朵 + 一对小翅膀，会缓缓扇动<br>飞起来（起飞互动）时最合适</div>
+    <div class="traits"><span class="t">小翅膀</span><span class="t">飘浮</span><span class="t">会飞</span></div>
+  </div>
+
+</div>
+
+<div class="note">
+  <b>Q弹效果怎么实现的：</b>用 CSS 关键帧做「挤压-伸展」(squash &amp; stretch) —— 果冻感来自
+  横向放大时纵向压扁、再反向回弹，配合 <b>低阻尼回弹曲线</b>，就像真的软体。<br>
+  <b>互动时会更夸张：</b>被敲打会「啪」地压扁再抖几下；被拖起会拉长；落地会「啪叽」摊开再回弹。<br>
+  <b>腿脚/翅膀都做成了独立分组</b>，后续可以单独控制（走路摆腿、飞起扇翅）。
+</div>
+
+</body>
+</html>

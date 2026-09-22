@@ -17,8 +17,18 @@
     },
     {
       "name": "mineru-agent-parse",
-      "description": "使用 mineru_parse 工具将 PDF 解析为 Markdown，支持单文件或文件夹批量（MinerU v4），需配置 MinerU Token",
-      "version": "3.0.0"
+      "description": "把 PDF 解析并归档成'全文+按图注编号的图表文件夹'，产出 00_full_cleaned.md 与 00_images_map.json 清单，供翻译/图文挖掘使用。需配 MinerU Token。",
+      "version": "4.2.0"
+    },
+    {
+      "name": "literature-translate",
+      "description": "文献全文中译写入笔记，多子图按 layout_html 网格排版并配中文图注。需先用 mineru-agent-parse 归档。",
+      "version": "1.2.0"
+    },
+    {
+      "name": "literature-contradiction",
+      "description": "单篇文献内部对账：图账/表账/段落账三轨道交叉核对，E类裁决+A-E分级，输出矛盾台账表。图账表账用 delegate_task(role=contradiction) 并行，示意图跳过。",
+      "version": "1.0.0"
     }
   ]
 }
