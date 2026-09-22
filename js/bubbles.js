@@ -169,12 +169,13 @@
                 console.warn('Auto upload failed:', err);
             }
             // 解析文本（供 LLM 上下文使用）
-            // PDF/Office 大文件：不在前端用 pdfjs 逐页提取（超大 PDF 会卡死浏览器），
-            // 文本由后端 file_ids 注入完整内容。非 PDF 的小文本本地提取。
+            // PDF/Word 等大文档：不在前端解析，正文由后端按 file_id 注入（当轮全文 / 后续轮次引用）。
+            // 其余小文件本地提取文本，仅用于图片 OCR 文字随消息发送。
             const ext = (att.name || att.file.name || '').split('.').pop().toLowerCase();
-            const isBigParse = ['pdf', 'doc', 'docx'].includes(ext);
-            if (isBigParse) {
-                att._parsedText = `[文件: ${att.name}]\n（内容已由系统按 file_id 完整注入，无需在消息中重复全文）`;
+            const isBackendParse = ['pdf', 'doc', 'docx'].includes(ext);
+            if (isBackendParse) {
+                att._backendInjected = true;  // 正文交给后端 file_ids 通道
+                att._parsedText = '';
             } else {
                 try {
                     var localText = data && data.text ? data.text : await extractTextFromFile(att.file);
@@ -302,16 +303,22 @@
             _bubbleMenuBranchId = branchId;
             _bubbleMenuBubbleEl = bubbleEl;
 
-            // 根据是否有文件，显示/隐藏「发送给 LLM」和「打开文件地址」按钮
+            // 根据是否有文件，显示/隐藏「发送给 LLM」和「打开文件地址」按钮；
+            // 非 Windows 后端（Linux/服务器部署）隐藏「打开文件」「打开文件地址」（os.startfile/explorer 不存在）
             const filePath = bubbleEl?.dataset?.filePath || '';
             const hasFileId = !!bubbleEl?.dataset?.fileId;
+            const isWinBackend = (window.C4EAI_PLATFORM || 'win32') === 'win32';
             const sendLlmItem = menu.querySelector('[data-action="send-llm"]');
+            const openFileItem = menu.querySelector('[data-action="open-file"]');
             const openLocItem = menu.querySelector('[data-action="open-location"]');
             if (sendLlmItem) {
                 sendLlmItem.style.display = filePath ? '' : 'none';
             }
+            if (openFileItem) {
+                openFileItem.style.display = isWinBackend ? '' : 'none';
+            }
             if (openLocItem) {
-                openLocItem.style.display = hasFileId ? '' : 'none';
+                openLocItem.style.display = (hasFileId && isWinBackend) ? '' : 'none';
             }
 
             menu.style.left = e.clientX + 'px';
@@ -388,7 +395,9 @@
                 const branch = state.branches[_bubbleMenuBranchId];
                 const bub = branch?._bubbles?.find(b => b.id === bubbleId);
                 if (bub && bub.fileId) {
-                    if (state.settings.fileOpenMode === 'backend') {
+                    if (typeof window.openFileById === 'function') {
+                        window.openFileById(bub.fileId, bub.filePath || bub.text || 'file');
+                    } else if (state.settings.fileOpenMode === 'backend') {
                         fetch('/api/file/' + bub.fileId + '/open', { method: 'POST' });
                     } else {
                         window.open('/api/file/' + bub.fileId, '_blank');

@@ -110,6 +110,20 @@
             // 检查 marked 是否可用
             if (typeof marked !== 'undefined') {
                 try {
+                    // 1.4 附件卡片预处理：{{file:file_id:文件名}} → 聊天同款 attachment-item 卡片（含 × 删除）
+                    processedContent = processedContent.replace(/\{\{file:([0-9a-fA-F]+):([^}]*)\}\}/g, function (m, fid, name) {
+                        var n = (name || '附件').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                        var f = String(fid);
+                        return '<span style="display:inline-block;vertical-align:middle;margin:2px 4px;max-width:280px;">'
+                            + '<div class="attachment-item attachment-clickable" data-file-id="' + f + '" data-file-name="' + n + '" '
+                            + 'onclick="window.openDbFile &amp;&amp; window.openDbFile(this.dataset.fileId, this.dataset.fileName)" '
+                            + 'title="点击打开（浮窗预览，不支持则下载）">'
+                            + '<span class="attachment-icon">📄</span>'
+                            + '<div class="attachment-info"><div class="attachment-name">' + n + '</div></div>'
+                            + '<button class="attachment-remove" title="删除附件（同时删除后端文件）" '
+                            + 'onclick="event.stopPropagation(); window.__removeInlineFile &amp;&amp; window.__removeInlineFile(this)">✕</button>'
+                            + '</div></span>';
+                    });
                     // 1.5 图片 markdown 预处理：解析 ![alt](url =WxH) 尺寸与 ![alt](url)，转成带宽度控制的 <img>
                     // 尺寸为可选（=300 宽自适应 或 =300x150 压扁），用于"屏幕缩小但保持原图质量"
                     processedContent = processedContent.replace(/\!\[(.*?)\]\(([^)\s]+)(?:\s+=(?:(\d+))?(?:x(\d+))?)?\)/g, function (m, alt, url, w, h) {
@@ -307,3 +321,52 @@
         }
 
         // ==================== Mermaid 增强功能 ====================
+
+    // ==================== 笔记内嵌附件 × 删除（B 方案：删引用 + 删后端文件） ====================
+    window.__removeInlineFile = function (btn) {
+        var item = btn.closest ? btn.closest('.attachment-item') : null;
+        var fid = item ? item.getAttribute('data-file-id') : (btn.getAttribute && btn.getAttribute('data-file-id'));
+        if (!fid) return;
+        if (typeof showPassiveToast === 'function') showPassiveToast('🗑 正在删除附件…');
+        // 1) 浮动编辑器打开且正文含此占位符 → 抠掉并实时重渲染
+        try {
+            var ta = document.getElementById('fe-textarea');
+            if (ta && ta.value.indexOf('{{file:' + fid) >= 0) {
+                ta.value = ta.value.replace(new RegExp('\n?\{\{file:' + fid + ':[^}]*\}\}\n?'), '\n');
+                ta.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        } catch (e) {}
+        // 2) 笔记卡片语境 → 从后端笔记正文抠掉占位符并保存
+        var card = btn.closest ? btn.closest('.note-card') : null;
+        if (card) {
+            var noteId = card.getAttribute('data-note-id');
+            var branchId = '';
+            try { branchId = (typeof state !== 'undefined' && state.currentBranchId) || ''; } catch (e) {}
+            fetch('/api/notes?branch_id=' + encodeURIComponent(branchId))
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    var note = (d.notes || []).find(function (n) { return n.id === noteId; });
+                    if (!note) return null;
+                    var c = (note.content || '').replace(new RegExp('\n?\{\{file:' + fid + ':[^}]*\}\}\n?'), '\n');
+                    return fetch('/api/notes', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ note_id: noteId, title: note.title || '未命名笔记', content: c })
+                    });
+                })
+                .then(function (r) { return r ? r.json() : null; })
+                .then(function () { if (typeof window.renderNotesPanel === 'function') window.renderNotesPanel(); });
+        }
+        // 3) 删除后端文件本体（B 方案核心；若其他笔记引用同一文件将失效）
+        fetch('/api/file/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ file_id: fid })
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (typeof showPassiveToast === 'function')
+                    showPassiveToast(d && d.status === 'ok' ? '🗑 附件已删除' : '⚠️ 删除文件失败');
+            })
+            .catch(function () { if (typeof showPassiveToast === 'function') showPassiveToast('⚠️ 删除文件失败'); });
+    };

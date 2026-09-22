@@ -44,7 +44,7 @@
 
             // 智能体配置
             agentConfig: {
-                enabledTools: ['graph_schema', 'execute_cypher', 'skill_list', 'skill_view', 'web_search', 'web_extract', 'todo', 'conversation_notes', 'run_code', 'terminal', 'read_file', 'write_file', 'list_files', 'search_history', 'search_knowledge', 'skill_write', 'mineru_parse'],
+                enabledTools: ['graph_schema', 'execute_cypher', 'shared_search', 'shared_upload', 'search_history', 'conversation_notes', 'skill_list', 'skill_view', 'skill_write', 'web_search', 'web_extract', 'todo', 'mineru_parse', 'read_file', 'write_file', 'list_files', 'run_code', 'terminal', 'delegate_task'],
                 loadedSkills: ['graph-guide', 'self-modify'],
                 permissionMode: 'safe',
                 engine: 'custom',          // custom=裸API手写循环 / langchain=LangChain流式
@@ -70,6 +70,18 @@
                     fontSizeModal: 0.9,         // 居中模态框字号 (rem)
                     fontSizePopup: 0.85,        // 小浮层字号 (rem)
                     fontSizeToast: 0.85,        // 微提示/轻提示字号 (rem)
+                    // 超时保护（秒，0=关闭该级）
+                    timeoutNudge: 120,          // 催促：注入「尽快收尾」提示
+                    timeoutWarn: 240,           // 警告：注入「立即作答」提示
+                    timeoutAbort: 420,          // 终止：强制结束并返回超时说明
+                    // 子智能体（delegate_task）
+                    subagentEnabled: true,
+                    subagentMaxRounds: 4,       // 每个子智能体的工具循环轮次上限
+                    subagentMaxParallel: 2,     // 并发上限（1-8，可自由调节）
+                    subagentMaxTasks: 4,        // 单次最多派发子任务数（1-8）
+                    subagentNudge: 60,          // 子智能体三级超时：催促
+                    subagentWarn: 150,          // 子智能体三级超时：警告
+                    subagentAbort: 300,         // 子智能体三级超时：终止
                      },
 
             // 侧边栏状态
@@ -126,11 +138,21 @@
             }
         }
 
+        var FILE_OPEN_MODE_LABEL = {
+            backend: '后端打开',
+            browser: '浏览器新标签',
+            float: '应用内浮窗'
+        };
+
         function updateFileOpenModeUI() {
-            const modeValue = document.getElementById('file-open-mode-value');
-            const toggle = document.getElementById('file-open-mode-toggle');
-            if (modeValue) {
-                modeValue.textContent = toggle && toggle.checked ? '浏览器打开' : '后端打开';
+            var mode = (state.settings && state.settings.fileOpenMode) || 'backend';
+            var modeValue = document.getElementById('file-open-mode-value');
+            if (modeValue) modeValue.textContent = FILE_OPEN_MODE_LABEL[mode] || FILE_OPEN_MODE_LABEL.backend;
+            var group = document.getElementById('file-open-mode-group');
+            if (group) {
+                group.querySelectorAll('.mode-seg-btn').forEach(function (btn) {
+                    btn.classList.toggle('active', btn.dataset.mode === mode);
+                });
             }
         }
 

@@ -1,4 +1,9 @@
         function init() {
+            // 探测后端部署平台：非 Windows（Linux/服务器）时隐藏「本机打开」类按钮
+            fetch('/api/platform').then(function (r) { return r.json(); }).then(function (d) {
+                window.C4EAI_PLATFORM = d.platform || 'win32';
+            }).catch(function () { window.C4EAI_PLATFORM = 'win32'; });
+
             initProviderSystem(); // 新的服务商系统初始化 (替代 loadApiKeys)
             loadSettings();
             loadBranches();
@@ -168,10 +173,13 @@
                             window.updateImageUploadModeUI = updateImageUploadModeUI;
                             updateImageUploadModeUI();
 
-                            // 文件打开方式开关事件 — 仅 UI，保存时才提交
-                            const fileOpenModeToggle = document.getElementById('file-open-mode-toggle');
-                            if (fileOpenModeToggle) {
-                                fileOpenModeToggle.addEventListener('change', () => {
+                            // 文件打开方式（三选一：后端打开 / 浏览器新标签 / 应用内浮窗）— 仅 UI，保存时才提交
+                            const fileOpenModeGroup = document.getElementById('file-open-mode-group');
+                            if (fileOpenModeGroup) {
+                                fileOpenModeGroup.addEventListener('click', (e) => {
+                                    const btn = e.target.closest('.mode-seg-btn');
+                                    if (!btn) return;
+                                    state.settings.fileOpenMode = btn.dataset.mode || 'backend';
                                     updateFileOpenModeUI();
                                 });
                             }

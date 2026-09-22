@@ -9,7 +9,7 @@ var imageTools = (function () {
     var state = { img: null, file: null, url: null, naturalW: 0, naturalH: 0, replaceCb: null, mode: 'crop' };
     var ui = { panel: null, box: null, cropBox: null, drag: null };
 
-    // ── 通用：上传 blob → url ──
+    // ── 通用：上传 blob → url（图片专用：非图片扩展名强制 .png，供裁剪/缩放管线使用） ──
     function uploadBlob(blob, name, mime, cb) {
         var fd = new FormData();
         var fname = name || 'image.png';
@@ -22,6 +22,19 @@ var imageTools = (function () {
                 if (cb) cb('/api/file/' + res.file_id);
             })
             .catch(function (e) { console.error('图片上传失败', e); });
+    }
+
+    // ── 任意文件上传（笔记附件用）：保留原名与原类型，不强制 .png ──
+    function uploadFileRaw(file, cb) {
+        var fd = new FormData();
+        fd.append('file', file);   // 浏览器自动带真实 name/type
+        fetch('/api/file/upload', { method: 'POST', body: fd })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (!res || !res.file_id) { console.error('文件上传失败', res); if (cb) cb(''); return; }
+                if (cb) cb('/api/file/' + res.file_id);
+            })
+            .catch(function (e) { console.error('文件上传失败', e); if (cb) cb(''); });
     }
     function fetchBlob(url, cb) {
         fetch(url).then(function (r) { return r.blob(); }).then(cb).catch(function (e) { console.error('加载图片失败', e); });
@@ -393,6 +406,7 @@ var imageTools = (function () {
 
     return {
         uploadBlob: uploadBlob,
+        uploadFileRaw: uploadFileRaw,
         chooseFile: chooseFile,
         openCropFromUrl: openCropFromUrl,
         close: close,

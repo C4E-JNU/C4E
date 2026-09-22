@@ -1,4 +1,4 @@
-        function addMessage(role, content, tokens = 0, isSystem = false, thinkingChain = null, type = null, attachments = []) {
+        function addMessage(role, content, tokens = 0, isSystem = false, thinkingChain = null, type = null, attachments = [], noteRefs = []) {
             const currentBranch = state.branches[state.currentBranchId];
             const messageId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
 
@@ -11,7 +11,8 @@
                 branchId: state.currentBranchId,
                 thinkingChain: thinkingChain,
                 type: type,
-                attachments: attachments
+                attachments: attachments,
+                noteRefs: noteRefs      // [{id, scope:'notes'|'database', title}] 引用的笔记/数据库条目
             };
 
             currentBranch.messages.push(message);
@@ -315,6 +316,29 @@
                            case 'observation':
                            case 'tool_result':
                                return `<div class="agent-step-header">👁️ 结果</div><div class="obs-content">${escHtml(step.text||step.content||'')}</div>`;
+                           case 'subagent': {
+                               // 子智能体卡片：点击打开浮窗查看它的思考/工具调用全过程
+                               const sbBadge = step.running
+                                   ? '<span style="color:#e6a23c;">● 运行中…</span>'
+                                   : (step.ok ? '<span style="color:#2e9e4f;">✅ 完成' + (step.seconds ? '（' + step.seconds + 's）' : '') + '</span>'
+                                              : '<span style="color:#e02020;">⚠️ 失败</span>');
+                               const payloadId = 'sa-data-' + message.id + '-' + (step.index || 0);
+                               // 注册数据，供点击时打开浮窗
+                               window.__saData = window.__saData || {};
+                               window.__saData[payloadId] = step;
+                               return `<div class="subagent-node subagent-open" data-payload="${payloadId}" style="cursor:pointer;border:1px solid var(--border-color,#ddd);border-radius:8px;padding:.45rem .6rem;margin:.35rem 0;background:var(--light,#f6f8fa);">
+                                   <div style="font-weight:600;">🤖 子智能体 ${(step.index || 0) + 1} &nbsp;${sbBadge}</div>
+                                   <div style="margin-top:.15rem;">目标：${escHtml((step.goal || '').slice(0, 140))}</div>
+                                   ${step.summary ? `<div style="margin-top:.25rem;color:var(--gray);">结论：${escHtml(step.summary.slice(0, 200))}…</div>` : ''}
+                                   <div style="margin-top:.2rem;font-size:.75rem;color:var(--primary);">点击查看全过程 ▸</div>
+                               </div>`;
+                           }
+                           case 'timeout_notice': {
+                               const tColor = step.level === 'abort' ? '#e02020' : (step.level === 'warn' ? '#e6a23c' : 'var(--gray)');
+                               const tIcon = step.level === 'abort' ? '⏹️' : (step.level === 'warn' ? '⚠️' : '⏳');
+                               const tLabel = step.level === 'abort' ? '超时终止' : (step.level === 'warn' ? '超时警告' : '超时催促');
+                               return `<div class="agent-step-header" style="color:${tColor};">${tIcon} ${tLabel}${step.elapsed ? '（' + step.elapsed + 's）' : ''}</div><div class="obs-content">${escHtml(step.text || '')}</div>`;
+                           }
                            default: return '';
                        }
                    }).join('\n');
@@ -328,7 +352,7 @@
                 var attDivId = 'att-' + message.id;
                 var attachmentItems = message.attachments.map(function(att) {
                     var fileUrl = att.file_id ? '/api/file/' + att.file_id : null;
-                    return '<div class="attachment-item' + (fileUrl ? ' attachment-clickable' : '') + '" data-file-url="' + (fileUrl || '') + '">' +
+                    return '<div class="attachment-item' + (fileUrl ? ' attachment-clickable' : '') + '" data-file-url="' + (fileUrl || '') + '" data-file-name="' + (att.name || '') + '">' +
                         '<span class="attachment-icon">' + (fileUrl ? '\uD83D\uDCC4' : att.icon) + '</span>' +
                         '<div class="attachment-info">' +
                             '<div class="attachment-name">' + att.name + '</div>' +
@@ -341,9 +365,25 @@
                 attachmentsHTML = `<div class="message-attachments">${attachmentItems}</div>`;
             }
 
+            // 引用给智能体的笔记/数据库条目（仅用户消息，显示为芯片）
+            let refsHTML = '';
+            if (message.role === 'user' && message.noteRefs && message.noteRefs.length > 0) {
+                refsHTML = '<div class="message-refs" style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0;">' +
+                    message.noteRefs.map(function (r) {
+                        var icon = r.scope === 'database' ? '🗄️' : '📝';
+                        var label = (r.scope === 'database' ? '数据库' : '笔记');
+                        return '<span title="' + (r.title || '') + '（' + label + ' ' + r.id + '）" ' +
+                            'style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border:1px solid var(--border,#d0d5dd);' +
+                            'border-radius:12px;background:var(--card-bg,#f6f8fa);font-size:.76rem;max-width:260px;">' +
+                            icon + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' +
+                            (r.title || r.id) + '</span><span style="color:var(--gray);font-size:.7rem;">' + label + '</span></span>';
+                    }).join('') + '</div>';
+            }
+
             messageEl.innerHTML = `
                  <div class="message-content">
                      ${attachmentsHTML}
+                     ${refsHTML}
                      ${thinkingContent}
                      ${rawToolCalls}
                      ${rawDataSection}
@@ -860,6 +900,62 @@
                         }
                     }
                 });
+                // 拖入任意文件 → 上传 → 按类型插入（图片走 ![]()，其它走 {{file:}} 附件卡片）
+                ta.addEventListener('dragover', function (e) { e.preventDefault(); });
+                ta.addEventListener('drop', function (e) {
+                    const files = e.dataTransfer && e.dataTransfer.files;
+                    if (!files || !files.length) return;
+                    e.preventDefault();
+                    for (let i = 0; i < files.length; i++) {
+                        _uploadAndInsert(files[i]);
+                    }
+                });
+            }
+
+            // ── 任意文件上传 → 光标处插入 ──
+            // 图片 → ![name](url)；其它（pdf/docx/xlsx…）→ {{file:file_id:文件名}} 附件卡片
+            function _uploadAndInsert(file) {
+                if (typeof window.imageTools === 'undefined') return;
+                if (typeof showPassiveToast === 'function') showPassiveToast('📎 正在上传 ' + (file.name || '') + ' …');
+                imageTools.uploadFileRaw(file, function (url) {
+                    if (!url) { if (typeof showPassiveToast === 'function') showPassiveToast('❌ 文件上传失败'); return; }
+                    if (file.type && file.type.indexOf('image/') === 0) {
+                        _insertImageMarkdown(url);
+                    } else {
+                        const m = String(url).match(/\/api\/file\/([0-9a-f]+)/i);
+                        const fid = m ? m[1] : '';
+                        if (!fid) return;
+                        _insertAtCursor('\n{{file:' + fid + ':' + (file.name || '附件') + '}}\n');
+                        if (typeof showPassiveToast === 'function') showPassiveToast('📎 已插入附件占位符');
+                    }
+                });
+            }
+
+            function insertFile() {
+                const ta = _textarea(); if (!ta) return;
+                ta.focus();
+                const inp = document.createElement('input');
+                inp.type = 'file';
+                inp.onchange = function () { const f = inp.files[0]; if (f) _uploadAndInsert(f); };
+                inp.click();
+            }
+
+            function insertTable() {
+                const skeleton = '\n<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:6px 0;">\n' +
+                    '<tr><th>列1</th><th>列2</th><th>列3</th></tr>\n' +
+                    '<tr><td></td><td></td><td></td></tr>\n' +
+                    '<tr><td></td><td></td><td></td></tr>\n</table>\n';
+                _insertAtCursor(skeleton);
+            }
+
+            function _insertAtCursor(text) {
+                const ta = _textarea(); if (!ta) return;
+                ta.focus();
+                const s = ta.selectionStart || 0, e = ta.selectionEnd || 0;
+                ta.value = ta.value.slice(0, s) + text + ta.value.slice(e);
+                ta.selectionStart = ta.selectionEnd = s + text.length;
+                _pushHistory();
+                _render();
             }
 
             function applySize() {
@@ -868,7 +964,7 @@
                 _wrap('<span style="font-size:' + v + '">', '</span>');
             }
 
-            return { open, save, cancel, wrap: _wrap, line: _line, link, applyColor, applySize, insertImage, initPaste, undo, redo, editSelectedImage };
+            return { open, save, cancel, wrap: _wrap, line: _line, link, applyColor, applySize, insertImage, insertFile, insertTable, initPaste, undo, redo, editSelectedImage };
         })();
 
         // 暴露给内联工具栏按钮
@@ -878,6 +974,8 @@
         window.__feColor = function () { floatingEditor.applyColor(); };
         window.__feSize = function () { floatingEditor.applySize(); };
         window.__feInsertImage = function () { floatingEditor.insertImage(); };
+        window.__feInsertFile = function () { floatingEditor.insertFile(); };
+        window.__feInsertTable = function () { floatingEditor.insertTable(); };
         window.__feEditImage = function () { floatingEditor.editSelectedImage(); };
         window.__feUndo = function () { floatingEditor.undo(); };
         window.__feRedo = function () { floatingEditor.redo(); };
@@ -953,6 +1051,26 @@
             bodyEl.innerHTML = html;
         }
 
+        // 检查 file_id 是否还被其他消息 / 历史气泡引用（决定能否安全删除后端文件）
+        function _fileIdReferencedElsewhere(fileId, exceptMessageId) {
+            for (var bid in state.branches) {
+                var br = state.branches[bid];
+                var msgs = br.messages || [];
+                for (var i = 0; i < msgs.length; i++) {
+                    var m = msgs[i];
+                    if (m.id === exceptMessageId || !m.attachments) continue;
+                    for (var j = 0; j < m.attachments.length; j++) {
+                        if (m.attachments[j].file_id === fileId) return true;
+                    }
+                }
+                var bubbles = br._bubbles || [];
+                for (var k = 0; k < bubbles.length; k++) {
+                    if (bubbles[k].fileId === fileId) return true;
+                }
+            }
+            return false;
+        }
+
         // 删除单个附件：删后端文件 + 移除消息引用 + 重渲染
         function removeAttachmentFromMessage(messageId, fileId) {
             const branch = state.branches[state.currentBranchId];
@@ -967,12 +1085,16 @@
                 if (fi !== -1) msg._fileIds.splice(fi, 1);
             }
             saveBranches();
-            // 后端删除
-            fetch('/api/file/delete', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ file_id: fileId })
-            }).catch(function(e) { console.warn('后端删除附件失败', fileId, e); });
+            // 后端删除（仍被其他消息/气泡引用时保留文件）
+            if (_fileIdReferencedElsewhere(fileId, messageId)) {
+                console.info('[附件] file_id 仍被其他消息引用，保留后端文件:', fileId);
+            } else {
+                fetch('/api/file/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ file_id: fileId })
+                }).catch(function(e) { console.warn('后端删除附件失败', fileId, e); });
+            }
             // 重渲染消息列表（附件移除后刷新显示）
             if (typeof renderMessages === 'function') renderMessages();
             showKeyStatus('附件已删除', 'success');
@@ -1163,7 +1285,7 @@
 
             const message = currentBranch.messages[messageIndex];
 
-            // 删除该消息关联的后端附件
+            // 删除该消息关联的后端附件（仍被其他消息/气泡引用时保留）
             var fileIdsToDelete = message._fileIds || [];
             if (message.attachments && message.attachments.length > 0) {
                 message.attachments.forEach(function(a) {
@@ -1173,6 +1295,10 @@
                 });
             }
             fileIdsToDelete.forEach(function(fid) {
+                if (_fileIdReferencedElsewhere(fid, messageId)) {
+                    console.info('[DeleteMessage] file_id 仍被其他消息引用，保留后端文件:', fid);
+                    return;
+                }
                 fetch('/api/file/delete', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1209,10 +1335,13 @@
         // ==================== 对话功能 ====================
         async function sendMessage() {
             const message = messageInput.value.trim();
+            // 待发引用（笔记/数据库条目）
+            let pendingRefs = (window.noteRefs && typeof window.noteRefs.peek === 'function')
+                ? window.noteRefs.peek() : ((state.pendingNoteRefs || []).slice());
 
-            // 允许纯附件发送（无文字但有附件时也能发送）
+            // 允许纯附件 / 纯引用发送（无文字时也能发送）
             const hasAttachments = state.documentUpload.pendingAttachments.length > 0;
-            if (!message && !hasAttachments) return;
+            if (!message && !hasAttachments && pendingRefs.length === 0) return;
             if (!state.currentModel) {
                 addSystemMessageWithDelete('请先选择模型');
                 return;
@@ -1229,8 +1358,9 @@
 
             // 处理附件
                  let attachmentsMetadata = [];
-                 let attachmentContents = '';
+                 let inlineNotes = '';   // 仅存放后端无法提供的内容（OCR 文字、多模态图片标记）
                  let base64Images = []; // 存储 base64 图片供多模态使用
+                 const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'];
 
                  if (state.documentUpload.pendingAttachments.length > 0) {
                      showToast('正在处理附件...', 'info');
@@ -1254,7 +1384,7 @@
                                  }
                              }
 
-                             // 检查是否为 base64 图片
+                             // base64 图片 → 多模态通道
                              if (result && result.startsWith('data:image')) {
                                  base64Images.push({
                                      id: att.id,
@@ -1264,22 +1394,31 @@
                                      icon: att.icon,
                                      base64: result
                                  });
-                                 attachmentContents += `\n\n[图片附件: ${att.name} - 已转为多模态格式]\n`;
-                             } else if (result && result.trim().length > 0) {
-                                 // 添加到附件内容
-                                 attachmentContents += `\n\n[文件: ${att.name}]\n${result}\n`;
+                                 inlineNotes += `\n\n[图片附件: ${att.name} - 已转为多模态格式]`;
+                                 continue;
+                             }
 
-                                 // 保存附件元数据
-                                 attachmentsMetadata.push({
-                                     id: att.id,
-                                     name: att.name,
-                                     size: att.size,
-                                     type: att.type,
-                                     icon: att.icon,
-                                     file_id: fileId
-                                 });
+                             if (!fileId) {
+                                 // 历史重发但后端文件已被删除等情况：明确提示而不是静默丢弃
+                                 showToast(`文件 ${att.name} 未上传成功（可能已被删除），本次未随消息发送`, 'error');
+                                 continue;
+                             }
 
-                            }
+                             // 只要有 file_id 就交给后端：文档全文由后端按 file_id 注入，前端不再内嵌
+                             attachmentsMetadata.push({
+                                 id: att.id,
+                                 name: att.name,
+                                 size: att.size,
+                                 type: att.type,
+                                 icon: att.icon,
+                                 file_id: fileId
+                             });
+
+                             // 图片的 OCR 文字后端提取不到，必须随消息正文带给模型
+                             var attExt = (att.name || '').split('.').pop().toLowerCase();
+                             if (result && result.trim() && IMAGE_EXTS.includes(attExt)) {
+                                 inlineNotes += `\n\n[图片 ${att.name} 的 OCR 识别文字]\n${result}\n`;
+                             }
                          } catch (error) {
                              console.error(`处理文件 ${att.name} 失败:`, error);
                              showToast(`文件 ${att.name} 处理失败`, 'error');
@@ -1287,32 +1426,39 @@
                      }
                  }
 
-                 // 组合用户消息和附件内容
-                 let fullMessage = message;
-                 if (attachmentContents) {
-                     fullMessage = message + '\n\n' + attachmentContents;
+                 // 组合用户消息：正文只含用户文字 + 少量 inline 标记；文件全文由后端按 file_ids 注入
+                 const refsMeta = pendingRefs.map(function (r) { return { id: r.id, scope: r.scope, title: r.title }; });
+                 if (!message && attachmentsMetadata.length === 0 && base64Images.length === 0 && refsMeta.length === 0) {
+                     showToast('没有可发送的内容（附件均未成功处理）', 'error');
+                     return;
+                 }
+                 let displayContent = message;
+                 if (!displayContent && attachmentsMetadata.length > 0) {
+                     displayContent = '（上传了附件：' + attachmentsMetadata.map(a => a.name).join('、') + '）';
+                 }
+                 if (!displayContent && refsMeta.length > 0) {
+                     displayContent = '（引用条目：' + refsMeta.map(r => r.title || r.id).join('、') + '）';
+                 }
+                 let fullMessage = displayContent;
+                 if (inlineNotes) {
+                     fullMessage = displayContent + '\n\n' + inlineNotes;
                  }
 
-                 // 添加用户消息 (带附件元数据和内容)
-                 addMessage('user', message, 0, false, null, null, attachmentsMetadata);
-                 // 保存附件内容到消息对象，供后续上下文使用
-                 const msgs = state.branches[state.currentBranchId].messages;
-                 const lastMsg = msgs[msgs.length - 1];
-                 if (lastMsg && attachmentContents) {
-                     lastMsg._attachmentContent = attachmentContents;
-                 }
+                 // 添加用户消息（附件只存元数据，不再把文件全文写入 localStorage）
+                 addMessage('user', displayContent, 0, false, null, null, attachmentsMetadata, refsMeta);
                  messageInput.value = '';
                  expandedTextarea.value = '';
                  collapseExpandMode();
 
-                 // 清空待发送附件（仅清空成功处理的）
+                 // 清空待发送附件（仅清空成功处理的）与待发引用
                  state.documentUpload.pendingAttachments = []; state.documentUpload._errorFiles = [];
                  updateSelectedFilesList();
                  hideUploadPanel();
+                 if (window.noteRefs) window.noteRefs.clear();
 
                  // 发送消息 — 智能体自动决策
                  // 不再有"知识库模式"/"图谱模式"的手动切换
-                 await reactAgentLoop(fullMessage);
+                 await reactAgentLoop(fullMessage, { images: base64Images.map(function(b) { return b.base64; }), note_refs: refsMeta });
         }
 
         function getRecentMessagesForContext(messages) {

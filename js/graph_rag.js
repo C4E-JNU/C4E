@@ -1,33 +1,6 @@
 // ==================== ReAct 智能体引擎 + Neo4j 连接器 ====================
-
-async function buildAgentSystemPrompt(enabledTools, loadedSkills) {
-    const lines = [];
-    lines.push('你是一个催化降解领域的智能科研助手。你实时连接 Neo4j 知识图谱。');
-    lines.push('');
-    lines.push('## 可用的工具');
-    for (const [name, tool] of Object.entries(agentTools)) {
-        if (!enabledTools.includes(name)) continue;
-        lines.push(`### ${name}`);
-        lines.push(tool.description);
-        lines.push(`参数 JSON Schema: ${JSON.stringify(tool.parameters)}`);
-        lines.push('');
-    }
-    if (loadedSkills.length > 0) {
-        const skillsIndex = typeof getSkillsIndex === 'function' ? await getSkillsIndex() : {};
-        lines.push('## 可用的技能');
-        lines.push('当你需要领域知识时，使用 skill_view(name) 读取完整指引。');
-        for (const skillName of loadedSkills) {
-            const desc = skillsIndex[skillName];
-            lines.push(desc ? `- ${skillName}: ${desc}` : `- ${skillName}`);
-        }
-        lines.push('');
-    }
-    lines.push('## ReAct 推理格式');
-    lines.push('格式1 (需要调用工具):\nThought: <推理>\nAction: <工具名>\nAction Input: <JSON>\n');
-    lines.push('格式2 (信息足够):\nThought: <总结>\nFinal Answer: <回答>\n');
-    lines.push('## 规则\n- 每步只能做一个 Action\n- Action Input 必须是合法 JSON\n- 用中文回答，保留专业英文术语');
-    return lines.join('\n');
-}
+// 注：旧的 buildAgentSystemPrompt（前端 ReAct prompt 拼装，依赖已删除的 js/agent_tools.js）
+// 已移除——智能体提示词与工具全部由后端提供（backend/agent/）。
 
 // ── Neo4j ──────────────────────────────────────────
 class Neo4jConnector {
@@ -140,11 +113,23 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
     options = options || {};
     const optsImages = options.images || [];
     const overrideFileIds = options.fileIds || null;
+    // 引用的笔记/数据库条目：优先用本次传入；重新生成/续写时从上一条用户消息里恢复
+    let noteRefs = options.note_refs || null;
+    if (!noteRefs) {
+        const _msgs = (state.branches[state.currentBranchId] || {}).messages || [];
+        for (let i = _msgs.length - 1; i >= 0; i--) {
+            if (_msgs[i].role === 'user' && _msgs[i].noteRefs && _msgs[i].noteRefs.length) {
+                noteRefs = _msgs[i].noteRefs;
+                break;
+            }
+        }
+    }
+    noteRefs = (noteRefs || []).map(function (r) { return { id: r.id, scope: r.scope || 'notes', title: r.title || '' }; });
     // 生成开始：切入停止态（sendBtn 变 ■，可点击停止）
     state.isGenerating = true;
     if (typeof sendBtn !== 'undefined' && sendBtn) { sendBtn.innerHTML = '■'; sendBtn.classList.add('stop'); }
     if (typeof updateSendButtonState === 'function') updateSendButtonState();
-    const enabledTools = state.agentConfig?.enabledTools || ['graph_schema', 'execute_cypher', 'document_search', 'skill_view', 'web_search', 'web_extract', 'clarify', 'todo', 'mineru_parse'];
+    const enabledTools = state.agentConfig?.enabledTools || ['graph_schema', 'execute_cypher', 'shared_search', 'search_history', 'conversation_notes', 'skill_view', 'web_search', 'web_extract', 'todo', 'delegate_task', 'mineru_parse', 'read_file', 'list_files'];
     const loadedSkills = state.agentConfig?.loadedSkills || ['graph-guide'];
     const currentBranch = state.branches[state.currentBranchId];
     const modelId = state.currentModel;
@@ -244,12 +229,159 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
         liveScroll();
     }
 
+    // ── 超时保护提示（催促 / 警告 / 终止）──
+    function handleTimeoutNotice(level, text, elapsed) {
+        var icon = level === 'abort' ? '⏹️' : (level === 'warn' ? '⚠️' : '⏳');
+        var label = level === 'abort' ? '超时终止' : (level === 'warn' ? '超时警告' : '超时催促');
+        var color = level === 'abort' ? '#e02020' : (level === 'warn' ? '#e6a23c' : 'var(--gray)');
+        reasoningSteps.push({ type: 'timeout_notice', level: level, text: text || '', elapsed: elapsed || 0 });
+        appendStepNode('<div class="agent-step-header" style="color:' + color + ';">' + icon + ' ' + label +
+            (elapsed ? '（' + elapsed + 's）' : '') + '</div><div class="obs-content">' + escHtml(text || '') + '</div>');
+        liveScroll();
+    }
+
+    // ── 子智能体：卡片（可点开查看它的思考与工具调用全过程）──
+    var _subagentRuns = {};   // index -> 运行信息（供浮窗查看）
+    var _SA_ROLE_NAMES = { contradiction: '矛盾核查', extraction: '数据提取', verify: '数据核查' };
+    function _subagentCardHtml(idx, info) {
+        var badge = info.running
+            ? '<span style="color:#e6a23c;">● 运行中…</span>'
+            : (info.ok ? '<span style="color:#2e9e4f;">✅ 完成' + (info.seconds ? '（' + info.seconds + 's）' : '') + '</span>'
+                       : '<span style="color:#e02020;">⚠️ 失败</span>');
+        var role = info.role ? '<span style="font-size:.75rem;color:#8a6d3b;background:rgba(230,162,60,.15);border-radius:4px;padding:1px 6px;margin-left:4px;">' + (_SA_ROLE_NAMES[info.role] || info.role) + '</span>' : '';
+        var goal = escHtml((info.goal || '').slice(0, 120));
+        var summary = info.summary ? escHtml(info.summary.slice(0, 200)) : '';
+        var live = info.running
+            ? '<div class="sa-live" style="margin-top:.25rem;font-size:.78rem;color:var(--primary);min-height:1.1em;white-space:pre-wrap;">正在启动…</div>'
+            : '';
+        return '<div class="subagent-node" data-sa="' + idx + '" style="border:1px solid var(--border-color,#ddd);' +
+            'border-radius:8px;padding:.45rem .6rem;margin:.35rem 0;background:var(--light,#f6f8fa);cursor:pointer;" ' +
+            'title="点击查看该子智能体的思考与工具调用全过程">' +
+            '<div style="font-weight:600;">🤖 子智能体 ' + (idx + 1) + role + ' &nbsp;' + badge + '</div>' +
+            '<div style="margin-top:.15rem;">目标：' + goal + '</div>' +
+            live +
+            (summary ? '<div style="margin-top:.25rem;color:var(--gray);">结论：' + summary + '…</div>' : '') +
+            '<div style="margin-top:.2rem;font-size:.75rem;color:var(--primary);">点击查看全过程 ▸</div>' +
+            '</div>';
+    }
+    function _bindSubagentCards() {
+        reasoningSteps = reasoningSteps;  // no-op 占位（保持闭包可读性）
+        var nodes = reasoningContainer.querySelectorAll('.subagent-node');
+        Array.prototype.forEach.call(nodes, function (n) {
+            if (n.dataset.bound === '1') return;
+            n.dataset.bound = '1';
+            n.addEventListener('click', function () {
+                var idx = parseInt(n.dataset.sa, 10);
+                var info = _subagentRuns[idx] || {};
+                if (typeof window.subagentViewer !== 'undefined') window.subagentViewer.open(info);
+            });
+        });
+    }
+    function handleSubagentStart(ev) {
+        var idx = ev.index || 0;
+        _subagentRuns[idx] = { index: idx, goal: ev.goal || '', context: ev.context || '',
+                               role: ev.role || '',
+                               running: true, ok: false, steps: [] };
+        finalizeReasoning();
+        reasoningSteps.push({ type: 'subagent', index: idx, goal: ev.goal || '', context: ev.context || '',
+                             role: ev.role || '',
+                             ok: null, running: true, summary: '', steps: [], total: ev.total || 1 });
+        appendStepNode(_subagentCardHtml(idx, _subagentRuns[idx]));
+        _bindSubagentCards();
+        liveScroll();
+    }
+    function handleSubagentEnd(ev) {
+        var idx = ev.index || 0;
+        _subagentRuns[idx] = { index: idx, goal: ev.goal || '', context: ev.context || '',
+                              running: false, ok: !!ev.ok,
+                              summary: ev.summary || '', error: ev.error || '',
+                              steps: ev.steps || [], rounds: ev.rounds || 0, seconds: ev.seconds || 0 };
+        // 更新已渲染的卡片
+        var node = reasoningContainer.querySelector('.subagent-node[data-sa="' + idx + '"]');
+        if (node) {
+            node.outerHTML = _subagentCardHtml(idx, _subagentRuns[idx]);
+            _bindSubagentCards();
+        } else {
+            appendStepNode(_subagentCardHtml(idx, _subagentRuns[idx]));
+            _bindSubagentCards();
+        }
+        // 同步进 reasoningSteps（持久化：刷新/切换对话后仍可看）
+        var rec = null;
+        for (var i = reasoningSteps.length - 1; i >= 0; i--) {
+            if (reasoningSteps[i].type === 'subagent' && reasoningSteps[i].index === idx) { rec = reasoningSteps[i]; break; }
+        }
+        var payload = { type: 'subagent', index: idx, goal: _subagentRuns[idx].goal,
+                        context: _subagentRuns[idx].context || '', ok: !!ev.ok,
+                        running: false, summary: ev.summary || '', error: ev.error || '',
+                        steps: ev.steps || [], rounds: ev.rounds || 0, seconds: ev.seconds || 0 };
+        if (rec) { Object.assign(rec, payload); } else { reasoningSteps.push(payload); }
+        liveScroll();
+    }
+    // ── 子智能体流式进度：实时更新卡片 + 累积步骤（供浮窗查看）──
+    function handleSubagentStep(ev) {
+        var idx = ev.index || 0;
+        var run = _subagentRuns[idx];
+        if (!run || !run.running) return;
+        var st = ev.step || {};
+        if (st.type && st.type !== 'round') {
+            run.steps = run.steps || [];
+            run.steps.push(st);
+            var rec = null;
+            for (var i = reasoningSteps.length - 1; i >= 0; i--) {
+                if (reasoningSteps[i].type === 'subagent' && reasoningSteps[i].index === idx) { rec = reasoningSteps[i]; break; }
+            }
+            if (rec) rec.steps = run.steps;
+        }
+        var node = reasoningContainer.querySelector('.subagent-node[data-sa="' + idx + '"]');
+        if (node) {
+            var live = node.querySelector('.sa-live');
+            if (live) {
+                var txt = '';
+                if (st.type === 'round') txt = '🧭 第 ' + (st.round || '?') + ' 轮：思考中…';
+                else if (st.type === 'thinking') txt = '✍️ ' + (st.text || '').replace(/\s+/g, ' ').slice(0, 80);
+                else if (st.type === 'tool_call') txt = '🔧 调用 ' + (st.name || '') + '…';
+                else if (st.type === 'tool_result') txt = '📥 ' + (st.name || '') + ' 返回';
+                else if (st.type === 'notice') txt = '⚠️ ' + (st.text || '').slice(0, 80);
+                if (txt) live.textContent = txt;
+            }
+        }
+        liveScroll();
+    }
+
     try {
         var recentHistory = getRecentMessagesForContext(currentBranch.messages);
         // 主动发送时排除最后一条消息（它就是当前 input，避免重复）；续写(skipLastHistory=false)时保留完整历史
         if (options.skipLastHistory !== false && recentHistory.length > 0) {
             recentHistory = recentHistory.slice(0, -1);
         }
+        // 收集上下文窗口内所有用户消息引用的附件 file_id：
+        //   allIds  = 窗口内全部（历史附件仅作引用说明，模型可 read_file 自取）
+        //   freshIds = 最后一条用户消息的附件（当轮上传 → 后端注入完整文本）
+        var _collectFileIds = function () {
+            var msgs = state.branches[state.currentBranchId]?.messages || [];
+            var windowN = (state.settings?.contextLength || 10) * 2 + 1;
+            var recent = msgs.slice(-windowN);
+            var lastUserIdx = -1;
+            for (var i = recent.length - 1; i >= 0; i--) {
+                if (recent[i].role === 'user') { lastUserIdx = i; break; }
+            }
+            var allIds = [], freshIds = [];
+            recent.forEach(function (m, idx) {
+                if (m.role !== 'user' || !m.attachments) return;
+                m.attachments.forEach(function (a) {
+                    if (!a.file_id) return;
+                    if (allIds.indexOf(a.file_id) === -1) allIds.push(a.file_id);
+                    if (idx === lastUserIdx && freshIds.indexOf(a.file_id) === -1) freshIds.push(a.file_id);
+                });
+            });
+            return { allIds: allIds, freshIds: freshIds };
+        };
+
+        var collected = _collectFileIds();
+        var fullIds = overrideFileIds ? overrideFileIds.slice() : collected.freshIds;
+        var refIds = collected.allIds.slice();
+        fullIds.forEach(function (id) { if (refIds.indexOf(id) === -1) refIds.push(id); });
+
         var requestBody = {
             input: userQuestion,
             history: recentHistory,
@@ -261,23 +393,30 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
                 api_key: apiKey || '',
                 base_url: modelCfg ? getModelBaseUrl(modelCfg.endpoint) : '',
                 temperature: state.settings?.temperature || 0.7,
+                max_tokens: state.settings?.maxTokens || 8192,
             },
             context_length: state.settings?.contextLength || 10,
             branch_id: state.currentBranchId || '',
             permission_mode: state.agentConfig?.permissionMode || 'safe',
             engine: state.agentConfig?.engine || 'custom',
             max_rounds: (state.agentConfig?.maxRounds === 0 || state.agentConfig?.maxRounds) ? state.agentConfig.maxRounds : 8,
-            file_ids: overrideFileIds ? overrideFileIds : (function(){
-                var msgs = state.branches[state.currentBranchId]?.messages || [];
-                for (var i = msgs.length - 1; i >= 0; i--) {
-                    var m = msgs[i];
-                    if (m.role === 'user' && m.attachments && m.attachments.length > 0) {
-                        return m.attachments.map(function(a){ return a.file_id; }).filter(function(f){ return !!f; });
-                    }
-                    if (m.role === 'user') break;
-                }
-                return [];
-            })(),
+            file_ids: refIds,
+            full_file_ids: fullIds,
+            note_refs: noteRefs,
+            timeouts: {
+                nudge: state.settings?.timeoutNudge ?? 120,
+                warn: state.settings?.timeoutWarn ?? 240,
+                abort: state.settings?.timeoutAbort ?? 420,
+            },
+            subagent: {
+                enabled: state.settings?.subagentEnabled !== false,
+                max_rounds: state.settings?.subagentMaxRounds ?? 4,
+                max_parallel: state.settings?.subagentMaxParallel ?? 2,
+                max_tasks: state.settings?.subagentMaxTasks ?? 4,
+                nudge: state.settings?.subagentNudge ?? 60,
+                warn: state.settings?.subagentWarn ?? 150,
+                abort: state.settings?.subagentAbort ?? 300,
+            },
             images: optsImages,
         };
 
@@ -332,6 +471,10 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
                 else if (t === 'token') { if (ev.text) { streamedText += ev.text; currentRoundText += ev.text; answerDiv.textContent += ev.text; } }
                 else if (t === 'tool_call') { handleToolCall(ev.name || '', ev.input || ''); }
                 else if (t === 'tool_result') { handleToolResult(ev.name || '', ev.content || ''); }
+                else if (t === 'subagent_start') { handleSubagentStart(ev); }
+                else if (t === 'subagent_step') { handleSubagentStep(ev); }
+                else if (t === 'subagent_end') { handleSubagentEnd(ev); }
+                else if (t === 'timeout_notice') { handleTimeoutNotice(ev.level || 'nudge', ev.text || '', ev.elapsed || 0); }
                 else if (t === 'final') { finalAnswer = ev.text || ''; currentRoundText = ''; answerDiv.textContent = finalAnswer; }
                 else if (t === 'stopped') { finalAnswer = '已停止生成'; currentRoundText = ''; answerDiv.textContent = (streamedText || '') + '\n\n⏹️ 已停止'; }
                 else if (t === 'error') { throw new Error(ev.message || '后端错误'); }
@@ -400,7 +543,10 @@ document.addEventListener('click', function(e) {
     if (att) {
         var url = att.dataset.fileUrl;
         if (url) {
-            if (state.settings.fileOpenMode === 'backend') {
+            var attId2 = url.replace(/^\/api\/file\//, '');
+            if (typeof window.openFileById === 'function') {
+                window.openFileById(attId2, att.dataset.fileName || att.textContent || 'file');
+            } else if (state.settings.fileOpenMode === 'backend') {
                 fetch(url + '/open', { method: 'POST' }).catch(function(){});
             } else {
                 window.open(url, '_blank');
@@ -416,8 +562,10 @@ document.addEventListener('click', function(e) {
     var atts = state.documentUpload.pendingAttachments || [];
     var att = atts.find(function(a) { return a.id === attId; });
     if (att && att.file_id) {
-    // 已上传到后端 → 用统一后端方式打开
-    if (state.settings.fileOpenMode === 'backend') {
+    // 已上传到后端 → 按设置的三种打开方式派发
+    if (typeof window.openFileById === 'function') {
+        window.openFileById(att.file_id, att.name || att.fileName || 'file');
+    } else if (state.settings.fileOpenMode === 'backend') {
         fetch('/api/file/' + att.file_id + '/open', { method: 'POST' }).catch(function(){});
     } else {
         window.open('/api/file/' + att.file_id, '_blank');

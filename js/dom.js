@@ -86,7 +86,8 @@
         const toolListFiles = document.getElementById('tool-list-files');
         const toolSkillWrite = document.getElementById('tool-skill-write');
         const toolSearchHistory = document.getElementById('tool-search-history');
-        const toolSearchKnowledge = document.getElementById('tool-search-knowledge');
+        const toolSearchKnowledge = document.getElementById('tool-shared-search');   // 数据库检索（云端 shared_search）
+        const toolSharedUpload = document.getElementById('tool-shared-upload');      // 数据库上传（shared_upload）
         const toolMineru = document.getElementById('tool-mineru');
         // MinerU 配置面板元素
         const panelMineruToken = document.getElementById('panel-mineru-token');

@@ -20,15 +20,19 @@
                             uploadToggle.checked = state.settings.imageUploadMode === 'base64';
                             updateImageUploadModeUI();
                         }
-                        // 加载文件打开方式设置
-                        var fileToggle = document.getElementById('file-open-mode-toggle');
-                        if (fileToggle) {
-                            fileToggle.checked = state.settings.fileOpenMode === 'browser';
-                            updateFileOpenModeUI();
-                        }
+                        // 加载文件打开方式设置（三选一，读 state 渲染）
+                        updateFileOpenModeUI();
 
                         // 加载分区字号设置
                         loadFontSizeSettings();
+
+                        // 加载超时保护三级到面板（子智能体设置已迁至「智能体配置」面板）
+                        const _tn = document.getElementById('timeout-nudge');
+                        const _tw = document.getElementById('timeout-warn');
+                        const _ta = document.getElementById('timeout-abort');
+                        if (_tn) _tn.value = (state.settings.timeoutNudge ?? 120);
+                        if (_tw) _tw.value = (state.settings.timeoutWarn ?? 240);
+                        if (_ta) _ta.value = (state.settings.timeoutAbort ?? 420);
                     } catch (e) {
                         console.error('解析设置失败:', e);
                     }
@@ -112,6 +116,14 @@
               state.settings.contextLength = parseInt(contextSlider.value);
               state.settings.maxTokens = parseInt(maxTokensInput.value);
               if (expectedContextTokensInput) state.settings.expectedContextTokens = parseInt(expectedContextTokensInput.value) || 4000;
+
+              // 保存超时保护三级（子智能体设置由「智能体配置」面板保存）
+              const _tn = document.getElementById('timeout-nudge');
+              const _tw = document.getElementById('timeout-warn');
+              const _ta = document.getElementById('timeout-abort');
+              if (_tn) state.settings.timeoutNudge = Math.max(0, parseInt(_tn.value) || 0);
+              if (_tw) state.settings.timeoutWarn = Math.max(0, parseInt(_tw.value) || 0);
+              if (_ta) state.settings.timeoutAbort = Math.max(0, parseInt(_ta.value) || 0);
             
               // 保存图片上传模式设置
               const uploadToggle = document.getElementById('image-upload-mode-toggle');
@@ -119,10 +131,13 @@
                   state.settings.imageUploadMode = uploadToggle.checked ? 'base64' : 'ocr';
               }
 
-              // 保存文件打开方式设置
-              const fileToggle = document.getElementById('file-open-mode-toggle');
-              if (fileToggle) {
-                  state.settings.fileOpenMode = fileToggle.checked ? 'browser' : 'backend';
+              // 保存文件打开方式设置（三选一：以分段控件当前选中项为准）
+              const fileModeGroup = document.getElementById('file-open-mode-group');
+              if (fileModeGroup) {
+                  const activeBtn = fileModeGroup.querySelector('.mode-seg-btn.active');
+                  if (activeBtn && activeBtn.dataset.mode) {
+                      state.settings.fileOpenMode = activeBtn.dataset.mode;
+                  }
               }
             
               // 新增：原始输出过程开关
@@ -173,7 +188,7 @@
         }
 
         function loadBranches() {
-            const savedBranches = localStorage.getItem('ai-branches');
+            const savedBranches = localStorage.getItem(window.identityKey('ai-branches'));
             if (savedBranches) {
                 try {
                     const parsedBranches = JSON.parse(savedBranches);
@@ -202,7 +217,7 @@
                 }
             }
             // 恢复上次打开的对话（若存在且有效）；否则保持无对话(null)，让用户新建/选择
-            const prevBranchId = localStorage.getItem('ai-current-branch');
+            const prevBranchId = localStorage.getItem(window.identityKey('ai-current-branch'));
             // 只恢复真实对话（branch-*），不创建任何“默认对话”占位
             if (prevBranchId && prevBranchId.startsWith('branch-')
                 && state.branches[prevBranchId] && !state.branches[prevBranchId].isTemporary) {
@@ -212,18 +227,26 @@
             }
         }
 
-        function saveBranches() {
-            // 保存所有对话，不再区分临时/永久
-            localStorage.setItem('ai-branches', JSON.stringify(state.branches));
-            // 同时记住当前打开的是哪个对话，便于重启后恢复
-            persistCurrentBranch();
-        }
+             function saveBranches() {
+                // 保存所有对话，不再区分临时/永久
+                try {
+                    localStorage.setItem(window.identityKey('ai-branches'), JSON.stringify(state.branches));
+                } catch (e) {
+                    // 存储超限等原因：不抛出，否则调用方（addMessage 等）会中断、消息气泡不渲染
+                    console.error('保存对话到 localStorage 失败:', e);
+                    if (typeof showToast === 'function') {
+                        showToast('本地存储空间不足，最新对话可能未被保存；建议删除含大附件的旧对话', 'error');
+                    }
+                }
+                // 同时记住当前打开的是哪个对话，便于重启后恢复
+                persistCurrentBranch();
+            }
 
         // 记住当前打开的对话 id，下次打开应用时恢复（避免每次重启都回默认对话）
         // main 是空占位：不持久化，防止它被当作“上次对话”而在刷新时永远回默认空对话
         function persistCurrentBranch() {
             if (state && state.currentBranchId && state.currentBranchId !== 'main') {
-                try { localStorage.setItem('ai-current-branch', state.currentBranchId); } catch (e) {}
+                try { localStorage.setItem(window.identityKey('ai-current-branch'), state.currentBranchId); } catch (e) {}
             }
         }
 

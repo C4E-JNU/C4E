@@ -38,8 +38,8 @@
             if (!providerList) return;
             providerList.innerHTML = '';
 
-            // 1. 渲染服务商列表 (内置 + 自定义)
-            Object.values(providers).forEach(provider => {
+            // 1. 渲染服务商列表 (内置 + 自定义；hidden 的内置服务商如"本地千问"不显示但可用)
+            Object.values(providers).filter(p => !p.hidden).forEach(provider => {
                 const item = document.createElement('div');
                 item.className = `provider-item ${provider.id === currentEditingProviderId ? 'active' : ''}`;
                 item.onclick = () => {
@@ -80,7 +80,8 @@
             // 头部
             const nameEl = document.getElementById('current-provider-name');
             const iconEl = document.getElementById('current-provider-icon');
-            if (nameEl) nameEl.innerText = provider.name;
+            if (nameEl) nameEl.innerHTML = `${provider.name}` +
+                (provider.desc ? `<div style="font-weight:400;font-size:.75rem;color:var(--gray);margin-top:2px;white-space:normal;">${provider.desc}</div>` : '');
             if (iconEl) iconEl.innerText = '⚙️';
 
             // 配置回填
@@ -98,6 +99,12 @@
             const listContainer = document.getElementById('provider-models-list');
             if (listContainer) {
                 listContainer.innerHTML = '';
+                if (!provider.models || provider.models.length === 0) {
+                    const hint = document.createElement('div');
+                    hint.style.cssText = 'font-size:.78rem;color:var(--gray);padding:8px 4px;';
+                    hint.textContent = '在上方配置好 URL 与 API 密钥并保存后，点击「+ 添加模型」添加该服务商支持的模型，点亮即可使用。';
+                    listContainer.appendChild(hint);
+                }
                 if (provider.models) {
                     provider.models.forEach(model => {
                         const card = document.createElement('div');
@@ -269,6 +276,8 @@
             document.getElementById('confirm-add-provider').onclick = () => {
                 const name = document.getElementById('new-provider-name').value.trim();
                 const url = normalizeOpenAIEndpoint(document.getElementById('new-provider-url').value);
+                const descEl = document.getElementById('new-provider-desc');
+                const desc = descEl ? descEl.value.trim() : '';
                 if (!name) return showPassiveToast('请输入服务商名称');
 
                 const id = 'custom-' + Date.now();
@@ -276,6 +285,7 @@
                     id: id,
                     name: name,
                     icon: 'C',
+                    desc: desc,
                     defaultEndpoint: url || '',
                     models: []
                 };

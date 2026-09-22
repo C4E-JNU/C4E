@@ -5,6 +5,7 @@
         initAgentConfigPanel();
         // 更新 Neo4j 状态指示灯
         updateNeo4jStatusUI(state.neo4j.connected);
+        // 注：桌宠小e 的初始化在 js/xiaoe.js 内部自行完成（它在本文件之后加载）
 
         // 暴露函数给全局作用域
         window.editMessage = editMessage;
@@ -47,6 +48,7 @@
         window.deleteNoteCard = deleteNoteCard;
         window.updateNoteTitle = updateNoteTitle;
         window.editNoteCard = editNoteCard;
+        window.publishNoteToDb = publishNoteToDb;
         window.saveNoteEdit = saveNoteEdit;
         window.cancelNoteEdit = cancelNoteEdit;
         window.toggleNoteCollapse = toggleNoteCollapse;

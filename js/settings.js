@@ -1,85 +1,74 @@
         // ==================== 服务商与模型配置 ====================
+        // 内置只给「服务商 + 官方端点 + 简介」；模型列表一律清空，由用户自行添加。
+        // 例外：qwen-local（隐藏内置，写死可用）与 hermes/codex（Agent 网关，预填免配置）。
         const defaultProviders = {
             'deepseek': {
-                id: 'deepseek',
-                name: 'DeepSeek',
-                defaultEndpoint: 'https://api.deepseek.com/chat/completions',
-                models: [
-                    { id: 'deepseek-chat', name: 'DeepSeek Chat', desc: '通用对话模型，适合日常对话、编程辅助，仅支持文本输入与输出', modelParam: 'deepseek-chat' },
-                    { id: 'deepseek-reasoner', name: 'DeepSeek R1', desc: '推理增强模型，逻辑推理能力强，仅支持文本输入与输出', modelParam: 'deepseek-reasoner', enableReasoning: true }
-                ]
+                id: 'deepseek', name: 'DeepSeek',
+                defaultEndpoint: 'https://api.deepseek.com/v1',
+                desc: '深度求索官方 API｜通用对话与代码见长，性价比高',
+                models: []
             },
             'openai': {
-                id: 'openai',
-                name: 'OpenAI',
-                defaultEndpoint: 'https://api.openai.com/v1/chat/completions',
-                models: [
-                    { id: 'gpt-4o', name: 'GPT-4o', desc: '高性能多模态模型', modelParam: 'gpt-4o' },
-                    { id: 'gpt-5-mini', name: 'GPT-5 Mini', desc: '轻量级快速模型', modelParam: 'gpt-5-mini' },
-                    { id: 'gpt-5.2', name: 'GPT-5.2', desc: '增强版推理模型', modelParam: 'gpt-5.2' }
-                ]
+                id: 'openai', name: 'OpenAI',
+                defaultEndpoint: 'https://api.openai.com/v1',
+                desc: 'OpenAI 官方 API｜GPT 系列，多模态与生态最全',
+                models: []
             },
             'alibaba': {
-                id: 'alibaba',
-                name: 'Alibaba',
-                defaultEndpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
-                apiKeyHeader: 'Authorization',
-                apiKeyPrefix: 'Bearer ',
-                models: [
-                    { id: 'qwen-3.0', name: 'Qwen 3.0', desc: '强大的中文理解和代码生成', modelParam: 'qwen-plus' },
-                    { id: 'qwen3-flash', name: 'Qwen3 Flash', desc: '高速推理模型', modelParam: 'qwen3-flash' }
-                ]
+                id: 'alibaba', name: '阿里云百炼',
+                defaultEndpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+                apiKeyHeader: 'Authorization', apiKeyPrefix: 'Bearer ',
+                desc: '通义千问 Qwen 官方 API｜中文与长文本能力强，额度友好',
+                models: []
+            },
+            'glm': {
+                id: 'glm', name: '智谱 GLM',
+                defaultEndpoint: 'https://open.bigmodel.cn/api/paas/v4',
+                apiKeyHeader: 'Authorization', apiKeyPrefix: 'Bearer ',
+                desc: '智谱 AI 官方 API｜GLM 系列，Agent 与代码能力突出',
+                models: []
             },
             'google': {
-                id: 'google',
-                name: 'Google',
-                defaultEndpoint: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
-                models: [
-                    { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', desc: '新一代极速多模态模型', modelParam: 'gemini-3-flash-preview' },
-                    { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', desc: '高性能复杂任务处理', modelParam: 'gemini-2.5-pro' },
-                    { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite', desc: '轻量化极速响应模型', modelParam: 'gemini-2.5-flash-lite' },
-                    { id: 'gemini-2.5-flash-native-audio-preview-12-2025', name: 'Gemini 2.5 Flash Live', desc: '支持原生音频输入与实时互动', modelParam: 'gemini-2.5-flash-native-audio-preview-12-2025' },
-                    { id: 'gemma-3-27b-it', name: 'Gemma 3', desc: '高性能开源模型', modelParam: 'gemma-3-27b-it' },
-                    { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro', desc: '新一代推理与多模态旗舰', modelParam: 'gemini-3-pro-preview' },
-                    { id: 'gemini-3-pro-image-preview', name: 'Nano Banana Pro', desc: '新一代视觉理解与图像生成预览版', modelParam: 'gemini-3-pro-image-preview' },
-                    { id: 'gemini-2.5-computer-use-preview-10-2025', name: 'Gemini 2.5 Computer Use', desc: '支持计算机操控任务的预览模型', modelParam: 'gemini-2.5-computer-use-preview-10-2025' }
-                ]
+                id: 'google', name: 'Google',
+                defaultEndpoint: 'https://generativelanguage.googleapis.com/v1beta/openai',
+                desc: 'Gemini 官方 API（OpenAI 兼容端点）｜多模态旗舰',
+                models: []
             },
             'xai': {
-                id: 'xai',
-                name: 'xAI',
-                defaultEndpoint: 'https://api.x.ai/v1/responses',
-                models: [
-                    { id: 'grok-4.1', name: 'Grok 4.1', desc: '具有强推理能力和幽默感', modelParam: 'grok-4.1' }
-                ]
+                id: 'xai', name: 'xAI',
+                defaultEndpoint: 'https://api.x.ai/v1',
+                desc: 'Grok 系列官方 API｜实时联网与强推理',
+                models: []
             },
             'anthropic': {
-                id: 'anthropic',
-                name: 'Anthropic',
-                defaultEndpoint: 'https://api.anthropic.com/v1/messages',
+                id: 'anthropic', name: 'Anthropic',
+                defaultEndpoint: 'https://api.anthropic.com/v1',
+                desc: 'Claude 系列官方 API｜长文本与复杂推理',
+                models: []
+            },
+            'qwen-local': {
+                id: 'qwen-local', name: '本地千问', hidden: true, type: 'openai',
+                defaultEndpoint: 'http://<HUB-IP>:8080/v1',
+                apiKeyHeader: 'Authorization', apiKeyPrefix: 'Bearer ',
+                desc: '实验室服务器本地推理｜免费不限量，内置无需配置',
                 models: [
-                    { id: 'claude-4.5-opus', name: 'Claude 4.5 Opus', desc: '长文本与复杂推理', modelParam: 'claude-4.5-opus' }
+                    { id: 'qwen3-local', name: 'Qwen3.6 35B（本地）', desc: '实验室服务器本地推理，免费不限量，已内置无需配置', modelParam: 'Qwen3.6-35B-A3B-Q4_K_M.gguf', enableReasoning: false }
                 ]
             },
-            'meta': {
-                 id: 'meta',
-                 name: 'Meta',
-                 defaultEndpoint: 'https://api.openai.com/v1/chat/completions',
-                 models: [
-                     { id: 'llama-4', name: 'Llama 4', desc: '开源大模型最新版', modelParam: 'llama-4' }
-                 ]
-             },
-             'hermes': {
-                 id: 'hermes',
-                 name: 'Hermes',
-                 type: 'openai',
-                 defaultEndpoint: 'http://localhost:8642/v1',
-                 apiKeyHeader: 'Authorization',
-                 apiKeyPrefix: 'Bearer ',
-                 models: [
-                     { id: 'hermes-qwen3', name: 'Hermes (qwen3)', desc: '通过 Hermes Gateway 运行的本地 Agent，支持工具调用和持久记忆', modelParam: 'qwen3', enableReasoning: false }
-                 ]
-             }
+            'hermes': {
+                id: 'hermes', name: 'Hermes', type: 'openai',
+                defaultEndpoint: '',
+                apiKeyHeader: 'Authorization', apiKeyPrefix: 'Bearer ',
+                desc: 'Agent 网关：可通过 agent gateway 连接任意主流 agent 到 C4EAI 进行回答，数据保存在您的浏览器前端，我们不获取您的任何隐私信息。注意：使用外部 agent 连接时，C4EAI 自身的工具与技能不可用，仅可纯问答。',
+                models: []
+            },
+            'codex': {
+                id: 'codex', name: 'Codex', type: 'openai',
+                defaultEndpoint: '',
+                apiKeyHeader: 'Authorization', apiKeyPrefix: 'Bearer ',
+                desc: 'Agent 网关：可通过 agent gateway 连接任意主流 agent 到 C4EAI 进行回答，数据保存在您的浏览器前端，我们不获取您的任何隐私信息。注意：使用外部 agent 连接时，C4EAI 自身的工具与技能不可用，仅可纯问答。',
+                models: []
+            }
             };
 
         // 运行时状态
@@ -104,13 +93,26 @@
                  providerSettings = JSON.parse(savedSettings);
              }
 
-             // 预填 Hermes Gateway API Key（用户未保存设置时自动填充）
-             if (!providerSettings['hermes']) {
-                 providerSettings['hermes'] = {
-                     apiKey: 'hermes-api-key-2026-local',
-                     endpoint: 'http://localhost:8642/v1'
-                 };
-             }
+              // Hermes / Codex 等 Agent 网关：URL、密钥、模型均不内置——
+              // 用户在配置界面自行填写，保存后只存在其浏览器 localStorage（前端保存，不上送）。
+
+              // 本地千问（实验室 llama-server，免密钥内置可用）；旧存档 IP 端点自动迁移到 c4eai.lab
+              if (!providerSettings['qwen-local']) {
+                  providerSettings['qwen-local'] = {
+                      apiKey: 'sk-local',
+                      endpoint: 'http://<HUB-IP>:8080/v1'
+                  };
+              } else if ((providerSettings['qwen-local'].endpoint || '').indexOf('c4eai') >= 0) {
+                  providerSettings['qwen-local'].endpoint = 'http://<HUB-IP>:8080/v1';
+                  providerSettings['qwen-local'].apiKey = providerSettings['qwen-local'].apiKey || 'sk-local';
+                  localStorage.setItem('ragagent-provider-settings', JSON.stringify(providerSettings));
+              }
+
+              // 本地千问写死可用：确保 qwen3-local 始终在“已亮起”列表
+              if (!state.enabledModels.includes('qwen3-local')) {
+                  state.enabledModels.unshift('qwen3-local');
+                  localStorage.setItem('ragagent-enabled-models', JSON.stringify(state.enabledModels));
+              }
 
             // 2. 加载自定义服务商和模型覆盖项
             const savedCustomProviders = localStorage.getItem('ragagent-custom-providers');

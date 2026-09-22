@@ -3,12 +3,14 @@
 // 工具分组（Hermes toolset 风格：按能力域分组勾选）
 const TOOL_GROUPS = [
     { name: '图谱 (graph)', tools: ['graph_schema', 'execute_cypher'] },
+    { name: '数据库/共享库 (database)', tools: ['shared_search', 'shared_upload'] },
     { name: '联网 (web)', tools: ['web_search', 'web_extract'] },
     { name: '技能 (skills)', tools: ['skill_list', 'skill_view', 'skill_write'] },
     { name: '文件 (file)', tools: ['read_file', 'write_file', 'list_files'] },
     { name: '代码/终端 (code)', tools: ['run_code', 'terminal'] },
-    { name: '记忆/历史 (memory)', tools: ['search_history', 'search_knowledge', 'conversation_notes'] },
+    { name: '记忆/历史 (memory)', tools: ['search_history', 'conversation_notes'] },
     { name: '任务 (task)', tools: ['todo'] },
+    { name: '子智能体 (subagent)', tools: ['delegate_task'] },
     { name: '文档解析 (documents)', tools: ['mineru_parse'] },
 ];
 
@@ -46,7 +48,7 @@ async function renderToolsGroups() {
     container.innerHTML = html || '<div style="color:var(--gray)">（后端未返回工具）</div>';
 
     // 隐藏旧的硬编码工具勾选（避免重复读取）；保留 DOM 兼容
-    document.querySelectorAll('#tool-graph-schema, #tool-execute-cypher, #tool-skill-list, #tool-skill-view, #tool-web-search, #tool-web-extract, #tool-todo, #tool-notes, #tool-run-code, #tool-read-file, #tool-write-file, #tool-list-files, #tool-skill-write, #tool-search-history, #tool-search-knowledge, #tool-mineru').forEach(cb => {
+    document.querySelectorAll('#tool-graph-schema, #tool-execute-cypher, #tool-skill-list, #tool-skill-view, #tool-web-search, #tool-web-extract, #tool-todo, #tool-notes, #tool-run-code, #tool-read-file, #tool-write-file, #tool-list-files, #tool-skill-write, #tool-search-history, #tool-shared-search, #tool-shared-upload, #tool-mineru').forEach(cb => {
         cb.style.display = 'none';
         if (cb.closest('label')) cb.closest('label').style.display = 'none';
     });
@@ -85,10 +87,11 @@ async function renderSkillsCheckboxes() {
     const enabled = state.agentConfig?.loadedSkills || [];
 
     container.innerHTML = skills.map(s => `
-        <label class="config-option">
+        <label class="config-option" style="align-items:flex-start;">
             <input type="checkbox" class="skill-checkbox" data-skill="${s.name}"
+                   style="margin-top:0.3rem;flex:none;"
                    ${enabled.includes(s.name) ? 'checked' : ''}>
-            <span class="config-option-label">${s.name}<span class="config-option-desc"> ${s.description}</span></span>
+            <span class="config-option-label" style="line-height:1.4;">${s.name}<span class="config-option-desc" style="display:block;"> ${s.description}</span></span>
         </label>
     `).join('');
 
@@ -144,6 +147,43 @@ function loadAgentEngineFromState() {
     if (sel) sel.value = String(rounds);
 }
 
+// ── 子智能体设置（已从设置面板迁移至此，存储仍用 state.settings.*）──
+function loadSubagentConfigToPanel() {
+    const s = state.settings || {};
+    const _se = document.getElementById('subagent-enabled');
+    const _sr = document.getElementById('subagent-rounds');
+    const _sp = document.getElementById('subagent-parallel');
+    const _sm = document.getElementById('subagent-maxtasks');
+    const _sn = document.getElementById('subagent-nudge');
+    const _sw = document.getElementById('subagent-warn');
+    const _sab = document.getElementById('subagent-abort');
+    if (_se) _se.checked = (s.subagentEnabled !== false);
+    if (_sr) _sr.value = (s.subagentMaxRounds ?? 4);
+    if (_sp) _sp.value = (s.subagentMaxParallel ?? 2);
+    if (_sm) _sm.value = (s.subagentMaxTasks ?? 4);
+    if (_sn) _sn.value = (s.subagentNudge ?? 60);
+    if (_sw) _sw.value = (s.subagentWarn ?? 150);
+    if (_sab) _sab.value = (s.subagentAbort ?? 300);
+}
+
+function saveSubagentConfigFromPanel() {
+    const _se = document.getElementById('subagent-enabled');
+    const _sr = document.getElementById('subagent-rounds');
+    const _sp = document.getElementById('subagent-parallel');
+    const _sm = document.getElementById('subagent-maxtasks');
+    const _sn = document.getElementById('subagent-nudge');
+    const _sw = document.getElementById('subagent-warn');
+    const _sa = document.getElementById('subagent-abort');
+    if (_se) state.settings.subagentEnabled = !!_se.checked;
+    if (_sr) state.settings.subagentMaxRounds = Math.min(20, Math.max(1, parseInt(_sr.value) || 4));
+    if (_sp) state.settings.subagentMaxParallel = Math.min(8, Math.max(1, parseInt(_sp.value) || 2));
+    if (_sm) state.settings.subagentMaxTasks = Math.min(8, Math.max(1, parseInt(_sm.value) || 4));
+    if (_sn) state.settings.subagentNudge = Math.max(0, parseInt(_sn.value) || 0);
+    if (_sw) state.settings.subagentWarn = Math.max(0, parseInt(_sw.value) || 0);
+    if (_sa) state.settings.subagentAbort = Math.min(3600, Math.max(30, parseInt(_sa.value) || 300));
+    try { localStorage.setItem('ai-settings', JSON.stringify(state.settings)); } catch (e) { /* ignore */ }
+}
+
 function initAgentConfigPanel() {
     if (!agentConfigToggle) return;
 
@@ -164,6 +204,7 @@ function initAgentConfigPanel() {
         loadToolsConfigFromState();
         loadPermissionModeFromState();
         loadAgentEngineFromState();
+        loadSubagentConfigToPanel();
         syncNeo4jConfigToPanel();
         renderSkillsCheckboxes();  // 动态加载技能列表
         loadMineruConfigToPanel();  // 预填 MinerU Token
@@ -245,7 +286,8 @@ function loadToolsConfigFromState() {
     if (toolListFiles) toolListFiles.checked = cfg.enabledTools.includes('list_files');
     if (toolSkillWrite) toolSkillWrite.checked = cfg.enabledTools.includes('skill_write');
     if (toolSearchHistory) toolSearchHistory.checked = cfg.enabledTools.includes('search_history');
-    if (toolSearchKnowledge) toolSearchKnowledge.checked = cfg.enabledTools.includes('search_knowledge');
+    if (toolSearchKnowledge) toolSearchKnowledge.checked = cfg.enabledTools.includes('shared_search');
+    if (toolSharedUpload) toolSharedUpload.checked = cfg.enabledTools.includes('shared_upload');
     if (toolMineru) toolMineru.checked = cfg.enabledTools.includes('mineru_parse');
     loadSkillsConfigFromState();
     loadPermissionModeFromState();
@@ -281,7 +323,8 @@ function saveAgentConfig() {
         if (toolListFiles && toolListFiles.checked) tools.push('list_files');
         if (toolSkillWrite && toolSkillWrite.checked) tools.push('skill_write');
         if (toolSearchHistory && toolSearchHistory.checked) tools.push('search_history');
-        if (toolSearchKnowledge && toolSearchKnowledge.checked) tools.push('search_knowledge');
+        if (toolSearchKnowledge && toolSearchKnowledge.checked) tools.push('shared_search');
+        if (toolSharedUpload && toolSharedUpload.checked) tools.push('shared_upload');
         if (toolMineru && toolMineru.checked) tools.push('mineru_parse');
     }
 
@@ -303,6 +346,9 @@ function saveAgentConfig() {
     state.agentConfig.maxRounds = isNaN(rounds) ? 8 : rounds;
     saveAgentConfigToLocal();
 
+    // 子智能体设置（写入 state.settings.*，独立持久化到 ai-settings）
+    saveSubagentConfigFromPanel();
+
     // 收起面板
     if (agentConfigPanel) agentConfigPanel.classList.remove('active');
     const btn = document.getElementById('save-agent-config');
@@ -320,6 +366,10 @@ function loadAgentConfigFromLocal() {
             state.agentConfig.permissionMode = parsed.permissionMode || 'safe';
             state.agentConfig.engine = parsed.engine || 'custom';
             state.agentConfig.maxRounds = (parsed.maxRounds === 0 || parsed.maxRounds) ? parsed.maxRounds : 8;
+            // 技能勾选状态同样持久化（旧存档无此字段时保留默认）
+            if (Array.isArray(parsed.loadedSkills)) {
+                state.agentConfig.loadedSkills = parsed.loadedSkills;
+            }
         }
     } catch (e) { /* ignore */ }
 }

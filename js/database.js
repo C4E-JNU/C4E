@@ -55,7 +55,9 @@ function _chunkText(text, maxChars = 500, overlap = 50) {
 
 // ── IndexedDB 操作 ──────────────────────────
 
-const DB_NAME = 'C4EAI_KB', DB_VER = 1, STORE = 'docs';
+// IndexedDB 按登录身份分库（identityKey）：切换账号=各自的文档库
+const DB_NAME = 'C4EAI_KB_' + ((window.C4EAI_IDENTITY || 'guest').replace(/[^A-Za-z0-9_-]/g, '_') || 'guest');
+const DB_VER = 1, STORE = 'docs';
 
 function _openDB() {
     return new Promise((resolve, reject) => {
@@ -69,6 +71,37 @@ function _openDB() {
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
     });
+}
+
+// 旧版单一库 C4EAI_KB → 当前身份库（仅 guest 首次启动时迁移一次）
+async function _migrateLegacyDBIfNeeded() {
+    if (window.C4EAI_IDENTITY !== 'guest') return;
+    try {
+        const dbs = await indexedDB.databases ? indexedDB.databases() : [];
+        const hasLegacy = (dbs || []).some(function (d) { return d.name === 'C4EAI_KB'; });
+        if (!hasLegacy) return;
+        const marked = localStorage.getItem('c4eai_idb_migrated_guest');
+        if (marked) return;
+        const oldDb = await new Promise(function (res, rej) {
+            const r = indexedDB.open('C4EAI_KB', 1);
+            r.onsuccess = function () { res(r.result); };
+            r.onerror = function () { rej(r.error); };
+        });
+        const oldDocs = await new Promise(function (res, rej) {
+            try {
+                const tx = oldDb.transaction('docs', 'readonly');
+                const q = tx.objectStore('docs').getAll();
+                q.onsuccess = function () { res(q.result || []); };
+                q.onerror = function () { rej(q.error); };
+            } catch (e) { res([]); }
+        });
+        oldDb.close();
+        for (const d of oldDocs) {
+            try { await _dbPut(d); } catch (e) {}
+        }
+        localStorage.setItem('c4eai_idb_migrated_guest', '1');
+        if (oldDocs.length) showToast(`已将 ${oldDocs.length} 个旧文档归入游客文档库`, 'info');
+    } catch (e) { /* 迁移失败不阻塞 */ }
 }
 
 async function _dbPut(doc) {
@@ -104,65 +137,90 @@ async function _dbDelete(id) {
 // ── 初始化 ──────────────────────────────────
 
 function initDatabase() {
+    _migrateLegacyDBIfNeeded().finally(function () { refreshDocumentList(); });
+    document.getElementById('db-close-btn').addEventListener('click', closeDatabaseModal);
     document.getElementById('db-upload-btn').addEventListener('click', () => {
         document.getElementById('db-file-input').click();
     });
+
+    // ＋ 新建条目（空笔记，浮动编辑器，可贴图/插附件/表格）
+    var addEntryBtn = document.getElementById('db-add-entry-btn');
+    if (addEntryBtn) addEntryBtn.addEventListener('click', dbAddEntry);
     document.getElementById('db-file-input').addEventListener('change', async (e) => {
         const file = e.target.files?.[0];
         if (!file) return;
         await uploadDocument(file);
-        e.target.value = '';
+        e.target.value = ''; // 允许重复选择同一文件
     });
-    document.getElementById('cancel-database-btn').addEventListener('click', closeDatabaseModal);
 }
 
 function openDatabaseModal() {
-    document.getElementById('database-modal').classList.add('active');
+    var p = document.getElementById('database-panel');
+    if (!p) return;
+    p.classList.add('active');
     refreshDocumentList();
 }
 
 function closeDatabaseModal() {
-    document.getElementById('database-modal').classList.remove('active');
+    var p = document.getElementById('database-panel');
+    if (p) p.classList.remove('active');
 }
 
-// ── 上传文档 ────────────────────────────────
+// 数据库浮动面板拖动（头部按下拖动，与笔记面板一致）
+(function _initDbPanelDrag() {
+    function bind() {
+        var panel = document.getElementById('database-panel');
+        var hd = document.getElementById('db-panel-header');
+        if (!panel || !hd || hd.dataset.dragBound) return;
+        hd.dataset.dragBound = '1';
+        hd.addEventListener('mousedown', function (e) {
+            if (e.target.closest('button')) return;
+            var rect = panel.getBoundingClientRect();
+            var offX = e.clientX - rect.left, offY = e.clientY - rect.top;
+            function mv(ev) {
+                panel.style.left = Math.max(0, Math.min(window.innerWidth - 80, ev.clientX - offX)) + 'px';
+                panel.style.top = Math.max(0, Math.min(window.innerHeight - 60, ev.clientY - offY)) + 'px';
+                panel.style.right = 'auto';
+            }
+            function up() {
+                document.removeEventListener('mousemove', mv);
+                document.removeEventListener('mouseup', up);
+            }
+            document.addEventListener('mousemove', mv);
+            document.addEventListener('mouseup', up);
+            e.preventDefault();
+        });
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bind);
+    } else { bind(); }
+})();
+
+// ── 上传文档 → 共享数据库池（云端唯一数据库）────────────────
+// 游客/未授权：前端拦截并提示；已授权：source=database 上传（本地实例由后端代理到云端），不写本地 IndexedDB。
 
 async function uploadDocument(file) {
-    showToast('正在解析文档...', 'info');
+    var me = (typeof window.getAuthUser === 'function') ? window.getAuthUser() : null;
+    if (!me || me.username === 'guest') {
+        showToast('🔐 数据库在共享服务器：请先点击右上角「登录」', 'info');
+        if (typeof window.openLoginModal === 'function') window.openLoginModal();
+        return;
+    }
+    if (!me.approved && me.role !== 'admin') {
+        showToast('⏳ 已注册，等待管理员开通数据库权限后即可上传', 'info');
+        return;
+    }
+    showToast('正在上传到共享数据库...', 'info');
     try {
-        const content = await extractTextFromFile(file);
-        if (!content || !content.trim()) throw new Error('未能提取到文本内容');
-
-        showToast('🔄 正在向量化...', 'info');
-        const chunks = _chunkText(content);
-        const embeddings = chunks.map(chunk => _computeEmbedding(chunk));
-
-        // 同时把原文件上传到后端，以便点击文档时能打开源文件
-        let fileId = null;
-        try {
-            const fd = new FormData();
-            fd.append('file', file);
-            const resp = await fetch('/api/file/upload', { method: 'POST', body: fd });
-            const data = await resp.json();
-            if (data && data.file_id) fileId = data.file_id;
-        } catch (e) {
-            console.warn('源文件上传失败:', e.message);
+        const fd = new FormData();
+        fd.append('file', file);
+        const resp = await fetch('/api/file/upload?source=database', { method: 'POST', body: fd });
+        const data = await resp.json();
+        if (!resp.ok) {
+            showToast('❌ 上传失败: ' + (data.error || resp.status), 'error');
+            return;
         }
-
-        const doc = {
-            id: 'doc-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6),
-            name: file.name,
-            chunks: chunks,
-            embeddings: embeddings,
-            file_id: fileId,          // 后端源文件 ID（无则无法打开源文件）
-            charCount: content.length,
-            chunkCount: chunks.length,
-            createdAt: new Date().toISOString()
-        };
-
-        await _dbPut(doc);
-        state.database.loaded = true;
-        showToast(`✅ 「${file.name}」已上传并向量化`, 'success');
+        showToast(`✅ 「${file.name}」已入共享数据库，全组可检索`, 'success');
         refreshDocumentList();
     } catch (e) {
         showToast('❌ 上传失败: ' + e.message, 'error');
@@ -209,77 +267,215 @@ async function deleteDocument(docId) {
     refreshDocumentList();
 }
 
-// ── 文档列表 ────────────────────────────────
+// ── 数据库条目列表（笔记形态：每条 = 标题 + markdown 正文 + 附件/图片内嵌）────────────────
+// 后端存储复用笔记体系：branch_id = '__db__'；附件/图片走 {{file:file_id:文件名}} / ![图](url) 占位，
+// 渲染用 formatMessage，与聊天附件、笔记完全一致。
+
+var DB_BRANCH = '__db__';
+var _dbEntryCollapsed = {};
+var _dbEntries = [];   // 最近一次条目缓存（供编辑回显）
+
+function _dbEntryBodyHtml(n) {
+    return n.content
+        ? formatMessage(n.content, true)
+        : '<span style="color:var(--gray);font-style:italic;">空条目</span>';
+}
+
+// 给容器内渲染出的附件卡片（.msg-file-card）追加 × 删除按钮。
+// getNote(noteId) → 条目对象（需含 content/owner）；onChanged() → 删除成功后回调（重新渲染）。
+// 仅当当前用户是条目 owner 或 admin 时加 ×。
+function _enhanceFileCardDelete(container, getNote, onChanged) {
+    var me = (typeof window.getAuthUser === 'function') ? window.getAuthUser() : null;
+    if (!me) return;
+    var isAdmin = (me.role === 'admin');
+    container.querySelectorAll('.msg-file-card, .attachment-item[data-file-id]').forEach(function (card) {
+        var noteEl = card.closest('[data-eid],[data-note-id]');
+        if (!noteEl) return;
+        var noteId = noteEl.dataset.eid || noteEl.dataset.noteId;
+        var note = getNote(noteId);
+        if (!note) return;
+        // 笔记卡片里 note.id 是字段；条目卡片同样
+        var owner = note.owner || 'admin';
+        if (owner !== me.username && !isAdmin) return;
+        if (card.querySelector('.file-card-del')) return;
+        var btn = document.createElement('button');
+        btn.className = 'file-card-del';
+        btn.textContent = '×';
+        btn.title = '从条目中移除该附件（不删文件）';
+        btn.style.cssText = 'margin-left:4px;border:none;background:none;color:var(--danger);cursor:pointer;font-size:.95rem;line-height:1;padding:0 2px;';
+        btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var fid = card.dataset.fileId;
+            if (!fid) return;
+            if (!confirm('从条目中移除该附件占位？（文件本身保留）')) return;
+            var re = new RegExp('\\n?\\{\\{file:' + fid + ':[^}]*\\}\\}\\n?', 'g');
+            var newContent = (note.content || '').replace(re, '\n');
+            fetch('/api/notes', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ note_id: note.id, title: note.title, content: newContent })
+            }).then(function (r) { return r.json(); }).then(function (d) {
+                if (d.status === 'ok') {
+                    note.content = newContent;
+                    if (typeof showPassiveToast === 'function') showPassiveToast('已移除附件占位');
+                    if (onChanged) onChanged();
+                } else {
+                    if (typeof showPassiveToast === 'function') showPassiveToast('❌ 更新失败', 'error');
+                }
+            }).catch(function () {
+                if (typeof showPassiveToast === 'function') showPassiveToast('❌ 更新失败', 'error');
+            });
+        });
+        card.appendChild(btn);
+    });
+}
+window._enhanceFileCardDelete = _enhanceFileCardDelete;
 
 async function refreshDocumentList() {
-    const docs = await _dbGetAll();
     const container = document.getElementById('db-doc-list');
     const badge = document.getElementById('database-status-badge');
-    badge.textContent = docs.length + ' 个文档';
-
-    if (docs.length === 0) {
-        container.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--gray);font-size:0.9rem;">暂无文档</div>';
-        state.database.loaded = false;
+    var me = (typeof window.getAuthUser === 'function') ? window.getAuthUser() : null;
+    if (!me || me.username === 'guest') {
+        badge.textContent = '未登录';
+        container.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--gray);">🔐 数据库在共享服务器：请先点击右上角「登录」</div>';
         return;
     }
-    state.database.loaded = true;
+    container.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--gray);">加载中…</div>';
+    try {
+        const r = await fetch('/api/notes?branch_id=' + encodeURIComponent(DB_BRANCH));
+        const d = await r.json();
+        const notes = d.notes || [];
+        _dbEntries = notes;
+        badge.textContent = notes.length + ' 个条目';
+        if (!notes.length) {
+            container.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--gray);font-size:0.9rem;">暂无条目<br><span style="font-size:.78rem;">点「📤 上传文档」自动建条目，或「＋ 新建条目」手写笔记</span></div>';
+            return;
+        }
+        var myName = me.username, isAdmin = (me.role === 'admin');
+        // 按 owner 分组：每组一个 "👤 用户名" 小标题（本人排最前）
+        var groups = {};
+        var order = [];
+        notes.forEach(function (n) {
+            var o = n.owner || 'admin';
+            if (!groups[o]) { groups[o] = []; order.push(o); }
+            groups[o].push(n);
+        });
+        order.sort(function (a, b) {
+            if (a === myName) return -1;
+            if (b === myName) return 1;
+            return a.localeCompare(b);
+        });
+        container.innerHTML = order.map(function (o) {
+            var sectionHead = '<div style="padding:.45rem .2rem .25rem;font-size:.78rem;color:var(--gray,#999);font-weight:600;">👤 '
+                + escHtml(o) + (o === myName ? '（我）' : '') + '</div>';
+            return sectionHead + groups[o].map(function (n) {
+                var owner = n.owner || 'admin';
+                var canEdit = (owner === myName) || isAdmin;
+                var collapsed = _dbEntryCollapsed[n.id] !== undefined ? _dbEntryCollapsed[n.id] : true;
+                var refBtn = '<button class="db-entry-ref" data-id="' + n.id + '" title="引用给智能体（发送时带上该条目全文，可让它增删改查）" style="background:none;border:none;cursor:pointer;font-size:.9rem;padding:.1rem .3rem;">📌</button>';
+                var actions = refBtn + (canEdit
+                    ? ('<button class="db-entry-edit" data-id="' + n.id + '" title="编辑条目" style="background:none;border:none;cursor:pointer;font-size:.95rem;padding:.1rem .3rem;">✏️</button>'
+                    +  '<button class="db-entry-del" data-id="' + n.id + '" title="删除条目" style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:1.05rem;padding:.1rem .3rem;">×</button>')
+                    : '');
+                return '<div class="note-card" data-eid="' + n.id + '" data-owner="' + escHtml(owner) + '">'
+                    + '<div class="note-card-header db-entry-toggle" data-id="' + n.id + '" style="cursor:pointer;">'
+                    + '<span class="note-card-title">' + escHtml(n.title || '未命名条目') + '</span>'
+                    + '<div class="note-card-header-actions" style="display:flex;gap:.15rem;" onclick="event.stopPropagation();">' + actions + '</div>'
+                    + '</div>'
+                    + '<div class="note-card-body" id="db-entry-body-' + n.id + '"' + (collapsed ? ' style="display:none;"' : '') + '>'
+                    + '<div class="message-content">' + _dbEntryBodyHtml(n) + '</div>'
+                    + '</div></div>';
+            }).join('');
+        }).join('');
 
-    container.innerHTML = docs.map(d => `
-        <div class="db-doc-item" data-id="${d.id}"
-            style="display:flex;align-items:center;gap:0.5rem;padding:0.6rem 0.8rem;
-                   border:1px solid var(--border);border-radius:8px;margin-bottom:0.4rem;background:var(--card-bg);">
-            <span style="font-size:1.1rem;">📄</span>
-            <span class="db-doc-name" style="flex:1;font-weight:500;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
-                title="${d.file_id ? '点击打开源文件' : '点击查看内容'}">${escHtml(d.name)}</span>
-            <span style="font-size:0.8rem;color:var(--gray);white-space:nowrap;">${(d.charCount/1000).toFixed(1)}K</span>
-            <button class="db-doc-rename-btn" data-id="${d.id}"
-                style="background:none;border:none;cursor:pointer;color:var(--primary);font-size:0.9rem;padding:0.2rem 0.4rem;" title="重命名">✏️</button>
-            <button class="db-doc-delete-btn" data-id="${d.id}"
-                style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:1.1rem;padding:0.2rem;" title="删除">🗑️</button>
-        </div>
-    `).join('');
+        // 附件卡片 × 删除（编辑权限内）：从条目正文移除对应 {{file:..}} 占位
+        _enhanceFileCardDelete(container, function (noteId) {
+            return _dbEntries.find(function (x) { return x.id === noteId; });
+        }, function () { refreshDocumentList(); });
 
-    container.querySelectorAll('.db-doc-name').forEach(el => {
-        el.addEventListener('click', async () => {
-            const id = el.closest('.db-doc-item').dataset.id;
-            const docs2 = await _dbGetAll();
-            const doc = docs2.find(d => d.id === id);
-            if (!doc) return;
-            if (doc.file_id) {
-                // 打开后端源文件（与消息附件一致）
-                if (state.settings.fileOpenMode === 'backend') {
-                    fetch('/api/file/' + doc.file_id + '/open', { method: 'POST' }).catch(function(){});
-                } else {
-                    window.open('/api/file/' + doc.file_id, '_blank');
+        container.querySelectorAll('.db-entry-toggle').forEach(function (el) {
+            el.addEventListener('click', function () {
+                var id = el.dataset.id;
+                var bodyEl = document.getElementById('db-entry-body-' + id);
+                if (bodyEl) {
+                    var hide = bodyEl.style.display !== 'none';
+                    bodyEl.style.display = hide ? 'none' : '';
+                    _dbEntryCollapsed[id] = hide;
                 }
-            } else {
-                // 无源文件（旧文档/后端丢失）→ 提示无法打开
-                showPassiveToast('后端文件丢失，浏览器前端无法打开该文档源文件');
-            }
+            });
         });
-    });
+        container.querySelectorAll('.db-entry-edit').forEach(function (btn) {
+            btn.addEventListener('click', function () { dbEditEntry(btn.dataset.id); });
+        });
+        container.querySelectorAll('.db-entry-del').forEach(function (btn) {
+            btn.addEventListener('click', function () { dbDeleteEntry(btn.dataset.id); });
+        });
+        // 引用给智能体（任何可见条目都能引用，用于让智能体读取/修改）
+        container.querySelectorAll('.db-entry-ref').forEach(function (btn) {
+            btn.addEventListener('click', function () { if (window.refDbEntry) window.refDbEntry(btn.dataset.id); });
+        });
+    } catch (e) {
+        console.error('加载数据库条目失败:', e);
+        container.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--error);">加载失败</div>';
+    }
+}
 
-    container.querySelectorAll('.db-doc-rename-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const id = btn.dataset.id;
-            const docs2 = await _dbGetAll();
-            const doc = docs2.find(d => d.id === id);
-            if (!doc) return;
-            const name = prompt('重命名：', doc.name);
-            if (name && name.trim() && name.trim() !== doc.name) {
-                await renameDocument(id, name.trim());
-            }
-        });
-    });
+function dbToggleCollapse(id) { /* 由 header 点击委托处理 */ }
 
-    container.querySelectorAll('.db-doc-delete-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            if (confirm('确定删除？')) {
-                await deleteDocument(btn.dataset.id);
-            }
-        });
+function dbEditEntry(id) {
+    var n = _dbEntries.find(function (x) { return x.id === id; });
+    if (!n) return;
+    if (typeof window.floatingEditor === 'undefined') { showToast('编辑器未就绪', 'error'); return; }
+    window.floatingEditor.open({
+        title: '编辑数据库条目',
+        showTitle: true,
+        titleValue: n.title || '',
+        value: n.content || '',
+        onSave: function (newContent, newTitle) {
+            var t = (newTitle !== null && newTitle !== undefined && newTitle !== '') ? newTitle : '未命名条目';
+            fetch('/api/notes', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ note_id: id, title: t, content: newContent, branch_id: DB_BRANCH })
+            }).then(function (r) { return r.json(); }).then(function (d) {
+                if (d.status === 'ok') { showToast('条目已更新', 'success'); refreshDocumentList(); }
+                else showToast('更新失败', 'error');
+            }).catch(function () { showToast('更新失败', 'error'); });
+        }
+    });
+}
+
+function dbAddEntry() {
+    var me = (typeof window.getAuthUser === 'function') ? window.getAuthUser() : null;
+    if (!me || me.username === 'guest') { showToast('请先登录', 'info'); return; }
+    if (typeof window.floatingEditor === 'undefined') { showToast('编辑器未就绪', 'error'); return; }
+    window.floatingEditor.open({
+        title: '新建数据库条目',
+        showTitle: true,
+        titleValue: '',
+        value: '',
+        onSave: function (newContent, newTitle) {
+            var t = (newTitle !== null && newTitle !== undefined && newTitle !== '') ? newTitle : '未命名条目';
+            fetch('/api/notes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: t, content: newContent, branch_id: DB_BRANCH })
+            }).then(function (r) { return r.json(); }).then(function (d) {
+                if (d.status === 'ok') { showToast('条目已创建', 'success'); refreshDocumentList(); }
+                else showToast('创建失败', 'error');
+            }).catch(function () { showToast('创建失败', 'error'); });
+        }
+    });
+}
+
+function dbDeleteEntry(id) {
+    if (!confirm('确定删除这条条目吗？（附件文件本身保留）')) return;
+    // 数据库条目只在云端 → 显式带来源标识，后端直连云端删除（不再本地扫描）
+    fetch('/api/notes/' + encodeURIComponent(id) + '?source=cloud', { method: 'DELETE' })
+        .then(function (r) { return r.json(); }).then(function (d) {
+            if (d.status === 'ok') { showToast('条目已删除', 'success'); refreshDocumentList(); }
+            else { showToast('删除失败：' + (d.error || d.message || d.detail || '未知原因'), 'error'); }
+        }).catch(function (e) { showToast('删除失败：' + (e && e.message ? e.message : '网络错误'), 'error');
     });
 }
 
@@ -326,7 +522,7 @@ async function searchDocuments(query) {
 
 // ── 导出搜索函数给智能体使用 ────────────────────
 // toggleDatabaseSearch 和 updateDatabaseUI 已移除，
-// 文档上传/搜索功能保留供智能体的 document_search 工具使用
+// 文档上传/搜索功能保留供智能体的 shared_search（云端）工具使用
 
 function escHtml(str) {
     const d = document.createElement('div');
