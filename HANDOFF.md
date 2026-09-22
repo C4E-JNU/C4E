@@ -40,7 +40,16 @@ C4EAI —— 催化降解研究智能体（江南大学）。前端纯 HTML/JS�
 - 改等级端点：`POST /api/auth/users/level`（body `{username, level}`）
 - 等级元数据端点：`GET /api/auth/levels`（含颜色/名称/说明，前端据此渲染）
 - **`admin` 账号不可被降级/删除**；L5 金色**不能**授予 L5（只能 admin 授）
-- 注册用户默认 L0，需 admin 或 L5 提升才能用数据库
+- **注册默认等级 = L1 蓝色**（`role_policy.default_level_for_new_user()`，改这一个函数即可调整）
+
+### 手机端（≤768px）
+
+形态类 DeepSeek：**对话优先 + 侧栏抽屉**。实现全在 `css/mobile.css` + `js/mobile.js`，桌面端零影响。
+
+- 顶栏单行 52px：`☰` 汉堡 + logo + 数据库 + 身份芯片
+- 侧栏默认 `translateX(-102%)` 藏起；点汉堡滑入，`body.mobile-drawer-open` 时显示遮罩
+- 关闭抽屉：点遮罩 / 点消息区 / Esc / 选对话后自动收
+- 手机端**不自动弹登录框**（改为点顶栏「登录」）
 
 ---
 

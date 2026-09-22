@@ -6,6 +6,29 @@
 
 ---
 
+## [2026-09-22] feat(mobile): 手机端适配（抽屉式侧栏）+ 注册默认 L1 蓝色
+
+**为什么**：主界面按桌面设计，手机上是一条超长竖向流（对话区在 y=2385，要滚 3 屏才到聊天），顶栏还挤成两行。
+
+**形态**：类 DeepSeek —— 对话优先 + 侧栏抽屉（汉堡按钮滑出）。桌面端完全不受影响（只加 `@media (max-width: 768px)`）。
+
+**改动明细**
+- `css/mobile.css`（新增，仅 ≤768px 生效）
+  - 顶栏精简为单行 52px：☰ + logo + 数据库 + 身份芯片；主题圆点隐藏；去 logo 椭圆边框
+  - 隐藏欢迎区（`.hero`）与模型配置区（`.models-section`），对话区占满视口
+  - 侧栏 `position:fixed` + `translateX(-102%)` 藏起，`body.mobile-drawer-open` 时滑入 + 遮罩
+  - 笔记/数据库面板底部全屏铺开；弹窗限制在 96vw；小e 缩放至 74px 移到右下
+  - iOS 防缩放（输入框字号 ≥16px）、代码块/表格横向滚动、触摸区域加高
+- `js/mobile.js`（新增）— 汉堡开合、点遮罩/消息区/Esc 关闭、开抽屉锁滚动、旋转屏自动收起、切回桌面宽度自动复原
+- `js/auth.js` — **手机端不自动弹登录框**（401 时跳过；桌面端保留）。加 `window.__userAskedLogin` 标记区分「用户主动点登录」与「自动弹」
+- `backend/role_policy.py` / `backend/auth.py` — 注册默认等级改为 **L1 蓝色**（注册即可用自己数据库）；等级集中在 `default_level_for_new_user()`
+
+**排查中定位的真实问题**（记下来避免重犯）
+1. `.logo-area` 有 `border:1px solid` + `border-radius:50px` 胶囊边框且 `flex:1 1 auto` 撑到 188px，与 `.db-analysis-btn`（x=188）**重叠** → 手机端去边框 + 改 `flex:0 1 auto` 按内容收缩
+2. 欢迎区真实类名是 **`.hero`**（不是 `.hero-section`）、模型区是 **`.models-section`**（不是 `.models-content-wrapper`）—— 首次写错导致对话区仍在 y=1850 → 补正确类名 + 加「`main.container` 下除 `.chat-section` 外全隐藏」兜底
+
+---
+
 ## [2026-09-22] feat(auth): 六级身份体系（颜色代表身份）
 
 **为什么**：原权限只有 4 类（游客/待授权/已授权/管理员），无法区分"能查所有人数据库"与"能改所有人数据库"，也无法给不同人不同 token 额度。
