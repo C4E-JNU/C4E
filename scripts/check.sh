@@ -38,6 +38,19 @@ chk js/xiaoe.js  'pointercancel'        'xiaoe.js pointercancel 兜底'
 chk js/xiaoe.js  'WEATHER_CHANCE = 0.025' 'xiaoe.js 概率 0.025'
 # 免密钥聊天：只查 model 字段
 chk backend/app.py 'req.model.get("model")' 'app.py 免密钥判据'
+# 附件正文必须有截断上限常量（曾漏导入 → NameError → 500 → "未能生成回答"）
+chk backend/agent/agent.py 'READ_FILE_MAX_CHARS' 'agent.py 导入 READ_FILE_MAX_CHARS'
+# Neo4j 失败必须降级而非终止对话（三处：两流式 + 一非流式）
+_n4="$(grep -c '连不上只降级摘掉图谱工具' backend/agent/agent.py 2>/dev/null || echo 0)"
+if [ "$_n4" -ge 3 ]; then ok "Neo4j 失败降级 ($_n4 处)"; else bad "Neo4j 降级仅 $_n4 处（应≥3）"; fi
+_hn="$(grep -c 'Neo4j连接失败: {cr.get' backend/agent/agent.py 2>/dev/null | head -1)"
+_hn="${_hn:-0}"
+if [ "$_hn" -eq 0 ]; then ok '无 Neo4j 硬失败 return'; else bad "仍有 $_hn 处 Neo4j 硬失败"; fi
+# 对话区必须把附件 file_id 传给 agent（曾漏传 → 附件内容不进 LLM）
+chk js/messages.js 'fileIds: attachmentsMetadata.map' 'messages.js 传附件 fileId 给 agent'
+# 后端不得存在未定义的全局名（pyflakes；曾因 READ_FILE_MAX_CHARS 漏导入而 500）
+_pf="$(env -u PYTHONPATH python -m pyflakes backend/ 2>/dev/null | grep -i 'undefined' || true)"
+if [ -z "$_pf" ]; then ok '后端无 undefined name (pyflakes)'; else bad "未定义名: $_pf"; fi
 # 附件多选：笔记编辑器动态 input 必须 multiple（曾漏改 → 用户无法多选）
 chk js/messages.js 'inp.multiple = true' 'messages.js 笔记附件支持多选'
 # 全仓不应再有只取 files[0] 的附件上传（image_tools 单图工具例外）

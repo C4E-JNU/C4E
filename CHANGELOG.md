@@ -6,6 +6,63 @@
 
 ---
 
+## [2026-09-22] fix(agent): 上传附件后「未能生成回答」—— NameError 500 + file_id 漏传 + Neo4j 硬终止
+
+**用户反馈**：「我在对话区域上传的时候，发送消息提示 agent 未能生成回答」
+
+**三个根因（逐个实测确认）**
+
+| # | 位置 | 问题 | 后果 |
+|---|---|---|---|
+| ① | `agent.py:327` `_prepare_file_context()` | 用了 `READ_FILE_MAX_CHARS` 但**从未导入** | 附件**有可提取文本**就抛 `NameError` → **HTTP 500** → 前端「未能生成回答」 |
+| ② | `js/messages.js` `sendMessage()` | 调 `reactAgentLoop()` 时**没传 `fileIds`** | `file_ids` 恒为空 → 附件正文不进 LLM（答非所问） |
+| ③ | `agent.py` 三处 Neo4j 启动检查 | 连接失败用 `yield error + return` **终止整个对话** | 只要勾了 `graph_schema`/`execute_cypher` 且 Neo4j 未连上，普通对话也直接失败 |
+
+**修复**
+
+① `backend/agent/agent.py`：`_prepare_file_context` 的 import 补上 `READ_FILE_MAX_CHARS`
+```python
+from tools.file_tools import (image_to_base64, _resolve_upload,
+                              get_upload_text as get_file_text,
+                              READ_FILE_MAX_CHARS)
+```
+
+② `js/messages.js`：把附件 file_id 传给 agent
+```js
+await reactAgentLoop(fullMessage, {
+    images: base64Images.map(b => b.base64),
+    note_refs: refsMeta,
+    fileIds: attachmentsMetadata.map(a => a.file_id).filter(Boolean)   // 新增
+});
+```
+
+③ `backend/agent/agent.py`（**3 处**：2 处流式 + 1 处非流式 `run_agent`）：
+Neo4j 连不上 → **降级摘掉图谱工具并继续**，不再 `return`。
+```python
+if not cr.get("success"):
+    _n4_err = cr.get("error", "")
+    enabled_tools = [t for t in enabled_tools
+                     if t not in ("graph_schema", "execute_cypher")]
+    yield {"type": "reasoning",
+           "text": f"（图谱未连接，已跳过图谱工具继续回答：{_n4_err}）\n"}
+```
+> 用户定：**Neo4j 是可选增强**。工具层 `execute_cypher` 失败时本就返回
+> `{"error":"Neo4j 未连接"}` 让 LLM 自行判断跳过；启动检查也不该反过来打断整个对话。
+
+**canonical check 增强**（`scripts/check.sh`，防同类 bug 复发）
+- `agent.py 导入 READ_FILE_MAX_CHARS`
+- `Neo4j 失败降级 (≥3 处)` + `无 Neo4j 硬失败 return`
+- `messages.js 传附件 fileId 给 agent`
+- **`后端无 undefined name (pyflakes)`** ← 这类 NameError 本该被静态检查拦住
+
+**实测**
+- `_prepare_file_context` 5 场景 9/9 PASS：短文本注入 ✅ / 超长附件截断分支正常（44000→20000，无 NameError）✅ / 历史附件只给引用说明 ✅ / 未知 file_id 不崩 ✅ / 空输入返回空 ✅
+- Neo4j 三路径（含 graph_schema / 含 execute_cypher / 两者都有）均**不再硬失败** ✅
+- 端到端：上传附件带 file_ids 请求 HTTP **200**（原 500）、响应 len **4746**（原 21 =「未能生成回答」）✅
+- `bash scripts/check.sh` ALL_PASS ✅
+
+---
+
 ## [2026-09-22] feat(perm): 权限体系细化 —— 红+全读写/全工具、金=管理员（方案 B）
 
 **用户裁定（三条）**

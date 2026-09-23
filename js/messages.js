@@ -1468,7 +1468,13 @@
 
                  // 发送消息 — 智能体自动决策
                  // 不再有"知识库模式"/"图谱模式"的手动切换
-                 await reactAgentLoop(fullMessage, { images: base64Images.map(function(b) { return b.base64; }), note_refs: refsMeta });
+                 // ⚠️ 必须把附件 file_id 传下去：后端据此注入文件正文（此前漏传 →
+                 //    file_ids 恒为空 → 附件内容没进 LLM → 表现为"答非所问/未能生成回答"）
+                 await reactAgentLoop(fullMessage, {
+                     images: base64Images.map(function (b) { return b.base64; }),
+                     note_refs: refsMeta,
+                     fileIds: attachmentsMetadata.map(function (a) { return a.file_id; }).filter(Boolean)
+                 });
         }
 
         function getRecentMessagesForContext(messages) {

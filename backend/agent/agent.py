@@ -302,7 +302,11 @@ async def _prepare_file_context(file_ids: list, full_file_ids, images: list):
 
     返回 (text_block, image_urls)：text_block 拼到当前用户输入之后；image_urls 附加到最后一条 user 消息。
     """
-    from tools.file_tools import image_to_base64, _resolve_upload, get_upload_text as get_file_text
+    # ⚠️ READ_FILE_MAX_CHARS 必须一并导入：函数内用它做正文截断上限，
+    #    漏导入时只要附件有可提取文本就抛 NameError → HTTP 500 → 前端"未能生成回答"
+    from tools.file_tools import (image_to_base64, _resolve_upload,
+                                  get_upload_text as get_file_text,
+                                  READ_FILE_MAX_CHARS)
 
     file_ids = [f for f in (file_ids or []) if f]
     full_set = None if full_file_ids is None else set(full_file_ids or [])
@@ -370,13 +374,14 @@ async def run_agent(
     _T = _resolve_timeouts(timeouts)
     clear_delegate_pending()
     _t_start = time.time()
-    # 1. Neo4j 连接
+    # 1. Neo4j 连接（可选增强：连不上只降级摘掉图谱工具，绝不终止 —— 用户 2026-09-22 定）
     if neo4j_config and neo4j_config.get("uri"):
         if {"graph_schema", "execute_cypher"} & set(enabled_tools):
             if not Neo4jClient.is_connected():
                 cr = Neo4jClient.connect(neo4j_config["uri"], neo4j_config["user"], neo4j_config["password"])
                 if not cr.get("success"):
-                    return {"final_answer": f"⚠️ Neo4j 连接失败: {cr.get('error', '')}", "reasoning_steps": []}
+                    enabled_tools = [t for t in enabled_tools
+                                     if t not in ("graph_schema", "execute_cypher")]
 
     # 2. System Prompt
     system_prompt = await _build_system_prompt(enabled_tools, loaded_skills)
@@ -496,14 +501,19 @@ async def stream_agent(
     _T = _resolve_timeouts(timeouts)
     clear_delegate_pending()
 
-    # Neo4j
+    # Neo4j（可选增强：连不上只降级摘掉图谱工具，绝不终止对话 —— 用户 2026-09-22 定）
+    # 理由：用户常只想问普通问题/读附件；图谱没连上不该让整个对话失败。
+    # 降级后 execute_cypher 工具本身也返回 {"error":"Neo4j 未连接"}，LLM 自会判断跳过。
     if neo4j_config and neo4j_config.get("uri"):
         if {"graph_schema", "execute_cypher"} & set(enabled_tools):
             if not Neo4jClient.is_connected():
                 cr = Neo4jClient.connect(neo4j_config["uri"], neo4j_config["user"], neo4j_config["password"])
                 if not cr.get("success"):
-                    yield {"type": "error", "message": f"Neo4j连接失败: {cr.get('error','')}"}
-                    return
+                    _n4_err = cr.get("error", "")
+                    enabled_tools = [t for t in enabled_tools
+                                     if t not in ("graph_schema", "execute_cypher")]
+                    yield {"type": "reasoning",
+                           "text": f"（图谱未连接，已跳过图谱工具继续回答：{_n4_err}）\n"}
 
     # System prompt
     system_prompt = await _build_system_prompt(enabled_tools, loaded_skills)
@@ -865,14 +875,19 @@ async def stream_agent_lc(
     clear_delegate_pending()
     _t_start = time.time()
 
-    # Neo4j
+    # Neo4j（可选增强：连不上只降级摘掉图谱工具，绝不终止对话 —— 用户 2026-09-22 定）
+    # 理由：用户常只想问普通问题/读附件；图谱没连上不该让整个对话失败。
+    # 降级后 execute_cypher 工具本身也返回 {"error":"Neo4j 未连接"}，LLM 自会判断跳过。
     if neo4j_config and neo4j_config.get("uri"):
         if {"graph_schema", "execute_cypher"} & set(enabled_tools):
             if not Neo4jClient.is_connected():
                 cr = Neo4jClient.connect(neo4j_config["uri"], neo4j_config["user"], neo4j_config["password"])
                 if not cr.get("success"):
-                    yield {"type": "error", "message": f"Neo4j连接失败: {cr.get('error','')}"}
-                    return
+                    _n4_err = cr.get("error", "")
+                    enabled_tools = [t for t in enabled_tools
+                                     if t not in ("graph_schema", "execute_cypher")]
+                    yield {"type": "reasoning",
+                           "text": f"（图谱未连接，已跳过图谱工具继续回答：{_n4_err}）\n"}
 
     system_prompt = await _build_system_prompt(enabled_tools, loaded_skills)
 
