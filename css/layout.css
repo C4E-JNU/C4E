@@ -1184,6 +1184,7 @@
             flex-shrink: 0;
         }
         /* 四角缩放热区 + 细 L 形边角线（仿浮动编辑器） */
+        /* 四角缩放把手：热区保留（功能可用），但不画角标（用户 2026-09-22 要求删除所有四角 UI） */
         .notes-resize {
             position: absolute;
             z-index: 6;
@@ -1194,17 +1195,7 @@
         .notes-resize.nw { left: 0; top: 0; width: 18px; height: 18px; cursor: nwse-resize; }
         .notes-resize.ne { right: 0; top: 0; width: 18px; height: 18px; cursor: nesw-resize; }
         .notes-resize.sw { left: 0; bottom: 0; width: 18px; height: 18px; cursor: nesw-resize; }
-        .notes-resize::before {
-            content: '';
-            position: absolute;
-            width: 9px;
-            height: 9px;
-            box-sizing: border-box;
-        }
-        .notes-resize.se::before { right: 3px; bottom: 3px; border-right: 2px solid var(--primary); border-bottom: 2px solid var(--primary); }
-        .notes-resize.nw::before { left: 3px; top: 3px; border-left: 2px solid var(--primary); border-top: 2px solid var(--primary); }
-        .notes-resize.ne::before { right: 3px; top: 3px; border-right: 2px solid var(--primary); border-top: 2px solid var(--primary); }
-        .notes-resize.sw::before { left: 3px; bottom: 3px; border-left: 2px solid var(--primary); border-bottom: 2px solid var(--primary); }
-        .notes-resize:hover::before { border-color: var(--error); }
+        /* 角标视觉已删除；恢复方法：去掉下面的 content:none / display:none 并还原上方 ::before 边框 */
+        .notes-resize::before { content: none; display: none; }
 
         /* 侧边栏头部新设计样式 */

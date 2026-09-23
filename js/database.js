@@ -168,7 +168,12 @@ function initDatabase() {
 function openDatabaseModal() {
     var p = document.getElementById('database-panel');
     if (!p) return;
-    p.classList.add('active');
+    // 用浮窗控制器打开（应用记忆的尺寸/位置）；控制器未就绪时退化为基础显示
+    if (window.__dbPanelFloat && window.__dbPanelFloat.open) {
+        window.__dbPanelFloat.open();
+    } else {
+        p.classList.add('active');
+    }
     refreshDocumentList();
 }
 
@@ -177,31 +182,140 @@ function closeDatabaseModal() {
     if (p) p.classList.remove('active');
 }
 
-// 数据库浮动面板拖动（头部按下拖动，与笔记面板一致）
-(function _initDbPanelDrag() {
-    function bind() {
-        var panel = document.getElementById('database-panel');
-        var hd = document.getElementById('db-panel-header');
-        if (!panel || !hd || hd.dataset.dragBound) return;
-        hd.dataset.dragBound = '1';
-        hd.addEventListener('mousedown', function (e) {
-            if (e.target.closest('button')) return;
-            var rect = panel.getBoundingClientRect();
-            var offX = e.clientX - rect.left, offY = e.clientY - rect.top;
-            function mv(ev) {
-                panel.style.left = Math.max(0, Math.min(window.innerWidth - 80, ev.clientX - offX)) + 'px';
-                panel.style.top = Math.max(0, Math.min(window.innerHeight - 60, ev.clientY - offY)) + 'px';
-                panel.style.right = 'auto';
-            }
-            function up() {
-                document.removeEventListener('mousemove', mv);
-                document.removeEventListener('mouseup', up);
-            }
-            document.addEventListener('mousemove', mv);
-            document.addEventListener('mouseup', up);
-            e.preventDefault();
-        });
+// 数据库浮动面板：拖动 + 四角缩放 + 尺寸记忆（与笔记面板/笔记编辑浮窗同款）
+(function _initDbPanelFloat() {
+    var MIN_W = 320, MIN_H = 280;              // 与 .notes-panel 的 CSS min-width/min-height 配套
+    var KEY = 'c4eai-db-panel-rect';           // localStorage: {x,y,w,h}
+    var VER = 1;                               // 几何版本，样式变更时 +1 使旧记忆失效
+
+    function el() { return document.getElementById('database-panel'); }
+
+    function saveRect() {
+        var p = el(); if (!p) return;
+        try {
+            localStorage.setItem(KEY, JSON.stringify({
+                v: VER,
+                x: parseInt(p.style.left, 10) || 0,
+                y: parseInt(p.style.top, 10) || 0,
+                w: p.offsetWidth,
+                h: p.offsetHeight
+            }));
+        } catch (e) {}
     }
+
+    function applyRect(r) {
+        var p = el(); if (!p || !r) return;
+        var vw = window.innerWidth, vh = window.innerHeight, pad = 8;
+        var w = Math.min(Math.max(r.w, MIN_W), vw - 2 * pad);
+        var h = Math.min(Math.max(r.h, MIN_H), vh - 2 * pad);
+        var x = Math.min(Math.max(r.x, pad), Math.max(pad, vw - w - pad));
+        var y = Math.min(Math.max(r.y, pad), Math.max(pad, vh - h - pad));
+        p.style.left = x + 'px'; p.style.top = y + 'px';
+        p.style.width = w + 'px'; p.style.height = h + 'px';
+        p.style.right = 'auto';
+    }
+
+    function resolveRect() {
+        var vw = window.innerWidth, vh = window.innerHeight;
+        var saved = null;
+        try { saved = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
+        if (saved && saved.w && saved.h && saved.v === VER) return saved;
+        // 首次：沿用 index.html 里的初始位置（右上），尺寸取 CSS 默认
+        var p = el();
+        var w = (p && p.offsetWidth) ? p.offsetWidth : Math.min(520, vw - 24);
+        var h = (p && p.offsetHeight) ? p.offsetHeight : Math.min(600, vh - 24);
+        var r = p ? p.getBoundingClientRect() : null;
+        return { x: r ? r.left : Math.max(8, vw - w - 40), y: r ? r.top : 140, w: w, h: h };
+    }
+
+    function bind() {
+        var panel = el();
+        var hd = document.getElementById('db-panel-header');
+        if (!panel) return;
+
+        // ① 拖动（头部按下；点按钮不触发）
+        if (hd && !hd.dataset.dragBound) {
+            hd.dataset.dragBound = '1';
+            hd.addEventListener('mousedown', function (e) {
+                if (e.button !== 0) return;
+                if (e.target.closest('button')) return;
+                var rect = panel.getBoundingClientRect();
+                var offX = e.clientX - rect.left, offY = e.clientY - rect.top;
+                function mv(ev) {
+                    panel.style.left = Math.max(0, Math.min(window.innerWidth - 80, ev.clientX - offX)) + 'px';
+                    panel.style.top = Math.max(0, Math.min(window.innerHeight - 60, ev.clientY - offY)) + 'px';
+                    panel.style.right = 'auto';
+                }
+                function up() {
+                    document.removeEventListener('mousemove', mv);
+                    document.removeEventListener('mouseup', up);
+                    saveRect();
+                }
+                document.addEventListener('mousemove', mv);
+                document.addEventListener('mouseup', up);
+                e.preventDefault();
+            });
+        }
+
+        // ② 四角缩放（热区透明，无角标 UI）
+        if (!panel.querySelector('.notes-resize')) {
+            ['se', 'nw', 'ne', 'sw'].forEach(function (c) {
+                var d = document.createElement('div');
+                d.className = 'notes-resize ' + c;
+                d.dataset.corner = c;
+                panel.appendChild(d);
+                d.addEventListener('mousedown', function (e) {
+                    if (e.button !== 0) return;
+                    e.preventDefault(); e.stopPropagation();
+                    var sx = e.clientX, sy = e.clientY;
+                    var r0 = panel.getBoundingClientRect();
+                    var sW = r0.width, sH = r0.height, sL = r0.left, sT = r0.top;
+                    function mv(ev) {
+                        var dx = ev.clientX - sx, dy = ev.clientY - sy;
+                        var nW = sW, nH = sH, nL = sL, nT = sT;
+                        if (c.indexOf('e') >= 0) nW = sW + dx;
+                        if (c.indexOf('s') >= 0) nH = sH + dy;
+                        if (c.indexOf('w') >= 0) { nW = sW - dx; nL = sL + dx; }
+                        if (c.indexOf('n') >= 0) { nH = sH - dy; nT = sT + dy; }
+                        if (nW < MIN_W) { if (c.indexOf('w') >= 0) nL = sL + (sW - MIN_W); nW = MIN_W; }
+                        if (nH < MIN_H) { if (c.indexOf('n') >= 0) nT = sT + (sH - MIN_H); nH = MIN_H; }
+                        if (c.indexOf('w') >= 0 && nL < 0) { nW += nL; nL = 0; }
+                        if (c.indexOf('n') >= 0 && nT < 0) { nH += nT; nT = 0; }
+                        panel.style.width = nW + 'px'; panel.style.height = nH + 'px';
+                        panel.style.left = nL + 'px'; panel.style.top = nT + 'px';
+                        panel.style.right = 'auto';
+                    }
+                    function up() {
+                        document.removeEventListener('mousemove', mv);
+                        document.removeEventListener('mouseup', up);
+                        document.body.style.userSelect = '';
+                        saveRect();
+                    }
+                    document.body.style.userSelect = 'none';
+                    document.addEventListener('mousemove', mv);
+                    document.addEventListener('mouseup', up);
+                });
+            });
+        }
+
+        // ③ 窗口尺寸变化时重新夹紧
+        if (!window.__dbPanelResizeBound) {
+            window.__dbPanelResizeBound = true;
+            window.addEventListener('resize', function () {
+                var p = el(); if (!p || !p.classList.contains('active')) return;
+                applyRect(resolveRect());
+            });
+        }
+    }
+
+    function open() {
+        var p = el(); if (!p) return;
+        p.classList.add('active');
+        applyRect(resolveRect());
+    }
+
+    window.__dbPanelFloat = { open: open, applyRect: applyRect, saveRect: saveRect };
+
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', bind);
     } else { bind(); }
