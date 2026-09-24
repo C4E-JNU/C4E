@@ -48,8 +48,8 @@ _hn="${_hn:-0}"
 if [ "$_hn" -eq 0 ]; then ok '无 Neo4j 硬失败 return'; else bad "仍有 $_hn 处 Neo4j 硬失败"; fi
 # 对话区必须把附件 file_id 传给 agent
 chk js/messages.js 'fileIds: attachmentsMetadata.map' 'messages.js 传附件 fileId 给 agent'
-# 共享库分流：云端直读本地索引、本地走 HTTP 转发
-chk backend/tools/shared_hub.py 'def _is_hub_instance()' 'shared_hub 云端/本地分流判据'
+# 共享库分流：判据 = 「库在哪」（C4EAI_HUB 有无地址），不是「我是谁」
+chk backend/tools/shared_hub.py 'def _hub_base()' 'shared_hub 库地址判据'
 chk backend/tools/shared_hub.py 'from tools.vector_search import search_knowledge' 'shared_search 云端直读本地索引'
 # 后端不得存在未定义的全局名（pyflakes）
 _pf="$(env -u PYTHONPATH python -m pyflakes backend/ 2>/dev/null | grep -i 'undefined' || true)"
