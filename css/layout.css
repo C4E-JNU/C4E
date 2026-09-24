@@ -1161,29 +1161,43 @@
         .notes-panel .notes-panel-actions button {
             margin: 0;
         }
-        /* 条目分类切换（笔记/文档）—— 用户 2026-09-22 定 */
-        .db-tabs {
-            display: flex;
-            gap: 4px;
-            padding: 6px 10px 0;
-            border-bottom: 1px solid var(--border, #e5e7eb);
-            flex: 0 0 auto;
+        /* 筛选按钮 + 下拉菜单（笔记/文档）—— 用户 2026-09-22 定 */
+        .db-filter-wrap {
+            position: relative;
+            display: inline-block;
         }
-        .db-tabs .db-tab {
+        .db-filter-menu {
+            position: absolute;
+            top: calc(100% + 6px);
+            /* 左对齐到筛选按钮（原 right:0 会顶到面板右边缘、压住关闭按钮，看着飘） */
+            left: 0;
+            min-width: 108px;
+            background: var(--panel-bg, #fff);
+            border: 1px solid var(--border, #e5e7eb);
+            border-radius: 8px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.13);
+            padding: 4px;
+            z-index: 20;
+        }
+        .db-filter-menu[hidden] { display: none; }
+        .db-filter-menu .db-filter-item {
+            display: block;
+            width: 100%;
+            text-align: left;
             background: none;
             border: none;
-            border-bottom: 2px solid transparent;
-            padding: 5px 12px;
+            padding: 6px 10px;
             font-size: 0.84rem;
-            color: var(--gray);
+            color: var(--text, #333);
             cursor: pointer;
-            border-radius: 6px 6px 0 0;
+            border-radius: 5px;
+            white-space: nowrap;
         }
-        .db-tabs .db-tab:hover { background: rgba(0, 0, 0, 0.04); }
-        .db-tabs .db-tab.active {
+        .db-filter-menu .db-filter-item:hover { background: rgba(0, 0, 0, 0.05); }
+        .db-filter-menu .db-filter-item.active {
             color: var(--primary);
-            border-bottom-color: var(--primary);
             font-weight: 600;
+            background: rgba(59, 130, 246, 0.08);
         }
         /* 关闭按钮（压在 .notes-panel-actions button 之上，更高优先级） */
         .notes-panel .notes-close-btn {

@@ -147,11 +147,31 @@ function initDatabase() {
     var addEntryBtn = document.getElementById('db-add-entry-btn');
     if (addEntryBtn) addEntryBtn.addEventListener('click', dbAddEntry);
 
-    // 分类切换：笔记（默认）/ 文档 —— 用户 2026-09-22 定
-    var _tabs = document.getElementById('db-tabs');
-    if (_tabs) {
-        _tabs.querySelectorAll('.db-tab').forEach(function (btn) {
-            btn.addEventListener('click', function () { _switchDbKind(btn.dataset.kind || 'note'); });
+    // 筛选按钮：下拉切换「笔记 / 文档」——用户 2026-09-22 定
+    // （原 Tab 条占一整行、且未登录时两栏内容相同，看着像"点了没反应"，故改为单按钮）
+    var _fbtn = document.getElementById('db-filter-btn');
+    var _fmenu = document.getElementById('db-filter-menu');
+    if (_fbtn && _fmenu) {
+        _fbtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var open = !_fmenu.hidden;
+            _fmenu.hidden = open;
+            _fbtn.setAttribute('aria-expanded', open ? 'false' : 'true');
+        });
+        _fmenu.querySelectorAll('.db-filter-item').forEach(function (b) {
+            b.addEventListener('click', function (e) {
+                e.stopPropagation();
+                _fmenu.hidden = true;
+                _fbtn.setAttribute('aria-expanded', 'false');
+                _switchDbKind(b.dataset.kind || 'note');
+            });
+        });
+        // 点别处收起
+        document.addEventListener('click', function () {
+            if (!_fmenu.hidden) {
+                _fmenu.hidden = true;
+                _fbtn.setAttribute('aria-expanded', 'false');
+            }
         });
     }
     document.getElementById('db-file-input').addEventListener('change', async (e) => {
@@ -471,17 +491,17 @@ function _enhanceFileCardDelete(container, getNote, onChanged) {
 }
 window._enhanceFileCardDelete = _enhanceFileCardDelete;
 
-// 切换条目分类（笔记/文档）：更新按钮态 + 重新拉取
+// 切换条目分类（笔记/文档）：更新按钮文案 + 菜单态 + 重新拉取
 function _switchDbKind(kind) {
     kind = kind || 'note';
     if (kind === _dbKind) return;
     _dbKind = kind;
-    var tabs = document.getElementById('db-tabs');
-    if (tabs) {
-        tabs.querySelectorAll('.db-tab').forEach(function (b) {
-            var on = (b.dataset.kind || 'note') === kind;
-            b.classList.toggle('active', on);
-            b.setAttribute('aria-selected', on ? 'true' : 'false');
+    var label = document.getElementById('db-filter-label');
+    if (label) label.textContent = (kind === 'document') ? '📄 文档' : '📝 笔记';
+    var menu = document.getElementById('db-filter-menu');
+    if (menu) {
+        menu.querySelectorAll('.db-filter-item').forEach(function (b) {
+            b.classList.toggle('active', (b.dataset.kind || 'note') === kind);
         });
     }
     refreshDocumentList();
