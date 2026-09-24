@@ -6,6 +6,44 @@
 
 ---
 
+## [2026-09-24] feat(tools): 共享库体检 lint —— 借鉴 WeKnora 的 stale_ref 机制
+
+**Why**：共享库 66 个条目引用的附件，此前**没有任何机制验证它们还在**。
+之前云端 pptx 404 就是这么来的（条目引用本机 file_id，云端 pool 没文件），
+修了一整轮 + 回填 14 个文件。有 lint 就能**提前发现**而不是等用户点开才 404。
+
+**设计**（对齐用户偏好）
+- **独立只读脚本**，不碰后端主流程（宁可写独立脚本也不碰复杂流程）
+- **0 次 LLM 调用**，纯本地判定
+- **判据全部是客观事实**（文件在不在），无兜底默认值、无防呆断言
+
+**检查项**
+| 类型 | 级别 | 含义 |
+|---|---|---|
+| `cloud_missing` | error | 引用附件在云端找不到 → 会 404 |
+| `local_only` | warning | 本机有、云端无 → 同步缺口 |
+| `empty_entry` | info | 空条目 |
+| `dup_file` | info | 同一附件被多条引用 |
+| `orphan` | info | 磁盘有附件但无人引用 |
+| `note_with_file` | info | note 里含附件（按新设计应在 document）|
+
+**健康分**：0-100（借鉴 WeKnora HealthScore；error −10 / warning −3 / info −0.5）
+**退出码**：0 无问题 / 1 有 warning / 2 有 error（可接 CI/cron）
+
+**文件**：`tools/lint_shared_hub.py`（约 230 行，只读）
+**用法**
+```bash
+python tools/lint_shared_hub.py --token <token>              # 云端体检
+python tools/lint_shared_hub.py --token <token> --local-root <workspace>  # 对比同步
+python tools/lint_shared_hub.py --token <token> --json       # 机器可读
+```
+
+**验证**：9/9 ad-hoc —— **注入 5 条假数据确认真能检出**（cloud_missing / empty_entry /
+dup_file / note_with_file 全部命中，且正常引用不误报）；真实云端 **健康分 100/100**，
+77 个引用全部有效。
+
+---
+
 ## [2026-09-24] feat(hub): 共享库条目分类 kind（笔记/文档）+ 存量迁移
 
 **用户设计**：共享库条目分两类，**数据结构完全一致**（都是 文本+附件），
