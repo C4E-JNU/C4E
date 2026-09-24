@@ -168,23 +168,12 @@
             } catch (err) {
                 console.warn('Auto upload failed:', err);
             }
-            // 解析文本（供 LLM 上下文使用）
-            // PDF/Word 等大文档：不在前端解析，正文由后端按 file_id 注入（当轮全文 / 后续轮次引用）。
-            // 其余小文件本地提取文本，仅用于图片 OCR 文字随消息发送。
-            const ext = (att.name || att.file.name || '').split('.').pop().toLowerCase();
-            const isBackendParse = ['pdf', 'doc', 'docx'].includes(ext);
-            if (isBackendParse) {
-                att._backendInjected = true;  // 正文交给后端 file_ids 通道
-                att._parsedText = '';
-            } else {
-                try {
-                    var localText = data && data.text ? data.text : await extractTextFromFile(att.file);
-                    att._parsedText = localText;
-                } catch (err) {
-                    console.warn('Auto parse failed:', err);
-                    att._parsedText = '';
-                }
-            }
+            // 正文一律由后端按 file_id 注入（智能体侧 read_file 读取）。
+            // 前端不再做任何本地解析 —— 此前这里对非 pdf/doc/docx 走
+            // extractTextFromFile()（mammoth/JSZip/Tesseract OCR 全套前端解析），
+            // 与"上传统一走 read_file"的设计冲突，且凭空多一遍无用解析。
+            att._backendInjected = true;
+            att._parsedText = '';
             updateSelectedFilesList(); // 刷新 UI 显示 file_id
         }
 

@@ -155,25 +155,7 @@
                 updateTokenDisplay();  // 阈值变化 → 立即刷新警告状态
             });
 
-                      // 图片上传方式开关（单开关：关=OCR, 开=Base64）— 仅 UI，保存时才提交
-                            const imageUploadModeToggle = document.getElementById('image-upload-mode-toggle');
-                            if (imageUploadModeToggle) {
-                                imageUploadModeToggle.addEventListener('change', () => {
-                                    updateImageUploadModeUI();
-                                });
-                            }
-            
-                            function updateImageUploadModeUI() {
-                                const modeValue = document.getElementById('image-upload-mode-value');
-                                const toggle = document.getElementById('image-upload-mode-toggle');
-                                if (modeValue) {
-                                    modeValue.textContent = toggle && toggle.checked ? 'Base64 多模态' : 'OCR 文字识别';
-                                }
-                            }
-                            window.updateImageUploadModeUI = updateImageUploadModeUI;
-                            updateImageUploadModeUI();
-
-                            // 文件打开方式（三选一：后端打开 / 浏览器新标签 / 应用内浮窗）— 仅 UI，保存时才提交
+                      // 文件打开方式（三选一：后端打开 / 浏览器新标签 / 应用内浮窗）— 仅 UI，保存时才提交
                             const fileOpenModeGroup = document.getElementById('file-open-mode-group');
                             if (fileOpenModeGroup) {
                                 fileOpenModeGroup.addEventListener('click', (e) => {

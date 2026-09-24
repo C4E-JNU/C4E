@@ -14,12 +14,6 @@
                         if (expTokensVal) expTokensVal.textContent = expectedContextTokensInput.value;
                   
                   
-                        // 加载图片上传模式设置
-                        const uploadToggle = document.getElementById('image-upload-mode-toggle');
-                        if (uploadToggle) {
-                            uploadToggle.checked = state.settings.imageUploadMode === 'base64';
-                            updateImageUploadModeUI();
-                        }
                         // 加载文件打开方式设置（三选一，读 state 渲染）
                         updateFileOpenModeUI();
 
@@ -125,12 +119,6 @@
               if (_tw) state.settings.timeoutWarn = Math.max(0, parseInt(_tw.value) || 0);
               if (_ta) state.settings.timeoutAbort = Math.max(0, parseInt(_ta.value) || 0);
             
-              // 保存图片上传模式设置
-              const uploadToggle = document.getElementById('image-upload-mode-toggle');
-              if (uploadToggle) {
-                  state.settings.imageUploadMode = uploadToggle.checked ? 'base64' : 'ocr';
-              }
-
               // 保存文件打开方式设置（三选一：以分段控件当前选中项为准）
               const fileModeGroup = document.getElementById('file-open-mode-group');
               if (fileModeGroup) {

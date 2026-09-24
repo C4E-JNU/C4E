@@ -59,7 +59,6 @@
                      streaming: true,
                      showRawData: false,
                      fileOpenMode: 'backend', // 'backend' = 服务器os.startfile, 'browser' = 浏览器预览
-                     imageUploadMode: 'ocr', // 'ocr' = OCR 文字识别, 'base64' = Base64 多模态
                      databaseSearchMode: 'vector', // 纯向量搜索（正则已移除）
                      fontSizeConv: 0.85,       // 对话管理字号 (rem)
                      fontSizeHistory: 0.65,    // 历史记录字号 (rem)
@@ -129,13 +128,6 @@
         function splitIntoSentences(text) {
             const delimiters = /[。！？!?；;\n]+/;
             return text.split(delimiters).map(s => s.trim()).filter(s => s.length > 0);
-        }
-
-        function updateImageUploadModeUI() {
-            const modeValue = document.getElementById('image-upload-mode-value');
-            if (modeValue) {
-                modeValue.textContent = state.settings.imageUploadMode === 'base64' ? 'Base64 多模态' : 'OCR 文字识别';
-            }
         }
 
         var FILE_OPEN_MODE_LABEL = {

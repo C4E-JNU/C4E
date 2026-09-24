@@ -6,6 +6,43 @@
 
 ---
 
+## [2026-09-24] fix(ui): 删除 OCR/Base64 设置 + 补齐漏部署文件 + 新增部署校验
+
+**用户反馈**（三个问题）
+1. 设置里还能看到 OCR 和 base64 选项
+2. 数据库按钮打开后没有筛选「笔记/文档」的按钮
+3. 我以为"上传统一走 read_file"已完成，但前端还在自动解析
+
+**① 删除 OCR/Base64 设置（自动解析已废弃）**
+用户定：上传一律走 read_file 系列工具，前端不该解析。
+- `index.html`：删整个「图片上传方式」设置项 + **删 Tesseract.js CDN script**
+- `js/api.js`：删开关监听 + `updateImageUploadModeUI()`
+- `js/branching.js`：删加载处 + 保存处
+- `js/state.js`：删 `imageUploadMode` 默认值 + UI 同步函数
+- `js/bubble_actions.js`：删 OCR/Base64 分支 + **死代码 `fileToBase64()` / `imageToTextOCR()` 共 44 行**
+- `js/bubbles.js`：删 `extractTextFromFile()` 调用（mammoth/JSZip/Tesseract 全套前端解析）
+  → 正文一律由后端按 file_id 注入
+
+**② 数据库「笔记/文档」Tab 看不到 —— 真因是漏部署**
+上次 kind 改造只部署了后端 + `js/database.js`，**漏传了 `index.html`
+和 `js/database.js`**（前后两次都漏），导致：
+- `index.html` 缺 → `#db-tabs` 元素不存在 → 看不到按钮
+- `database.js` 缺 → `_switchDbKind` 未定义 → 按钮点了没反应
+- `css/layout.css` 缺 → `.db-tabs` 样式没有 → Tab 无样式
+- `js/main.js` 也有改动未传
+
+**③ 新增 `tools/check_deploy.py`（防止再漏传）**
+逐个前端文件比 md5（本地 vs 线上）。**这次启用后立刻抓出 2 个漏传文件**
+（`css/layout.css` 少 `.db-tabs` 样式、`js/main.js` 有改动）。
+退出码 0=全一致 / 1=有遗漏。**部署后必跑**。
+
+**验证**：11/11 org 浏览器实测（Edge CDP）——
+设置面板无 OCR/Base64/toggle/Tesseract；Tab 可见、文案正确、
+**active 样式生效（font-weight 600）**、**点击可切换 note↔document**、无未捕获错误；
+`tools/check_deploy.py` **22/22 全部一致**；`bash scripts/check.sh` ALL_PASS
+
+---
+
 ## [2026-09-24] fix(search): 知识库检索 —— 性能 1359x + 补齐 12 个文档索引缺口
 
 **用户最在乎**：知识库检索。实测（读源码 + 云端真实索引）发现 5 个问题，本轮修 4 个。

@@ -128,18 +128,11 @@
                   return text;
               }
 
-              // 6. 图片文件 - 支持 OCR 和 Base64 两种方式
+              // 6. 图片文件 —— 前端不解析、不 OCR、不转 base64。
+              //    图片随消息只带 file_id，智能体按需调 read_image(file_id, mode) 自行决定
+              //    base64 还是 OCR（用户 2026-09-22 定：上传一律走 read_file 系列工具）。
               if (imageExtensions.includes('.' + extension)) {
-                           // 单开关判断：imageUploadMode === 'base64' 就用 Base64 多模态，否则用 OCR
-                           const useBase64 = state.settings.imageUploadMode === 'base64';
-                
-                  if (useBase64) {
-                      // Base64 模式：返回 base64 字符串供多模态使用
-                      return await fileToBase64(file);
-                  } else {
-                      // OCR 模式（默认）：使用 Tesseract.js 提取文字
-                      return await imageToTextOCR(file);
-                  }
+                  return '[图片文件：正文由智能体按 file_id 调用 read_image 获取]';
               }
 
               // 7. Excel 文件 - 尝试读取为文本
@@ -158,49 +151,5 @@
               });
           }
 
-          // 将图片转换为 base64
-          function fileToBase64(file) {
-              return new Promise((resolve, reject) => {
-                  const reader = new FileReader();
-                  reader.onload = (e) => resolve(e.target.result);
-                  reader.onerror = (e) => reject(new Error('图片转换失败'));
-                  reader.readAsDataURL(file);
-              });
-          }
-
-          // 使用 Tesseract.js 进行 OCR
-          async function imageToTextOCR(file) {
-              try {
-                  showToast('正在进行 OCR 文字识别...', 'info');
-                
-                  // 使用 Tesseract.js 进行 OCR
-                  // 支持中文和英文混合识别
-                  const worker = await Tesseract.createWorker('chi_sim+eng');
-                
-                  // 设置 OCR 参数
-                  await worker.setParameters({
-                      tessedit_pageseg_mode: Tesseract.PSM.AUTO,
-                      oem: Tesseract.OEM.LSTM_ONLY
-                  });
-                
-                  // 识别图片中的文字
-                  const result = await worker.recognize(file);
-                
-                  // 销毁 worker 释放资源
-                  await worker.terminate();
-                
-                  if (result.data && result.data.text) {
-                      const extractedText = result.data.text.trim();
-                      showToast(`OCR 识别完成，提取 ${result.data.text.length} 个字符`, 'success');
-                      return extractedText;
-                  } else {
-                      throw new Error('OCR 未识别到任何文字');
-                  }
-              } catch (error) {
-                  console.error('OCR 识别失败：', error);
-                  showToast('OCR 识别失败：' + error.message, 'error');
-                  throw error;
-              }
-          }
 
         // ==================== 初始化应用 ====================

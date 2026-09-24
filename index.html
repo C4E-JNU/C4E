@@ -23,8 +23,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/copy-tex.min.js"></script>
     <!-- 文档解析库 -->
      <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
-     <!-- OCR 引擎 Tesseract.js -->
-     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <!-- Neo4j 驱动（浏览器直连图谱） -->
     <script src="https://unpkg.com/neo4j-driver@5"></script>
@@ -162,23 +160,6 @@
                                 </div>
                                 <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
                                     页面上那只云朵团。点它聊天（问功能/用法），双击敲打、连点发飙、拖着玩、右键换天气；60 秒不理它会睡着。小e 不保存任何记录，关掉即忘
-                                </div>
-                            </div>
-
-                           <!-- 图片上传模式设置 -->
-                            <div class="setting-item">
-                                <label class="setting-label">
-                                    图片上传方式
-                                    <span class="setting-value" id="image-upload-mode-value">OCR 文字识别</span>
-                                </label>
-                                <div style="margin-top: 0.5rem;">
-                                    <label class="switch">
-                                        <input type="checkbox" id="image-upload-mode-toggle">
-                                        <span class="slider-round"></span>
-                                    </label>
-                                </div>
-                                <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
-                                    关闭：OCR 文字识别（默认，所有模型可用）；开启：Base64 多模态（需模型支持视觉）
                                 </div>
                             </div>
 
@@ -881,16 +862,16 @@
 
 
     <!-- 脚本文件 (按依赖顺序) -->
-    <script src="js/state.js?v=6"></script>
+    <script src="js/state.js?v=7"></script>
     <script src="js/dom.js?v=3"></script>
     <script src="js/settings.js?v=7"></script>
     <script src="js/image_tools.js?v=3"></script>
     <script src="js/file_preview.js?v=11"></script>
     <script src="js/auth.js?v=19"></script>
-    <script src="js/api.js?v=4"></script>
+    <script src="js/api.js?v=5"></script>
     <script src="js/database.js?v=13"></script>
     <script src="js/sidebar.js?v=9"></script>
-    <script src="js/branching.js?v=8"></script>
+    <script src="js/branching.js?v=9"></script>
     <script src="js/provider.js?v=4"></script>
     <script src="js/messages.js?v=7"></script>
     <script src="js/editing.js?v=2"></script>
@@ -903,10 +884,10 @@
     <script src="js/skill_system.js?v=3"></script>
     <script src="js/agent_config.js?v=7"></script>
     <script src="js/ui.js?v=2"></script>
-    <script src="js/bubbles.js?v=4"></script>
-    <script src="js/bubble_actions.js?v=2"></script>
+    <script src="js/bubbles.js?v=5"></script>
+    <script src="js/bubble_actions.js?v=3"></script>
     <script src="js/utils.js?v=2"></script>
-    <script src="js/main.js?v=4"></script>
+    <script src="js/main.js?v=5"></script>
     <script src="js/xiaoe.js?v=8"></script>
     <script src="js/mobile.js?v=1"></script>
 
