@@ -119,8 +119,10 @@ class FileIdRequest(BaseModel):
     file_id: str
 class NoteAddReq(BaseModel):
     title: str; content: str = ""; branch_id: Optional[str] = ""
+    kind: Optional[str] = "note"     # note=笔记（默认）/ document=文档条目
 class NoteUpdateReq(BaseModel):
     note_id: str; title: Optional[str] = None; content: Optional[str] = None
+    kind: Optional[str] = None        # 迁移/改分类时用（note/document）
     branch_id: Optional[str] = None   # "__db__" = 数据库条目（唯一存云端，本地实例须转发）
 class NoteMoveReq(BaseModel):
     note_id: str; direction: int
@@ -662,17 +664,17 @@ async def api_file_upload(file: UploadFile = File(...), request: Request = None,
     import asyncio
     _res = json.loads(await asyncio.to_thread(
         _upload_sync, file.filename or "unknown", content, owner, source))
-    # 数据库上传：自动笔记化（标准条目：标题=文件名，正文=附件占位符 + 抽取正文）
-    # no_entry=1 例外：笔记发布时复制附件，附件只是笔记内容的一部分，不再另立条目
+    # 数据库上传：自动建「文档条目」（用户 2026-09-22 定）
+    #   · kind=document —— 解析正文放这里，不污染人写的笔记条目
+    #   · 正文 = {{file:...}} 占位 + 解析文本（供检索；原件完整保留可下载/预览）
+    #   · no_entry=1 例外：笔记发布时复制附件，附件是笔记内容的一部分，不另立条目
     if source == "database" and not no_entry and isinstance(_res, dict) and _res.get("file_id"):
         try:
             _fn = file.filename or "file"
             _fid = _res["file_id"]
-            # 云端：把抽取出的正文一并写进条目（否则智能体读条目只见占位符、无法召回；
-            # 原件仍完整保留，随时可下载/浮窗预览）
             _text = (_res.get("text") or "").strip()
             if len(_text) < 20:
-                # 短文本/纯图片等：尝试直接读取落盘的 text.txt，保证正文尽量完整
+                # 短文本/纯图片等：读落盘的 text.txt，保证正文尽量完整
                 try:
                     from tools.file_tools import _pool_uploads_dir
                     _tp = os.path.join(_pool_uploads_dir(), _fid, "text.txt")
@@ -682,11 +684,10 @@ async def api_file_upload(file: UploadFile = File(...), request: Request = None,
                 except Exception:
                     pass
             if _text:
-                _body = ("\n{{file:%s:%s}}\n\n---\n\n**📄 附件正文（上传时自动解析）**\n\n%s\n"
-                         % (_fid, _fn, _text))
+                _body = ("\n{{file:%s:%s}}\n\n---\n\n%s\n" % (_fid, _fn, _text))
             else:
                 _body = "\n{{file:%s:%s}}\n" % (_fid, _fn)
-            await add_note(_fn, _body, "__db__", owner)
+            await add_note(_fn, _body, "__db__", owner, kind="document")
         except Exception:
             pass   # 自动建条目不阻断上传主流程
     return _res
@@ -1002,26 +1003,39 @@ async def api_notes_publish(req: NotePublishReq, request: Request):
 
 
 @app.get("/api/notes")
-async def api_notes_list(branch_id: Optional[str] = None, request: Request = None):
+async def api_notes_list(branch_id: Optional[str] = None, kind: Optional[str] = None,
+                         request: Request = None):
+    """列条目。kind=note（默认前端取）/document；不传则全部。
+
+    用户 2026-09-22 定：共享库按钮切换「笔记 / 文档」，两者数据结构一致。
+    """
     if branch_id == DB_BRANCH_ID:
-        p = await _notes_proxy("GET", f"/api/notes?branch_id={DB_BRANCH_ID}")
+        _q = f"/api/notes?branch_id={DB_BRANCH_ID}" + (f"&kind={kind}" if kind else "")
+        p = await _notes_proxy("GET", _q)
         if p is not None:
             return p
     user = _cur_user(request)
+    _kn = kind or ""
     if _AUTH_ENABLED and user.get("role") == "admin":
         from tools.file_tools import list_all_users_notes
         notes = list_all_users_notes()
         if branch_id:
             notes = [n for n in notes if n.get("branch_id", "") == branch_id]
+        if _kn:
+            notes = [n for n in notes if (n.get("kind") or "note") == _kn]
         return {"status": "ok", "total": len(notes), "notes": notes}
-    return json.loads(await list_notes(branch_id or "", user["username"]))
+    return json.loads(await list_notes(branch_id or "", user["username"], _kn))
 @app.post("/api/notes")
 async def api_notes_add(req: NoteAddReq, request: Request):
+    _kd = req.kind or "note"
     if (req.branch_id or "") == DB_BRANCH_ID:
-        p = await _notes_proxy("POST", "/api/notes", {"title": req.title, "content": req.content, "branch_id": DB_BRANCH_ID})
+        p = await _notes_proxy("POST", "/api/notes",
+                               {"title": req.title, "content": req.content,
+                                "branch_id": DB_BRANCH_ID, "kind": _kd})
         if p is not None:
             return p
-    return json.loads(await add_note(req.title, req.content, req.branch_id or "", _cur_user(request)["username"]))
+    return json.loads(await add_note(req.title, req.content, req.branch_id or "",
+                                     _cur_user(request)["username"], kind=_kd))
 @app.post("/api/notes/move")
 async def api_notes_move(req: NoteMoveReq, request: Request):
     user = _cur_user(request)
@@ -1034,13 +1048,17 @@ async def api_notes_move(req: NoteMoveReq, request: Request):
 @app.put("/api/notes")
 async def api_notes_update(req: NoteUpdateReq, request: Request):
     user = _cur_user(request)
+    _kd = req.kind
     # 来源显式分流：数据库条目（branch=__db__）只在云端，本地实例直接转发
     if (req.branch_id or "") == DB_BRANCH_ID and not _AUTH_ENABLED:
-        p = await _notes_proxy("PUT", "/api/notes", {"note_id": req.note_id, "title": req.title, "content": req.content})
+        p = await _notes_proxy("PUT", "/api/notes",
+                               {"note_id": req.note_id, "title": req.title,
+                                "content": req.content, "kind": _kd})
         return p if p is not None else JSONResponse({"error": "共享库不可达"}, status_code=502)
     if not _owns_or_root(user, get_note_owner(req.note_id, user["username"])):
         return JSONResponse({"error": "只能修改自己的笔记"}, status_code=403)
-    return json.loads(await update_note(req.note_id, req.title, req.content, user["username"]))
+    return json.loads(await update_note(req.note_id, req.title, req.content,
+                                        user["username"], kind=_kd))
 @app.delete("/api/notes/{note_id}")
 async def api_notes_delete(note_id: str, request: Request, source: Optional[str] = None):
     user = _cur_user(request)

@@ -103,10 +103,15 @@
             <span class="notes-panel-title">🗄️ 数据库</span>
             <span id="database-status-badge" style="font-size:0.78rem;color:var(--gray);margin-left:.5rem;">0 个条目</span>
             <div class="notes-panel-actions">
-                <button id="db-upload-btn" title="上传文档（自动建条目）">📤 上传</button>
-                <button id="db-add-entry-btn" title="新建空条目">＋ 条目</button>
+                <button id="db-upload-btn" title="上传文档：自动解析并新建「文档条目」">📤 上传</button>
+                <button id="db-add-entry-btn" title="新建笔记条目（手写内容）">＋ 笔记</button>
                 <button id="db-close-btn" class="notes-close-btn" title="关闭">×</button>
             </div>
+        </div>
+        <!-- 条目分类切换：笔记（人写，默认）/ 文档（机器解析，供检索）——用户 2026-09-22 定 -->
+        <div class="db-tabs" id="db-tabs" role="tablist">
+            <button class="db-tab active" data-kind="note" role="tab" aria-selected="true">📝 笔记</button>
+            <button class="db-tab" data-kind="document" role="tab" aria-selected="false">📄 文档</button>
         </div>
         <input type="file" id="db-file-input" style="display:none;" multiple
             accept="image/*,.txt,.md,.js,.py,.c,.cpp,.h,.html,.css,.json,.csv,.log,.yaml,.yml,.sql,.sh,.xml,.ts,.java,.go,.rs,.docx,.pdf,.pptx,.odt,.rtf,.toml,.ini,.tex">

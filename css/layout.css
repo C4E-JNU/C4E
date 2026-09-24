@@ -1161,6 +1161,30 @@
         .notes-panel .notes-panel-actions button {
             margin: 0;
         }
+        /* 条目分类切换（笔记/文档）—— 用户 2026-09-22 定 */
+        .db-tabs {
+            display: flex;
+            gap: 4px;
+            padding: 6px 10px 0;
+            border-bottom: 1px solid var(--border, #e5e7eb);
+            flex: 0 0 auto;
+        }
+        .db-tabs .db-tab {
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            padding: 5px 12px;
+            font-size: 0.84rem;
+            color: var(--gray);
+            cursor: pointer;
+            border-radius: 6px 6px 0 0;
+        }
+        .db-tabs .db-tab:hover { background: rgba(0, 0, 0, 0.04); }
+        .db-tabs .db-tab.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+            font-weight: 600;
+        }
         /* 关闭按钮（压在 .notes-panel-actions button 之上，更高优先级） */
         .notes-panel .notes-close-btn {
             background: none;

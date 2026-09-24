@@ -211,11 +211,12 @@ async def publish_note_to_db(note_id: str, owner: str, base: str = "", token: st
             "content_len": len(new_content)}
 
 async def db_notes(action: str, note_id: str = "", title: str = "", content: str = "",
-                   owner: str = "guest") -> dict:
+                   owner: str = "guest", kind: str = "") -> dict:
     """数据库条目（云端 branch=__db__）统一入口 —— 给智能体工具用。
 
     - 云端实例（C4EAI_AUTH=1）：数据库就在本机 users/*/notes.json 的 __db__ 分支 → 直接读写
     - 本地实例：数据库唯一在云端 → 走 hub HTTP（带本地已存的登录会话）
+    kind: 新建条目时的分类（note=笔记/document=文档条目）；留空则用默认 note。
     返回 {status: 'ok', ...} 或 {error: ...}
     """
     import os as _os
@@ -269,7 +270,8 @@ async def db_notes(action: str, note_id: str = "", title: str = "", content: str
                 new_content = ((n.get("content") or "") + "\n\n" + content) if (n.get("content") or "") else content
                 r = json.loads(await _ft.update_note(note_id, None, new_content, owner))
                 return {"status": "ok", "id": note_id} if "error" not in r else r
-            r = json.loads(await _ft.add_note(title or "新条目", content or "", db_branch, owner))
+            r = json.loads(await _ft.add_note(title or "新条目", content or "", db_branch, owner,
+                                              kind=(kind or "note")))
             return r
         if action == "update":
             r = json.loads(await _ft.update_note(note_id, title or None, content, owner))
@@ -308,13 +310,18 @@ async def db_notes(action: str, note_id: str = "", title: str = "", content: str
             content = ((n.get("content") or "") + "\n\n" + content) if (n.get("content") or "") else content
             action = "update"
         if action == "add":
+            # kind 由调用方指定：个人笔记上传→note；文档解析→document（用户 2026-09-22 定）
             r = await client.post(f"{base}/api/notes",
-                                  json={"title": title or "新条目", "content": content or "", "branch_id": db_branch},
+                                  json={"title": title or "新条目", "content": content or "",
+                                        "branch_id": db_branch, "kind": (kind or "note")},
                                   headers={**headers, "Content-Type": "application/json"})
         elif action == "update":
-            r = await client.put(f"{base}/api/notes",
-                                 json={"note_id": note_id, "title": title or None, "content": content,
-                                       "branch_id": db_branch},
+            # kind 必须一并转发：迁移/改分类靠它（漏传则 kind 永远写不进去）
+            _upd = {"note_id": note_id, "title": title or None, "content": content,
+                    "branch_id": db_branch}
+            if kind:
+                _upd["kind"] = kind
+            r = await client.put(f"{base}/api/notes", json=_upd,
                                  headers={**headers, "Content-Type": "application/json"})
         else:  # delete
             r = await client.delete(f"{base}/api/notes/{note_id}?source=cloud", headers=headers)

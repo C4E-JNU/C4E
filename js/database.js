@@ -143,9 +143,17 @@ function initDatabase() {
         document.getElementById('db-file-input').click();
     });
 
-    // ＋ 新建条目（空笔记，浮动编辑器，可贴图/插附件/表格）
+    // ＋ 新建笔记（空笔记，浮动编辑器，可贴图/插附件/表格）
     var addEntryBtn = document.getElementById('db-add-entry-btn');
     if (addEntryBtn) addEntryBtn.addEventListener('click', dbAddEntry);
+
+    // 分类切换：笔记（默认）/ 文档 —— 用户 2026-09-22 定
+    var _tabs = document.getElementById('db-tabs');
+    if (_tabs) {
+        _tabs.querySelectorAll('.db-tab').forEach(function (btn) {
+            btn.addEventListener('click', function () { _switchDbKind(btn.dataset.kind || 'note'); });
+        });
+    }
     document.getElementById('db-file-input').addEventListener('change', async (e) => {
         // 支持多选：逐个上传（每个文件各自建立一个条目）
         const files = Array.from(e.target.files || []);
@@ -346,6 +354,8 @@ async function uploadDocument(file) {
             return;
         }
         showToast(`✅ 「${file.name}」已入共享数据库，全组可检索`, 'success');
+        // 上传建的是「文档条目」→ 自动切到文档 Tab，否则用户在笔记 Tab 看不到结果
+        if (_dbKind !== 'document' && typeof _switchDbKind === 'function') _switchDbKind('document');
         refreshDocumentList();
     } catch (e) {
         showToast('❌ 上传失败: ' + e.message, 'error');
@@ -399,6 +409,9 @@ async function deleteDocument(docId) {
 var DB_BRANCH = '__db__';
 var _dbEntryCollapsed = {};
 var _dbEntries = [];   // 最近一次条目缓存（供编辑回显）
+// 当前展示的条目类型：note=笔记（默认，人写）/ document=文档（机器解析，供检索）
+// 用户 2026-09-22 定：两者数据结构完全一致，只是分类不同，用于 Tab 切换展示。
+var _dbKind = 'note';
 
 function _dbEntryBodyHtml(n) {
     return n.content
@@ -458,6 +471,22 @@ function _enhanceFileCardDelete(container, getNote, onChanged) {
 }
 window._enhanceFileCardDelete = _enhanceFileCardDelete;
 
+// 切换条目分类（笔记/文档）：更新按钮态 + 重新拉取
+function _switchDbKind(kind) {
+    kind = kind || 'note';
+    if (kind === _dbKind) return;
+    _dbKind = kind;
+    var tabs = document.getElementById('db-tabs');
+    if (tabs) {
+        tabs.querySelectorAll('.db-tab').forEach(function (b) {
+            var on = (b.dataset.kind || 'note') === kind;
+            b.classList.toggle('active', on);
+            b.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+    }
+    refreshDocumentList();
+}
+
 async function refreshDocumentList() {
     const container = document.getElementById('db-doc-list');
     const badge = document.getElementById('database-status-badge');
@@ -468,14 +497,17 @@ async function refreshDocumentList() {
         return;
     }
     container.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--gray);">加载中…</div>';
+    const _kind = _dbKind;
     try {
-        const r = await fetch('/api/notes?branch_id=' + encodeURIComponent(DB_BRANCH));
+        const r = await fetch('/api/notes?branch_id=' + encodeURIComponent(DB_BRANCH) + '&kind=' + _kind);
         const d = await r.json();
         const notes = d.notes || [];
         _dbEntries = notes;
-        badge.textContent = notes.length + ' 个条目';
+        badge.textContent = notes.length + ' 个' + (_kind === 'document' ? '文档' : '笔记');
         if (!notes.length) {
-            container.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--gray);font-size:0.9rem;">暂无条目<br><span style="font-size:.78rem;">点「📤 上传文档」自动建条目，或「＋ 新建条目」手写笔记</span></div>';
+            container.innerHTML = _kind === 'document'
+                ? '<div style="text-align:center;padding:2rem;color:var(--gray);font-size:0.9rem;">暂无文档条目<br><span style="font-size:.78rem;">点「📤 上传」自动解析文件并建条目</span></div>'
+                : '<div style="text-align:center;padding:2rem;color:var(--gray);font-size:0.9rem;">暂无笔记<br><span style="font-size:.78rem;">点「＋ 笔记」手写，或从个人笔记「上传到数据库」</span></div>';
             return;
         }
         var myName = me.username, isAdmin = (me.username === 'admin');
@@ -586,7 +618,7 @@ function dbAddEntry() {
             fetch('/api/notes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: t, content: newContent, branch_id: DB_BRANCH })
+                body: JSON.stringify({ title: t, content: newContent, branch_id: DB_BRANCH, kind: 'note' })
             }).then(function (r) { return r.json(); }).then(function (d) {
                 if (d.status === 'ok') { showToast('条目已创建', 'success'); refreshDocumentList(); }
                 else showToast('创建失败', 'error');

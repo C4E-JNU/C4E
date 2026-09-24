@@ -597,14 +597,24 @@ def get_note_owner(note_id: str, owner: str = "guest") -> str:
     return owner
 
 
-async def list_notes(branch_id: str = "", owner: str = "guest") -> str:
+async def list_notes(branch_id: str = "", owner: str = "guest", kind: str = "") -> str:
+    """列条目。kind="" 全部；"note" 笔记；"document" 文档条目。
+
+    用户 2026-09-22 定：条目分两类，数据结构完全一致（都是 文本+附件）：
+      · kind="note"     人写的笔记，适合直接阅读，共享库默认展示
+      · kind="document" 机器解析的文档正文，文本乱但用于检索/向量索引
+    老数据无 kind 字段 → 一律视为 "note"。
+    """
     notes = _read_notes(owner)
     if branch_id:
         notes = [n for n in notes if n.get("branch_id", "") == branch_id]
+    if kind:
+        notes = [n for n in notes if (n.get("kind") or "note") == kind]
     return json.dumps({"status": "ok", "total": len(notes), "notes": notes}, ensure_ascii=False)
 
 
-async def add_note(title: str, content: str, branch_id: str = "", owner: str = "guest") -> str:
+async def add_note(title: str, content: str, branch_id: str = "", owner: str = "guest",
+                   kind: str = "note") -> str:
     owner = owner or "guest"
     notes = _read_notes(owner)
     note = {
@@ -613,6 +623,7 @@ async def add_note(title: str, content: str, branch_id: str = "", owner: str = "
         "content": content or "",
         "branch_id": branch_id,
         "owner": owner,
+        "kind": kind or "note",     # note=笔记 / document=文档条目（解析结果另立）
         "createdAt": str(datetime.now()),
         "updatedAt": str(datetime.now()),
     }
@@ -633,7 +644,8 @@ def _find_note(owner: str, note_id: str):
 
 
 async def update_note(note_id: str, title: str = None, content: str = None,
-                      owner: str = "guest") -> str:
+                      owner: str = "guest", kind: str = None) -> str:
+    """更新条目。kind 传入时一并更新（迁移/改分类用）。"""
     n, okey = _find_note(owner, note_id)
     if n is None:
         return json.dumps({"error": "笔记不存在"})
@@ -644,6 +656,8 @@ async def update_note(note_id: str, title: str = None, content: str = None,
                 x["title"] = title
             if content is not None:
                 x["content"] = content
+            if kind is not None:
+                x["kind"] = kind or "note"
             x["updatedAt"] = str(datetime.now())
             _write_notes(okey, notes)
             return json.dumps({"status": "ok"}, ensure_ascii=False)

@@ -6,6 +6,46 @@
 
 ---
 
+## [2026-09-24] feat(hub): 共享库条目分类 kind（笔记/文档）+ 存量迁移
+
+**用户设计**：共享库条目分两类，**数据结构完全一致**（都是 文本+附件），
+只是语义标签不同：
+- `kind="note"` —— 人写的笔记，适合直接阅读，**共享库默认展示**
+- `kind="document"` —— 机器解析的文档正文，文本乱但**用于检索/向量索引**
+
+**Why**：「共享库编辑上传」把解析正文塞进笔记条目 → 一个条目既有手写内容又有
+机器解析的几千字 → **笔记混乱**。解决：解析结果**独立成文档条目**。
+
+**改动**
+- `backend/tools/file_tools.py`：`list_notes(kind=)` 过滤 / `add_note(kind=)` /
+  `update_note(kind=)`；老数据无 kind → 视为 `note`（向后兼容）
+- `backend/app.py`：`NoteAddReq.kind` / `NoteUpdateReq.kind` / `GET /api/notes?kind=`
+  查询参数 / 代理转发带 kind；**上传建条目改为 `kind="document"`**，
+  正文去掉「附件正文（上传时自动解析）」标记（不再混入笔记）
+- `backend/tools/shared_hub.py`：`db_notes(kind=)` 参数；云端 add 与本地转发均传 kind；
+  **PUT(update) 分支补转发 kind**（此前漏传 → kind 永远写不进，迁移首次失败的真因）
+- `js/database.js`：`_dbKind` 状态 + `_switchDbKind()` + 按 kind 拉取；
+  新建笔记带 `kind:'note'`；**上传后自动切到文档 Tab**
+- `index.html`：`#db-tabs` 切换按钮（📝 笔记 / 📄 文档），笔记默认 active
+- `css/layout.css`：`.db-tabs` 样式
+- `tools/migrate_note_kind.py`：存量迁移（默认 dry-run）——**判据为客观事实**
+  （正文含 `{{file:...}}` 占位符 ⇒ 上传产物 ⇒ document；纯手写 ⇒ note）；
+  幂等；**写入后重新拉取逐条核对**
+
+**迁移实况**：云端 66 条 → **document 64 / note 2**
+（2 条纯手写：CATDA论文·全文翻译、AgentCAT 论文全文翻译）
+
+**教训**
+- 只信 HTTP 200 会报**假成功**：首次迁移报「成功 66/66」，实测 `{None: 66}`。
+  真因三重：① 云端跑旧代码 ② shared_hub PUT 漏传 kind ③ 脚本没核对落盘
+  → 迁移脚本此后**必须写入后重新 GET 核对**
+- Python 不热加载：改后端后云端须重启
+  （`pkill -f 'backend/app[.]py'` 再 `setsid nohup ~/start_c4eai.sh`）
+
+**验证**：31/31 ad-hoc 定向验证；`bash scripts/check.sh` ALL_PASS
+
+---
+
 ## [2026-09-24] fix(shared-hub): 云端 shared_search 恒报「需要登录身份」—— 云端不该请求自己
 
 **用户反馈**：「shared search 无法访问，我明确已经登录，且数据库可以点击查看，
