@@ -6,6 +6,50 @@
 
 ---
 
+## [2026-09-24] fix(shared-hub): 云端 shared_search 恒报「需要登录身份」—— 云端不该请求自己
+
+**用户反馈**：「shared search 无法访问，我明确已经登录，且数据库可以点击查看，
+共享服务器需要登录身份：请在网页右上角点击「登录」一次即可」
+
+**根因**
+- `shared_hub.shared_search()` 用 `_hub_base()` 取地址，默认 `http://<HUB-IP>:8088`
+- 云端实例**就在这台服务器上** → 等于「HTTP 请求自己」
+- 而 `_token()` 读的是 `workspace/_auth/hub_session.json` —— 该文件**只在本地实例生成**
+  （云端登录写的是 `sessions.json`）→ 云端拿不到 token → 云端自己回 401
+  → `_friendly()` 把 401 译成「共享服务器需要登录身份」
+- 即：**云端检索的是一条注定失败的回环**
+
+**修复（`backend/tools/shared_hub.py`）**
+新增 `_is_hub_instance()`，判据 = `C4EAI_AUTH=1`（**与 `role_policy.HUB` 完全同口径**，全项目统一）：
+
+| 跑在哪 | `C4EAI_AUTH` | 行为 |
+|---|---|---|
+| 云端（服务器） | `1`（`start_c4eai.sh` 设） | **直读本地索引**（`vector_search.search_knowledge`），不走 HTTP |
+| 本地（用户电脑） | 未设置（`start.bat` 不设） | **保持原样 HTTP 转发**到服务器 |
+
+- `shared_search` / `shared_upload` 均按此分流
+- 云端路径打日志 `[shared_hub] 云端实例：直接读写本地共享库（不走 HTTP 回环）`
+- **默认安全**：只有显式设 `C4EAI_AUTH=1` 才走本地 → 本地行为 100% 不变
+
+**为什么不做「云端也走 HTTP 回环」**（用户问过）
+1. 服务器上再请求自己是纯浪费（网络栈 → uvicorn → 同一进程）
+2. 需要额外维护一份 `hub_session.json` 状态，将来必出别的问题
+3. 单 worker 下自己等自己有死锁风险（此前已踩过并发卡死）
+
+**canonical check 增强**（防呆）
+- `shared_hub 云端/本地分流判据` / `shared_search 云端直读本地索引` / `role_policy.HUB 同口径`
+- **`start.bat 不得设置 C4EAI_AUTH`** ← 一旦手滑，本地会误判为云端
+
+**实测**
+- 分流单测（httpx 打桩）**12/12**：本地确实发 HTTP 到 `<HUB-IP>:8088/api/search/knowledge`；
+  云端走本地索引、HTTP 调用次数 0；与 `role_policy.HUB` 口径一致
+- 云端真机（SSH 进程内调用）：`is_hub_instance=True`、
+  `RESULT: {"status":"ok","count":3,...}`、**`HAS_NEED_LOGIN: False`** ✅
+- 云端 HTTP：admin 登录 → `/api/search/knowledge` HTTP 200、`count=3`
+- `bash scripts/check.sh` ALL_PASS ✅
+
+---
+
 ## [2026-09-22] fix(agent): 上传附件后「未能生成回答」—— NameError 500 + file_id 漏传 + Neo4j 硬终止
 
 **用户反馈**：「我在对话区域上传的时候，发送消息提示 agent 未能生成回答」

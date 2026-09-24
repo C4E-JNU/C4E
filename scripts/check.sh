@@ -48,6 +48,17 @@ _hn="${_hn:-0}"
 if [ "$_hn" -eq 0 ]; then ok '无 Neo4j 硬失败 return'; else bad "仍有 $_hn 处 Neo4j 硬失败"; fi
 # 对话区必须把附件 file_id 传给 agent（曾漏传 → 附件内容不进 LLM）
 chk js/messages.js 'fileIds: attachmentsMetadata.map' 'messages.js 传附件 fileId 给 agent'
+# 共享库分流：云端直读本地索引、本地走 HTTP 转发
+#   ⚠️ 判据是 C4EAI_AUTH 环境变量，全项目统一口径（role_policy.HUB 同款）
+#   本地 start.bat 绝不能设 C4EAI_AUTH，否则本地会误查本地索引
+chk backend/tools/shared_hub.py 'def _is_hub_instance()' 'shared_hub 云端/本地分流判据'
+chk backend/tools/shared_hub.py 'from tools.vector_search import search_knowledge' 'shared_search 云端直读本地索引'
+chk backend/role_policy.py 'C4EAI_AUTH' 'role_policy.HUB 同口径'
+if grep -q 'C4EAI_AUTH' start.bat 2>/dev/null; then
+    bad 'start.bat 不得设置 C4EAI_AUTH（会让本地误判为云端）'
+else
+    ok 'start.bat 未设 C4EAI_AUTH（本地走 HTTP 转发）'
+fi
 # 后端不得存在未定义的全局名（pyflakes；曾因 READ_FILE_MAX_CHARS 漏导入而 500）
 _pf="$(env -u PYTHONPATH python -m pyflakes backend/ 2>/dev/null | grep -i 'undefined' || true)"
 if [ -z "$_pf" ]; then ok '后端无 undefined name (pyflakes)'; else bad "未定义名: $_pf"; fi
