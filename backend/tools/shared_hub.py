@@ -14,39 +14,17 @@ from pathlib import Path
 import httpx
 
 _HUB_ENV = "C4EAI_HUB"
-_DEFAULT_HUB = "http://<HUB-IP>:8088"   # 组内共享库默认地址（服务器已更名：c4eai / c4eai.lab；start.bat 环境变量传递不可靠，此处兜底）
 
 
 def _hub_base() -> str:
-    return os.environ.get(_HUB_ENV, "").rstrip("/") or _DEFAULT_HUB
+    """共享库地址（环境变量 C4EAI_HUB）。
 
+    已配置 → 库在服务器（本地实例，start.bat 里设了）
+    未配置 → 库就在本机（云端实例，start_c4eai.sh 不设此变量）
 
-def _is_hub_instance() -> bool:
-    """当前进程是不是「云端共享库实例」（服务器上那个）。
-
-    ⚠️ 判据 = 环境变量 C4EAI_AUTH=1，与 role_policy.HUB 完全一致（全项目统一口径）。
-
-    ┌─────────────────────┬──────────────┬────────────────────────────┐
-    │ 跑在哪              │ C4EAI_AUTH   │ shared_search / upload 走  │
-    ├─────────────────────┼──────────────┼────────────────────────────┤
-    │ 云端（服务器）      │ 1            │ 读本地索引（不走 HTTP）    │
-    │ 本地（用户电脑）    │ 未设置       │ HTTP 转发到服务器          │
-    └─────────────────────┴──────────────┴────────────────────────────┘
-
-    为什么要分流：云端实例本身就是库，再 HTTP 请求自己是纯浪费，且
-    `_token()` 读的 hub_session.json 只在本地实例存在 → 云端必然 401
-    （历史 bug：云端 shared_search 恒报「共享服务器需要登录身份」）。
-
-    本地实例必须走 HTTP —— 共享库的实体文件只在服务器上，本地没有。
-    这个分流是**默认安全**的：只有显式设了 C4EAI_AUTH=1 才走本地。
+    调用方据此分流：有地址走 HTTP，没地址直读本地索引。
     """
-    is_hub = os.environ.get("C4EAI_AUTH", "") == "1"
-    if is_hub:
-        try:
-            print("[shared_hub] 云端实例：直接读写本地共享库（不走 HTTP 回环）", flush=True)
-        except Exception:
-            pass
-    return is_hub
+    return os.environ.get(_HUB_ENV, "").rstrip("/")
 
 
 def _token() -> str:
@@ -70,12 +48,6 @@ def _hub_headers() -> dict:
     """共享库若启用了账号鉴权，本地实例用 C4EAI_HUB_TOKEN 提供身份"""
     tok = _token()
     return {"Authorization": f"Bearer {tok}"} if tok else {}
-
-
-def _no_hub() -> str:
-    return json.dumps(
-        {"error": f"未配置共享服务器：请设置环境变量 {_HUB_ENV}，例如 http://<HUB-IP>:8088"},
-        ensure_ascii=False)
 
 
 def _workspace_dir() -> Path:
@@ -107,10 +79,6 @@ async def shared_upload(file_id: str = "", path: str = "") -> str:
     path:    workspace 内相对路径或绝对路径。
     二选一必填。上传成功后服务器会解析文本并入知识索引，全组都能 shared_search 到。
     """
-    base = _hub_base()
-    if not base:
-        return _no_hub()
-
     local = None
     if file_id:
         from tools.file_tools import _resolve_upload
@@ -134,14 +102,12 @@ async def shared_upload(file_id: str = "", path: str = "") -> str:
     except Exception as e:
         return json.dumps({"error": f"读取本地文件失败: {e}"}, ensure_ascii=False)
 
-    # 云端实例：本身就在服务器上，直接写 pool 并解析入索引（不再 HTTP 请求自己）
-    if _is_hub_instance():
-        try:
-            from tools.file_tools import upload_file as _upload_file
-            res = await _upload_file(local.name, data, "system", "database")
-            return res if isinstance(res, str) else json.dumps(res, ensure_ascii=False)
-        except Exception as e:
-            return json.dumps({"error": f"写入共享库失败: {e}"}, ensure_ascii=False)
+    base = _hub_base()
+    if not base:
+        # 库就在本机（云端实例）：直接写 pool 并解析入索引
+        from tools.file_tools import upload_file as _upload_file
+        res = await _upload_file(local.name, data, "system", "database")
+        return res if isinstance(res, str) else json.dumps(res, ensure_ascii=False)
 
     timeout = httpx.Timeout(connect=30, read=600, write=600, pool=30)
     try:
@@ -170,7 +136,8 @@ async def publish_note_to_db(note_id: str, owner: str, base: str = "", token: st
 
     base = (base or _hub_base()).rstrip("/")
     if not base:
-        return {"error": _no_hub()}
+        # 没地址 = 库在本机（云端实例），却调了这个「把本地附件推到服务器」的函数
+        return {"error": "云端实例无需推送：共享库就在本机，请直接写 pool"} 
     tok = token or _token()
     if not tok:
         return {"error": "共享服务器需要登录身份：请先在网页右上角点击「登录」一次"}
@@ -364,22 +331,14 @@ async def db_notes(action: str, note_id: str = "", title: str = "", content: str
 async def shared_search(query: str, top_k: int = 5) -> str:
     """在组内共享库（服务器上所有人上传的文献/文档）中做语义搜索。
 
-    ⚠️ 两种部署形态走不同路径（用户 2026-09-22 定）：
-      · 云端实例（C4EAI_AUTH=1）：**本身就在服务器上，直接读本地索引**，
-        绝不能再走 HTTP 请求自己 —— 否则会因读不到 hub_session.json 而 401
-        （历史 bug：云端 shared_search 恒报「共享服务器需要登录身份」）
-      · 本地实例：代理转发到服务器（用网页登录保存的 hub_session token）
+    有 C4EAI_HUB 地址 → 库在服务器 → HTTP 转发（本地实例）
+    没地址           → 库就在本机 → 直读本地索引（云端实例）
     """
-    if _is_hub_instance():
-        try:
-            from tools.vector_search import search_knowledge as _local_search
-            return await _local_search(query, top_k)
-        except Exception as e:
-            return json.dumps({"error": f"共享库搜索失败: {e}"}, ensure_ascii=False)
-
     base = _hub_base()
     if not base:
-        return _no_hub()
+        from tools.vector_search import search_knowledge as _local_search
+        return await _local_search(query, top_k)
+
     timeout = httpx.Timeout(connect=30, read=120, write=120, pool=30)
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
