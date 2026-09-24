@@ -34,6 +34,21 @@ def _meta_file(user: str = ""):
 # ── 全局单例 ───────────────────────────────────────
 _model = None
 
+# 相似度阈值：bge-small-zh 下 0.3 太低（会把不相关块放进来）。
+# 0.42 = 实测 bge 中文语义相关的经验下限（真相关通常 0.5~0.8）。
+_SCORE_THRESHOLD = float(os.environ.get("C4EAI_SCORE_THRESHOLD", "0.42"))
+
+
+def _relevance_level(score: float) -> str:
+    """把裸分数翻译成人话 —— 给 LLM 判断"该不该采信"用（借鉴 WeKnora）。"""
+    if score >= 0.75:
+        return "高相关"
+    if score >= 0.60:
+        return "中相关"
+    if score >= _SCORE_THRESHOLD:
+        return "低相关"
+    return "弱相关"
+
 def _get_model():
     global _model
     if _model is not None:
@@ -180,25 +195,45 @@ def remove_from_knowledge_index(file_id: str) -> int:
     return removed
 
 
+def _index_vectors(index: list[dict]) -> np.ndarray | None:
+    """取索引里现成的向量矩阵 (n, dim)；任一块缺向量则返回 None（调用方回退重算）。
+
+    入库时已把向量写进 chunk["vector"]，检索直接用它 —— 不再每次重算全库。
+    """
+    try:
+        vecs = [c.get("vector") for c in index]
+        if not vecs or any(v is None for v in vecs):
+            return None
+        m = np.array(vecs, dtype=np.float32)
+        if m.ndim != 2 or m.shape[0] != len(index):
+            return None
+        return m
+    except Exception:
+        return None
+
+
 async def search_history(query: str, top_k: int = 3, scope: str = None, user: str = "") -> str:
     """搜索历史对话（按身份分索引），返回 JSON 字符串"""
     index = _load_index(_history_index_file(user))
     if not index:
         return json.dumps({"status": "ok", "count": 0, "results": []})
 
-    texts = [c["text"] for c in index]
     try:
         q_vec = embed_texts([query])[0]
-        doc_vecs = embed_texts(texts)
+        # 优先用索引里现成的向量；缺失（老索引/异常）才重算，保证结果不变
+        doc_vecs = _index_vectors(index)
+        if doc_vecs is None:
+            doc_vecs = embed_texts([c["text"] for c in index])
         scores = cosine_similarity(q_vec, doc_vecs)
         top_idx = np.argsort(scores)[-top_k:][::-1]
 
         results = []
         for i in top_idx:
-            if scores[i] > 0.3:  # 阈值过滤
+            if scores[i] > _SCORE_THRESHOLD:  # 阈值过滤
                 results.append({
                     "score": round(float(scores[i]), 4),
-                    "text": index[i]["text"][:300],
+                    "relevance": _relevance_level(float(scores[i])),
+                    "text": index[i]["text"],
                     "conversation": index[i].get("conversation", ""),
                     "source": index[i].get("source", "history"),
                 })
@@ -214,20 +249,24 @@ async def search_knowledge(query: str, top_k: int = 3, scope: str = None) -> str
     if not index:
         return json.dumps({"status": "ok", "count": 0, "results": []})
 
-    texts = [c["text"] for c in index]
     try:
         q_vec = embed_texts([query])[0]
-        doc_vecs = embed_texts(texts)
+        # 优先用索引里现成的向量（不再每次重算全库 embedding）
+        doc_vecs = _index_vectors(index)
+        if doc_vecs is None:
+            doc_vecs = embed_texts([c["text"] for c in index])
         scores = cosine_similarity(q_vec, doc_vecs)
         top_idx = np.argsort(scores)[-top_k:][::-1]
 
         results = []
         for i in top_idx:
-            if scores[i] > 0.3:
+            if scores[i] > _SCORE_THRESHOLD:
                 results.append({
                     "score": round(float(scores[i]), 4),
-                    "text": index[i]["text"][:300],
+                    "relevance": _relevance_level(float(scores[i])),
+                    "text": index[i]["text"],
                     "doc_name": index[i].get("doc_name", ""),
+                    "file_id": index[i].get("file_id", ""),
                 })
 
         return json.dumps({"status": "ok", "count": len(results), "results": results}, ensure_ascii=False)
