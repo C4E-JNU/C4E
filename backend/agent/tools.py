@@ -48,7 +48,7 @@ class CodeParams(BaseModel):
 
 class ReadFileParams(BaseModel):
     path: str = Field(default="", description="文件路径；相对路径以 workspace/ 为基准，询问/完全访问模式下可用绝对路径读取项目内或磁盘文件。若同时给 file_id 则可省略")
-    file_id: str = Field(default="", description="上传附件的 file_id：文档返回解析全文，图片返回 base64(dataURL) 供多模态。给 file_id 时优先于 path")
+    file_id: str = Field(default="", description="上传附件的 file_id：已解析文档返回解析全文；未解析附件（笔记附件）会【即时提取原文】返回；图片返回 base64(dataURL)。给 file_id 时优先于 path")
     as_base64: bool = Field(default=False, description="按 file_id 读取时是否强制返回 base64（图片默认即 base64）")
     offset: int = Field(default=1, description="起始行号")
     limit: int = Field(default=1000000, description="最多返回行数（文件内容做大不截断）")

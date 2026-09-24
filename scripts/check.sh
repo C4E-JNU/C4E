@@ -40,6 +40,12 @@ chk js/xiaoe.js  'WEATHER_CHANCE = 0.025' 'xiaoe.js 概率 0.025'
 chk backend/app.py 'req.model.get("model")' 'app.py 免密钥判据'
 # 附件正文必须有截断上限常量（曾漏导入 → NameError → 500 → "未能生成回答"）
 chk backend/agent/agent.py 'READ_FILE_MAX_CHARS' 'agent.py 导入 READ_FILE_MAX_CHARS'
+# 笔记附件不解析（用户 2026-09-25 定：笔记=总结，附件=补充，天然分层）
+chk backend/tools/file_tools.py 'parse: bool = True' 'file_tools upload_file 有 parse 开关'
+chk backend/tools/file_tools.py 'if not parse:' 'file_tools parse=False 走 early-return'
+chk backend/tools/shared_hub.py 'no_entry=1&parse=0' 'notes 发布附件时不解析'
+chk backend/app.py '_parse = (int(parse) != 0) if parse is not None' 'app.py parse 缺省跟随 no_entry'
+chk backend/tools/file_tools.py 'on_demand' 'read_file 对未解析附件即时提取原文'
 # Neo4j 失败必须降级而非终止对话（三处：两流式 + 一非流式）
 _n4="$(grep -c '连不上只降级摘掉图谱工具' backend/agent/agent.py 2>/dev/null || echo 0)"
 if [ "$_n4" -ge 3 ]; then ok "Neo4j 失败降级 ($_n4 处)"; else bad "Neo4j 降级仅 $_n4 处（应≥3）"; fi

@@ -6,6 +6,50 @@
 
 ---
 
+## [2026-09-25] feat(hub): 笔记附件不解析（天然分层：笔记=总结，附件=补充）
+
+**用户设计**：「笔记不需要解析，因为笔记通常是总结，其附带的文档都是补充信息，
+天然的分层结构。RAG 时候读到笔记，然后深入的时候智能体自己读文档。
+而文档类型的上传会自动解析，不然无法 RAG 检索。」
+
+**核实结论**：此前「笔记发布到共享库」时附件**确实被解析了** ——
+`publish_note_to_db` 调 `/api/file/upload?source=database&no_entry=1`，
+而 `no_entry=1` **只阻止"另建条目"**，`upload_file()` 里的解析与向量入库**照常执行**。
+（用户"好像还是说了"的感觉是对的，但实现是隐式的，看不出来。）
+
+**改动**
+- `file_tools.upload_file()` 加 `parse: bool = True` 参数；
+  `parse=False` → **early-return：只存原件，不写 `text.txt`、不入向量索引**，
+  meta 记 `parsed: False`（把"未解析"当事实存下来，便于排查）
+- `file_tools.read_file(file_id=)` 对**未解析附件即时提取原文**
+  （pdf/docx/pptx/文本，不落盘不入索引），返回 `on_demand: True`
+  —— 这就是用户要的"深入时智能体自己读文档"
+- `app.py /api/file/upload` 加 `parse` 参数；**缺省跟随 `no_entry`**
+  （`no_entry=1` → 不解析），显式传入优先
+- `app.py` 自动建「文档条目」的条件补 `_parse` 守卫（无正文不建条目）
+- `shared_hub.publish_note_to_db` → 改为 `no_entry=1&parse=0`
+- `agent/tools.py` `read_file` 的 file_id 参数说明补上"未解析附件即时提取"
+
+**不变量**：`upload_file` 里向量入库代码块必然 `parse=True` 才可达
+（`parse=False` 已 early-return）—— 这是"笔记附件不污染检索"的实现点，已写入注释。
+
+**实测（云端真机）**
+| 上传方式 | `text.txt` | meta.parsed | 向量索引块数 |
+|---|---|---|---|
+| `parse=0`（笔记附件）| **无** ✅ | False | **0** ✅ |
+| `parse=1`（上传文档）| 有 | True | 1 ✅ |
+
+`read_file(file_id)` 对未解析附件返回 `ok:True, on_demand:True`，
+即时提取原文 72 字符成功。
+
+**canonical check 增强**：新增 5 条不变量（parse 开关 / early-return /
+notes 发 parse=0 / app 缺省跟随 no_entry / on_demand 即时读取）
+
+**验证**：9/9 上传行为 + 磁盘实证 + 索引核对 + 即时读取；
+`bash scripts/check.sh` ALL_PASS
+
+---
+
 ## [2026-09-24] fix(ui): 条目筛选从「Tab 条」改为「单个筛选按钮 + 下拉菜单」
 
 **用户反馈**：「我点了笔记和文档的UI按钮没反应，而且你的UI做的太诡异了，

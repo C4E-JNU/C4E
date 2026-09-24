@@ -604,15 +604,25 @@ def _check_file_access(meta: dict, user: dict):
 
 @app.post("/api/file/upload")
 async def api_file_upload(file: UploadFile = File(...), request: Request = None,
-                          source: str = "chat", no_entry: int = 0):
+                          source: str = "chat", no_entry: int = 0,
+                          parse: Optional[int] = None):
     """source=chat → 私人附件（当前后端 users/<身份>/uploads，任何身份可用）；
-    source=database → 共享数据库：本地实例代理到云端共享池（需登录+授权）；云端写 pool 并入索引。"""
+    source=database → 共享数据库：本地实例代理到云端共享池（需登录+授权）；云端写 pool 并入索引。
+
+    parse=0 → 只存原件，不解析、不入向量索引。
+    用户 2026-09-25 定：**笔记里的附件不解析**（笔记是总结，附件是补充信息，天然分层：
+    RAG 先命中笔记正文 → 需要细节时智能体按 file_id 自己读原件）。
+    parse 缺省时跟随 no_entry：no_entry=1（笔记发布附件）→ 不解析；
+    否则（「📤 上传」文档）→ 解析（不解析就无法 RAG 检索）。
+    """
     content = await file.read()
     user = _cur_user(request)
     owner = user["username"]
     source = (source or "chat").strip().lower()
     if source not in ("chat", "database"):
         source = "chat"
+    # 是否解析：显式 parse 优先，否则 no_entry=1 → 不解析
+    _parse = (int(parse) != 0) if parse is not None else (not no_entry)
 
     if source == "database":
         if not _AUTH_ENABLED:
@@ -630,7 +640,8 @@ async def api_file_upload(file: UploadFile = File(...), request: Request = None,
             try:
                 timeout = _httpx.Timeout(connect=30, read=600, write=600, pool=30)
                 async with _httpx.AsyncClient(timeout=timeout) as cli:
-                    r = await cli.post(f"{base}/api/file/upload?source=database&no_entry={1 if no_entry else 0}",
+                    r = await cli.post(f"{base}/api/file/upload?source=database&no_entry={1 if no_entry else 0}"
+                                       f"&parse={1 if _parse else 0}",
                                        files={"file": (file.filename or "unknown", content)},
                                        headers={"Authorization": f"Bearer {s['token']}"})
                 try:
@@ -650,25 +661,27 @@ async def api_file_upload(file: UploadFile = File(...), request: Request = None,
                                 status_code=403)
 
     # upload_file 是 async 但内部无 await（纯 CPU 密集文本提取），在线程池执行避免阻塞事件循环
-    def _upload_sync(fn, c, ow, src):
+    def _upload_sync(fn, c, ow, src, pst):
         import asyncio
         try:
             loop = asyncio.new_event_loop()
             try:
-                return loop.run_until_complete(_upload_file(fn, c, ow, src))
+                return loop.run_until_complete(_upload_file(fn, c, ow, src, pst))
             finally:
                 loop.close()
         except Exception:
             import asyncio as a2
-            return a2.run(_upload_file(fn, c, ow, src))
+            return a2.run(_upload_file(fn, c, ow, src, pst))
     import asyncio
     _res = json.loads(await asyncio.to_thread(
-        _upload_sync, file.filename or "unknown", content, owner, source))
+        _upload_sync, file.filename or "unknown", content, owner, source, _parse))
     # 数据库上传：自动建「文档条目」（用户 2026-09-22 定）
     #   · kind=document —— 解析正文放这里，不污染人写的笔记条目
     #   · 正文 = {{file:...}} 占位 + 解析文本（供检索；原件完整保留可下载/预览）
     #   · no_entry=1 例外：笔记发布时复制附件，附件是笔记内容的一部分，不另立条目
-    if source == "database" and not no_entry and isinstance(_res, dict) and _res.get("file_id"):
+    #   · _parse=False 例外：笔记附件不解析（用户 2026-09-25 定）→ 无正文可建条目
+    if (source == "database" and not no_entry and _parse
+            and isinstance(_res, dict) and _res.get("file_id")):
         try:
             _fn = file.filename or "file"
             _fid = _res["file_id"]

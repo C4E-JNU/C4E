@@ -131,6 +131,51 @@ async def read_file(path: str = "", file_id: str = "", as_base64: bool = False, 
                                "note": (f"文件正文 {len(text)} 字符，已截断至 {READ_FILE_MAX_CHARS} 字符；"
                                         "如需后续内容请改用 offset/limit 分页读取，或告诉我需要的具体段落。") if truncated else "",
                                "content": clipped}, ensure_ascii=False)
+        # 无 text.txt：该附件是按「笔记附件」上传的（parse=False，只存原件不进索引）。
+        # 用户 2026-09-25 定的分层设计：RAG 先命中笔记正文，需要细节时智能体按 file_id
+        # 现读原件 —— 这里就在做「现读」：读原文即时提取，不落盘、不入索引。
+        _d, _meta, _orig = _resolve_upload(fid)
+        if _orig and os.path.isfile(_orig):
+            try:
+                with open(_orig, "rb") as _f:
+                    _bytes = _f.read()
+                _ext = os.path.splitext(_orig)[1].lower()
+                if _ext == ".pdf":
+                    import fitz
+                    with fitz.open(stream=_bytes, filetype="pdf") as _doc:
+                        _txt = "".join(_pg.get_text() for _pg in _doc)
+                elif _ext == ".docx":
+                    import io as _io, docx as _docx
+                    _dcm = _docx.Document(_io.BytesIO(_bytes))
+                    _txt = "\n".join(_p.text for _p in _dcm.paragraphs)
+                elif _ext in (".pptx", ".ppt"):
+                    import io as _io, zipfile as _zip
+                    from xml.etree import ElementTree as _ET
+                    _ns = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
+                    _txt = ""
+                    with _zip.ZipFile(_io.BytesIO(_bytes)) as _z:
+                        _slides = sorted(n for n in _z.namelist()
+                                         if n.startswith("ppt/slides/slide") and n.endswith(".xml"))
+                        for _sn in _slides:
+                            _root = _ET.fromstring(_z.read(_sn))
+                            _txt += "".join(t.text or "" for t in _root.iter(_ns + "t")) + "\n"
+                else:
+                    _txt = _bytes.decode("utf-8", errors="replace")
+                _txt = (_txt or "").strip()
+                if not _txt:
+                    return json.dumps({"ok": False, "file_id": fid,
+                                       "error": f"附件 {fid} 未提取到文本（可能是扫描件；"
+                                                f"图片请用 read_image，扫描 PDF 可试 mineru_parse）"},
+                                      ensure_ascii=False)
+                _clip = _txt[:READ_FILE_MAX_CHARS]
+                return json.dumps({"ok": True, "source": "attachment", "file_id": fid, "mode": "text",
+                                   "on_demand": True, "truncated": len(_txt) > READ_FILE_MAX_CHARS,
+                                   "note": "该附件未预先解析（笔记附件），以上为本次即时提取的原文；未写入索引。",
+                                   "content": _clip}, ensure_ascii=False)
+            except Exception as e:
+                return json.dumps({"ok": False, "file_id": fid,
+                                   "error": f"即时提取失败: {type(e).__name__}: {str(e)[:120]}"},
+                                  ensure_ascii=False)
         return json.dumps({"ok": False, "error": f"附件 {fid} 无内容"})
 
     path = (path or "").strip()
@@ -362,10 +407,17 @@ def _save_upload_meta(file_id: str, meta: dict):
 
 
 async def upload_file(filename: str, content_bytes: bytes, owner: str = "",
-                      source: str = "chat") -> str:
+                      source: str = "chat", parse: bool = True) -> str:
     """上传文件，返回 JSON 字符串 { file_id, name, text, size }。
+
     owner=归属用户；source=chat→users/<owner>/uploads（私人，不入索引）；
-    source=database→pool/uploads（共享，入向量索引，仅云端共享库用）。"""
+    source=database→pool/uploads（共享，入向量索引，仅云端共享库用）。
+
+    parse=False → **只存原件，不解析、不写 text.txt、不入向量索引**。
+    用户 2026-09-25 定：笔记里的附件属于「补充信息」，天然分层——
+    RAG 先命中笔记正文（人写的总结），需要细节时智能体再按 file_id 读附件原文。
+    所以笔记附件不做解析（否则几千字解析文本会污染检索，且非必要）。
+    """
     owner = owner or "guest"
     file_id = uuid.uuid4().hex  # 全量 uuid，防止被枚举他人文件
     base_dir = _pool_uploads_dir() if source == "database" else _user_uploads_dir(owner)
@@ -377,9 +429,31 @@ async def upload_file(filename: str, content_bytes: bytes, owner: str = "",
     with open(orig_path, "wb") as f:
         f.write(content_bytes)
 
-    # 提取文本
+    # 提取文本（parse=False 则跳过，只留原件）
     text_content = ""
     ext = os.path.splitext(filename)[1].lower()
+
+    if not parse:
+        meta = {
+            "file_id": file_id,
+            "name": filename,
+            "size": len(content_bytes),
+            "mime": ext,
+            "text_length": 0,
+            "created": str(datetime.now()),
+            "owner": owner,
+            "source": source,
+            "parsed": False,        # 记录「未解析」这一事实，便于排查
+        }
+        _save_upload_meta(file_id, meta)
+        return json.dumps({
+            "file_id": file_id,
+            "name": filename,
+            "text": "",
+            "text_full_length": 0,
+            "size": len(content_bytes),
+            "parsed": False,
+        }, ensure_ascii=False)
 
     try:
         if ext == ".txt":
@@ -479,11 +553,14 @@ async def upload_file(filename: str, content_bytes: bytes, owner: str = "",
         "created": str(datetime.now()),
         "owner": owner,
         "source": source,          # chat=私人附件 / database=共享数据库
+        "parsed": True,            # 已解析出正文
     }
     _save_upload_meta(file_id, meta)
 
     # 知识库入库：仅 database 来源（共享池）。聊天附件永不入索引。
     # 图片占位/解析失败提示/过短文本不入库。
+    # 不变量：走到这里必然 parse=True（parse=False 已在上面 early-return，
+    # 只存原件不入索引）——这正是「笔记附件不参与 RAG 检索」的实现点。
     _t = (text_content or "").strip()
     if source == "database" and len(_t) >= 50 and not (_t.startswith("[") and _t.rstrip().endswith("]")):
         def _ingest(_fid=file_id, _name=filename, _text=_t):
