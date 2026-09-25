@@ -30,6 +30,74 @@ _FOLDERS_FILE = os.path.join(_WORKSPACE, "pool", "_folders.json")
 # 这是业务规则（不是防呆兜底）：LLM 或误操作都不该造出 10 层目录。
 MAX_DEPTH = 5
 
+# ── 两个特殊根文件夹（用户 2026-09-25 定）──────────────────
+# 「笔记」「文档」不是"类型标签"，而是**两个真实的根文件夹**：
+#   · 整个共享库 = 一个文件夹树，文件夹有名字+简介，里面可装文件也可装子文件夹
+#   · 「文档」夹的 parse=True → 新内容**首次从外部进入共享库**且落在这里时，
+#     其附件自动解析成文字（供 RAG 检索）
+#   · 「笔记」夹的 parse=False → 不解析
+# ⚠️ 解析的**唯一触发点**：新条目第一次从共享库外部进入共享库。
+#    从个人库发布进来的、以及库内移动的，**一律不触发**（见 app.py / shared_hub.py）。
+ROOT_NOTE = "root-note"      # 「📝 笔记」夹
+ROOT_DOC = "root-doc"        # 「📄 文档」夹
+
+
+def ensure_roots():
+    """确保两个根文件夹存在（幂等）。返回 (folders, 是否新建过)。"""
+    folders = _load()
+    by_id = {f.get("id"): f for f in folders}
+    now = time.strftime("%Y-%m-%d %H:%M:%S")
+    created = False
+
+    if ROOT_NOTE not in by_id:
+        folders.append({
+            "id": ROOT_NOTE, "name": "笔记", "parent_id": "",
+            "intro": "人写的总结与笔记。此文件夹下的内容【不解析】附件，"
+                     "需要细节时由智能体按 file_id 自行读取原文。",
+            "parse": False,          # ★ 不解析
+            "system": True,          # 系统内置，不可删除（可改名）
+            "created": now, "updated": now,
+        })
+        created = True
+    if ROOT_DOC not in by_id:
+        folders.append({
+            "id": ROOT_DOC, "name": "文档", "parent_id": "",
+            "intro": "上传的文献与文档。新内容首次进入此文件夹时，"
+                     "附件会【自动解析】成文字，供全文检索（RAG）。",
+            "parse": True,           # ★ 解析
+            "system": True,
+            "created": now, "updated": now,
+        })
+        created = True
+
+    if created:
+        _recompute_paths(folders)
+        _save(folders)
+    return folders, created
+
+
+def root_id_for_kind(kind: str) -> str:
+    """按条目 kind 映射到对应的根文件夹（迁移老数据用）。"""
+    return ROOT_DOC if (kind or "note") == "document" else ROOT_NOTE
+
+
+def folder_parses(folder_id: str) -> bool:
+    """该文件夹是否要求「新内容首次入库时解析附件」。"""
+    if not folder_id:
+        return False
+    f = _find(_load(), folder_id)
+    if f is None:
+        return False
+    # 未显式标注时，跟随父链（子文件夹继承父的解析策略）
+    seen = 0
+    while f is not None and seen < 50:
+        if "parse" in f:
+            return bool(f.get("parse"))
+        pid = f.get("parent_id") or ""
+        f = _find(_load(), pid) if pid else None
+        seen += 1
+    return False
+
 
 # ── 读写 ────────────────────────────────────────
 
@@ -153,8 +221,9 @@ def list_groups() -> str:
     }, ensure_ascii=False)
 
 
-def create_group(name: str, parent_id: str = "", intro: str = "") -> str:
-    """新建分组。parent_id 空 = 根级。"""
+def create_group(name: str, parent_id: str = "", intro: str = "",
+                 parse: bool = None) -> str:
+    """新建分组。parent_id 空 = 根级。parse 传值则显式指定解析策略，否则跟随父夹。"""
     name = (name or "").strip()
     if not name:
         return json.dumps({"error": "分组名不能为空"}, ensure_ascii=False)
@@ -185,6 +254,9 @@ def create_group(name: str, parent_id: str = "", intro: str = "") -> str:
         "created": time.strftime("%Y-%m-%d %H:%M:%S"),
         "updated": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
+    # 解析策略继承：显式传入优先，否则跟随父夹（未给则不落 parse 键 → 沿父链回溯）
+    if parse is not None:
+        g["parse"] = bool(parse)
     folders.append(g)
     _recompute_paths(folders)
     _save(folders)
@@ -271,6 +343,9 @@ def delete_group(group_id: str, mode: str = "move_up") -> str:
     g = _find(folders, group_id)
     if g is None:
         return json.dumps({"error": f"分组不存在: {group_id}"}, ensure_ascii=False)
+
+    if g.get("system"):
+        return json.dumps({"error": "「笔记」「文档」是系统内置的根文件夹，不能删除"}, ensure_ascii=False)
 
     parent = g.get("parent_id") or ""
     kids = _children(folders, group_id)

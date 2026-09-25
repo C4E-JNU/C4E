@@ -44,7 +44,7 @@ chk backend/agent/agent.py 'READ_FILE_MAX_CHARS' 'agent.py 导入 READ_FILE_MAX_
 chk backend/tools/file_tools.py 'parse: bool = True' 'file_tools upload_file 有 parse 开关'
 chk backend/tools/file_tools.py 'if not parse:' 'file_tools parse=False 走 early-return'
 chk backend/tools/shared_hub.py 'no_entry=1&parse=0' 'notes 发布附件时不解析'
-chk backend/app.py '_parse = (int(parse) != 0) if parse is not None' 'app.py parse 缺省跟随 no_entry'
+chk backend/app.py 'folder_parses(folder_id)' 'app.py 解析策略看目标文件夹'
 chk backend/tools/file_tools.py 'on_demand' 'read_file 对未解析附件即时提取原文'
 # 分组树（用户 2026-09-25 定：顶层用 kind 区分，下层任意深度，分组带简介供 LLM 导航）
 chk backend/tools/folder_tree.py '_recompute_paths' '分组树：ParentID 邻接表 + Path 缓存重算'
@@ -62,6 +62,15 @@ chk index.html 'db-f-year-btn' '筛选器外置：年份'
 chk index.html 'db-f-sort-btn' '排序器外置'
 chk backend/tools/shared_hub.py 'summary_only' 'list_entries 支持 summary_only（省 token）'
 chk backend/tools/shared_hub.py 'year: str = ""' 'list_entries 支持 year 过滤（条件下推）'
+# 文件夹树模型（用户 2026-09-25 定）：笔记/文档是真实根文件夹，解析看落在哪个夹
+chk backend/tools/folder_tree.py 'def ensure_roots' '两个根文件夹（笔记/文档）'
+chk backend/tools/folder_tree.py 'def folder_parses' '解析策略挂在文件夹上'
+chk backend/tools/folder_tree.py 'ROOT_DOC' '文档夹 = parse=True'
+chk backend/app.py 'folder_parses(folder_id)' '上传解析看目标文件夹'
+chk backend/tools/file_tools.py 'parse=False → **只存原件**' 'parse=False 只存原件'
+chk js/database.js '_dbUploadFolder' '上传按钮下沉到文件夹行'
+chk js/database.js 'data-gact="upload"' '每个夹带上传按钮'
+chk js/database.js 'data-gact="addentry"' '每个夹带新建条目按钮'
 # Neo4j 失败必须降级而非终止对话（三处：两流式 + 一非流式）
 _n4="$(grep -c '连不上只降级摘掉图谱工具' backend/agent/agent.py 2>/dev/null || echo 0)"
 if [ "$_n4" -ge 3 ]; then ok "Neo4j 失败降级 ($_n4 处)"; else bad "Neo4j 降级仅 $_n4 处（应≥3）"; fi

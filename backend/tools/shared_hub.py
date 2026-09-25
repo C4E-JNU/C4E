@@ -169,9 +169,9 @@ async def publish_note_to_db(note_id: str, owner: str, base: str = "", token: st
                 failures.append(f"{fid}(读取失败:{e})")
                 continue
             try:
-                # parse=0：笔记附件**不解析、不入向量索引**（用户 2026-09-25 定）
-                # 笔记是总结，附件是补充信息 —— 天然分层：RAG 先命中笔记正文，
-                # 需要细节时智能体再按 file_id 读附件原文。
+                # ★ 解析的唯一触发点是「新内容第一次从共享库外部进入共享库」。
+                # 个人库发布属于「已有内容搬进来」→ **不解析**（用户 2026-09-25 明确要求）。
+                # 故这里固定 no_entry=1&parse=0：不另建条目、不解析、不入索引。
                 r = await client.post(f"{base}/api/file/upload?source=database&no_entry=1&parse=0",
                                       files={"file": (meta.get("name", Path(orig).name), data,
                                                       meta.get("mime") or "application/octet-stream")},

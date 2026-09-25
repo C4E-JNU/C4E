@@ -607,15 +607,14 @@ def _check_file_access(meta: dict, user: dict):
 @app.post("/api/file/upload")
 async def api_file_upload(file: UploadFile = File(...), request: Request = None,
                           source: str = "chat", no_entry: int = 0,
-                          parse: Optional[int] = None):
-    """source=chat → 私人附件（当前后端 users/<身份>/uploads，任何身份可用）；
+                          parse: Optional[int] = None, folder_id: str = ""):
+    """source=chat → 私人附件（users/<身份>/uploads，任何身份可用）；
     source=database → 共享数据库：本地实例代理到云端共享池（需登录+授权）；云端写 pool 并入索引。
 
-    parse=0 → 只存原件，不解析、不入向量索引。
-    用户 2026-09-25 定：**笔记里的附件不解析**（笔记是总结，附件是补充信息，天然分层：
-    RAG 先命中笔记正文 → 需要细节时智能体按 file_id 自己读原件）。
-    parse 缺省时跟随 no_entry：no_entry=1（笔记发布附件）→ 不解析；
-    否则（「📤 上传」文档）→ 解析（不解析就无法 RAG 检索）。
+    parse（用户 2026-09-25 定）——解析的**唯一触发点**是「新内容第一次从共享库外部进入共享库」：
+      · 显式传 parse 优先
+      · 否则看目标文件夹：落在「文档」夹（parse=true）→ 解析；「笔记」夹 → 不解析
+      · 从个人库发布进来的（no_entry=1）→ 一律不解析
     """
     content = await file.read()
     user = _cur_user(request)
@@ -623,8 +622,17 @@ async def api_file_upload(file: UploadFile = File(...), request: Request = None,
     source = (source or "chat").strip().lower()
     if source not in ("chat", "database"):
         source = "chat"
-    # 是否解析：显式 parse 优先，否则 no_entry=1 → 不解析
-    _parse = (int(parse) != 0) if parse is not None else (not no_entry)
+
+    # 是否解析：显式 > 从个人库发布(no_entry=1 → 否) > 目标文件夹的 parse 标记
+    if parse is not None:
+        _parse = int(parse) != 0
+    elif no_entry:
+        _parse = False          # 个人库发布进共享库：不解析（用户明确要求）
+    elif source == "database" and folder_id:
+        from tools.folder_tree import folder_parses
+        _parse = folder_parses(folder_id)
+    else:
+        _parse = True           # 直接上传到云端共享库且未指定文件夹 → 解析（默认文档语义）
 
     if source == "database":
         if not _AUTH_ENABLED:
@@ -643,7 +651,8 @@ async def api_file_upload(file: UploadFile = File(...), request: Request = None,
                 timeout = _httpx.Timeout(connect=30, read=600, write=600, pool=30)
                 async with _httpx.AsyncClient(timeout=timeout) as cli:
                     r = await cli.post(f"{base}/api/file/upload?source=database&no_entry={1 if no_entry else 0}"
-                                       f"&parse={1 if _parse else 0}",
+                                       f"&parse={1 if _parse else 0}"
+                                       + (f"&folder_id={folder_id}" if folder_id else ""),
                                        files={"file": (file.filename or "unknown", content)},
                                        headers={"Authorization": f"Bearer {s['token']}"})
                 try:
@@ -702,7 +711,8 @@ async def api_file_upload(file: UploadFile = File(...), request: Request = None,
                 _body = ("\n{{file:%s:%s}}\n\n---\n\n%s\n" % (_fid, _fn, _text))
             else:
                 _body = "\n{{file:%s:%s}}\n" % (_fid, _fn)
-            await add_note(_fn, _body, "__db__", owner, kind="document")
+            await add_note(_fn, _body, "__db__", owner, kind="document",
+                           folder_id=folder_id or "")
         except Exception:
             pass   # 自动建条目不阻断上传主流程
     return _res
@@ -1223,6 +1233,7 @@ class GroupOpReq(BaseModel):
     parent_id: str = ""
     intro: str = ""
     mode: str = "move_up"
+    parse: Optional[bool] = None   # 解析策略（一般跟随父夹，无需显式传）
 
 
 @app.post("/api/groups")
@@ -1238,11 +1249,13 @@ async def api_groups(req: GroupOpReq, request: Request):
         return JSONResponse({"error": "已注册，等待管理员开通数据库权限"}, status_code=403)
 
     import tools.folder_tree as FT
+    FT.ensure_roots()      # 幂等：确保「笔记」「文档」两个根文件夹存在
     action = (req.action or "list_groups").strip().lower()
     if action == "list_groups":
         return json.loads(FT.list_groups())
     if action == "create_group":
-        return json.loads(FT.create_group(req.name, req.parent_id or "", req.intro or ""))
+        return json.loads(FT.create_group(req.name, req.parent_id or "", req.intro or "",
+                                          parse=req.parse))
     if action == "update_group":
         return json.loads(FT.update_group(req.group_id, req.name or None,
                                           req.intro if req.intro != "" else None))

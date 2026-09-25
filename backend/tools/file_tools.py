@@ -413,10 +413,11 @@ async def upload_file(filename: str, content_bytes: bytes, owner: str = "",
     owner=归属用户；source=chat→users/<owner>/uploads（私人，不入索引）；
     source=database→pool/uploads（共享，入向量索引，仅云端共享库用）。
 
-    parse=False → **只存原件，不解析、不写 text.txt、不入向量索引**。
-    用户 2026-09-25 定：笔记里的附件属于「补充信息」，天然分层——
-    RAG 先命中笔记正文（人写的总结），需要细节时智能体再按 file_id 读附件原文。
-    所以笔记附件不做解析（否则几千字解析文本会污染检索，且非必要）。
+    parse 的含义（用户 2026-09-25 定）：
+      · parse=True  → 解析附件成文字，写 text.txt，进向量索引（供 RAG）
+      · parse=False → **只存原件**，不解析、不写 text.txt、不入索引
+    调用方（app.py）按「新内容首次进入共享库时落在哪个文件夹」决定：
+      落在「文档」夹（parse=true）→ True；落在「笔记」夹或库内操作 → False。
     """
     owner = owner or "guest"
     file_id = uuid.uuid4().hex  # 全量 uuid，防止被枚举他人文件

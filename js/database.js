@@ -139,13 +139,15 @@ async function _dbDelete(id) {
 function initDatabase() {
     _migrateLegacyDBIfNeeded().finally(function () { refreshDocumentList(); });
     document.getElementById('db-close-btn').addEventListener('click', closeDatabaseModal);
-    document.getElementById('db-upload-btn').addEventListener('click', () => {
+    // 上传/添加按钮已下沉到每个文件夹行（用户 2026-09-25 定）；
+    // 这里保留全局隐藏的 file input 与默认上传目标
+    var _upBtn = document.getElementById('db-upload-btn');
+    if (_upBtn) _upBtn.addEventListener('click', function () {
+        _dbUploadFolder = '';
         document.getElementById('db-file-input').click();
     });
-
-    // ＋ 新建笔记（空笔记，浮动编辑器，可贴图/插附件/表格）
     var addEntryBtn = document.getElementById('db-add-entry-btn');
-    if (addEntryBtn) addEntryBtn.addEventListener('click', dbAddEntry);
+    if (addEntryBtn) addEntryBtn.addEventListener('click', function () { dbAddEntry(''); });
 
     // 筛选/排序按钮（外置在上传旁边）—— 用户 2026-09-25 定
     // 三者都是「点开下拉 → 选中 → 作用到整棵树」
@@ -382,15 +384,18 @@ async function uploadDocument(file) {
     try {
         const fd = new FormData();
         fd.append('file', file);
-        const resp = await fetch('/api/file/upload?source=database', { method: 'POST', body: fd });
+        const _fid = (_dbUploadFolder || '');
+        const _fname = _fid ? ((_dbTree.folders.find(function (x) { return x.id === _fid; }) || {}).name || '') : '';
+        const _u = '/api/file/upload?source=database' + (_fid ? ('&folder_id=' + encodeURIComponent(_fid)) : '');
+        const resp = await fetch(_u, { method: 'POST', body: fd });
         const data = await resp.json();
         if (!resp.ok) {
             showToast('❌ 上传失败: ' + (data.error || resp.status), 'error');
             return;
         }
-        showToast(`✅ 「${file.name}」已入共享数据库，全组可检索`, 'success');
-        // 树同时展示「笔记/文档」两类，上传后刷新即可（并展开文档根）
-        _dbTree.openKind.document = true;
+        showToast(`✅ 「${file.name}」已存入${_fname ? '「' + _fname + '」' : '共享库'}，全组可检索`, 'success');
+        if (_fid) _dbTree.openGroup[_fid] = true;   // 展开刚放进的夹
+        _dbUploadFolder = '';
         refreshDocumentList();
     } catch (e) {
         showToast('❌ 上传失败: ' + e.message, 'error');
@@ -509,10 +514,11 @@ window._enhanceFileCardDelete = _enhanceFileCardDelete;
 // 切换条目分类（笔记/文档）：更新按钮文案 + 菜单态 + 重新拉取
 
 // ── 分组树状态 ─────────────────────────────────
+var _dbUploadFolder = '';   // 点某个文件夹的「📤」时，上传目标夹（按钮已下沉到每个夹）
 var _dbTree = {
-    folders: [],          // 全部文件夹（含 path/depth/parent_id/intro）
-    openKind: { note: true, document: true },  // 根节点展开态
-    openGroup: {},        // 分组展开态（gid -> bool）
+    folders: [],          // 全部文件夹（含 path/depth/parent_id/intro/parse/system）
+    openKind: { note: true, document: true },  // 兼容旧字段（树模式下不再按 kind 分组）
+    openGroup: {},        // 文件夹展开态（gid -> bool）
     owner: '',            // 筛选：上传者（''=全部）
     year: '',             // 筛选：上传年份（''=全部）
     sort: 'time'          // 排序
@@ -529,38 +535,43 @@ function _gDescendants(gid) {
     return out;
 }
 
-/** 渲染一个分组的子节点（递归） */
-function _renderGroupChildren(parentId, noteLookup, myName, isAdmin) {
-    var kids = _dbTree.folders.filter(function (f) { return (f.parent_id || '') === (parentId || ''); });
+/** 渲染某父夹下的子夹（递归）。
+ *  @param parentGid  父夹 id（'' = 根级；判断根级子夹时用 parent_id==='')
+ *  @param rootKind   所属根（笔记/文档），用于给按钮标记上传去处
+ */
+function _renderGroupChildren(parentGid, rootKind, noteLookup, myName, isAdmin) {
+    var kids = _dbTree.folders.filter(function (f) { return (f.parent_id || '') === (parentGid || ''); });
     if (!kids.length) return '';
 
     return kids.map(function (g) {
-        // 该分组（含所有后代）下的条目
+        // 该夹（含所有后代夹）下的条目
         var ids = _gDescendants(g.id);
         var mine = [];
         ids.forEach(function (id) { (noteLookup[id] || []).forEach(function (n) { mine.push(n); }); });
-        // 树上只显示有内容的组（筛选后为空则隐藏）—— 用户 2026-09-25 定
         var kidCount = _dbTree.folders.filter(function (f) { return (f.parent_id || '') === g.id; }).length;
-        if (!mine.length && !kidCount) return '';
-
+        // 空夹也显示（可先搭骨架）—— 用户 2026-09-25 定
         var isOpen = !!_dbTree.openGroup[g.id];
         var caret = (kidCount || mine.length) ? '▶' : '';
+        var sysBadge = g.system ? '<span class="db-tsys">系统</span>' : '';
         var h = '<div class="db-tnode" data-gid="' + g.id + '">';
         h += '<div class="db-tnode-row' + (isOpen ? ' open' : '') + '" data-gid="' + g.id + '">';
         h += '<span class="db-tcaret' + (isOpen ? ' open' : '') + '">' + caret + '</span>';
-        h += '<span class="db-tname">📁 ' + escHtml(g.name) + '</span>';
+        h += '<span class="db-tname">📁 ' + escHtml(g.name) + '</span>' + sysBadge;
         h += '<span class="db-tcount">' + mine.length + '</span>';
         h += '<span class="db-tacts">';
-        h += '<button data-gact="add" data-gid="' + g.id + '" title="在此分组下新建子分组">＋</button>';
+        // ★ 每个夹自己带「上传 / ＋笔记」（用户 2026-09-25 定：按钮下沉到分组）
+        h += '<button data-gact="upload" data-gid="' + g.id + '" title="上传文档到「' + escHtml(g.name) + '」（此夹内的附件会自动解析成文字）">📤</button>';
+        h += '<button data-gact="addentry" data-gid="' + g.id + '" title="在此夹新建笔记条目">＋</button>';
+        h += '<button data-gact="add" data-gid="' + g.id + '" title="在此夹下新建子文件夹">🗂️</button>';
         h += '<button data-gact="edit" data-gid="' + g.id + '" title="编辑名称与简介">✏️</button>';
-        h += '<button data-gact="del" data-gid="' + g.id + '" title="删除分组（条目不会删除）">×</button>';
+        if (!g.system) h += '<button data-gact="del" data-gid="' + g.id + '" title="删除文件夹（内容不会删除）">×</button>';
         h += '</span></div>';
         var intro = (g.intro || '').trim();
         h += '<div class="db-tintro' + (intro ? '' : ' empty') + '">'
             + (intro ? escHtml(intro) : '（无简介，点 ✏️ 添加）') + '</div>';
         if (isOpen) {
             h += '<div class="db-tchildren">';
-            h += _renderGroupChildren(g.id, noteLookup, myName, isAdmin);
+            h += _renderGroupChildren(g.id, rootKind, noteLookup, myName, isAdmin);
             mine.forEach(function (n) { h += _dbEntryCardHtml(n, myName, isAdmin); });
             h += '</div>';
         }
@@ -617,6 +628,7 @@ async function refreshDocumentList() {
 
         // 应用筛选（上传者 / 年份 / 排序）—— 条件作用在整棵树
         var all = notes.slice();
+        var html = '';
         if (_dbTree.owner) {
             all = all.filter(function (n) { return (n.owner || '') === _dbTree.owner; });
         }
@@ -645,39 +657,28 @@ async function refreshDocumentList() {
             return;
         }
 
-        // 按 kind 分桶，再按 folder_id 归位
-        var kinds = ['note', 'document'];
-        var html = '';
-        kinds.forEach(function (k) {
-            var bucket = all.filter(function (n) { return (n.kind || 'note') === k; });
-            var isOpen = _dbTree.openKind[k] !== false;
-            var label = (k === 'document') ? '📄 文档' : '📝 笔记';
-            html += '<div class="db-troot" data-kind="' + k + '">';
-            html += '<div class="db-troot-row' + (isOpen ? ' open' : '') + '" data-kind="' + k + '">';
-            html += '<span class="db-tcaret' + (isOpen ? ' open' : '') + '">▶</span>';
-            html += '<span class="db-tname">' + label + '</span>';
-            html += '<span class="db-tcount">' + bucket.length + '</span>';
-            html += '<span class="db-tacts"><button data-gact="add" data-gid="" data-kind="' + k + '" title="在「' + label + '」下新建分组">＋</button></span>';
-            html += '</div>';
-            if (isOpen) {
-                // folder_id -> 条目数组
-                var lookup = {};
-                bucket.forEach(function (n) {
-                    var fid = n.folder_id || '';
-                    if (!lookup[fid]) lookup[fid] = [];
-                    lookup[fid].push(n);
-                });
-                html += '<div class="db-tchildren">';
-                if (!_dbTree.folders.length) {
-                    html += '<div class="db-tempty">还没有分组。点上面的 ＋ 新建，或直接「📤 上传」到根级。</div>';
-                }
-                html += _renderGroupChildren('', lookup, myName, isAdmin);
-                // 未分组条目（folder_id 为空）
-                (lookup[''] || []).forEach(function (n) { html += _dbEntryCardHtml(n, myName, isAdmin); });
-                html += '</div>';
-            }
-            html += '</div>';
+        // ★ 整个共享库 = 一个文件夹树（用户 2026-09-25 定）
+        //  根级文件夹就是「📝 笔记」「📄 文档」两个（系统内置），下面挂用户自建夹
+        var lookup = {};
+        all.forEach(function (n) {
+            var fid = n.folder_id || '';
+            if (!lookup[fid]) lookup[fid] = [];
+            lookup[fid].push(n);
         });
+
+        html += _renderGroupChildren('', '', lookup, myName, isAdmin);
+
+        // 未归属任何夹的条目（理论上迁移后不该有；显示出来以免"东西不见了"）
+        var orphan = lookup[''] || [];
+        if (orphan.length) {
+            html += '<div class="db-tnode" data-gid="">';
+            html += '<div class="db-tnode-row" data-gid="">'
+                + '<span class="db-tcaret">▶</span>'
+                + '<span class="db-tname">📁 未归属</span>'
+                + '<span class="db-tcount">' + orphan.length + '</span></div>';
+            html += '<div class="db-tintro empty">这些条目还没有归入任何文件夹（可右键移动到目标夹）</div>';
+            html += '</div>';
+        }
         container.innerHTML = html;
         badge.textContent = all.length + ' 个条目'
             + (_dbTree.owner ? ' · ' + _dbTree.owner : '')
@@ -721,16 +722,7 @@ async function refreshDocumentList() {
         });
 
         // ── 树交互 ──
-        // 根节点（类型）展开折叠 / 选中
-        container.querySelectorAll('.db-troot-row').forEach(function (row) {
-            row.addEventListener('click', function (ev) {
-                if (ev.target.closest('button')) return;
-                var k = row.dataset.kind;
-                _dbTree.openKind[k] = !(_dbTree.openKind[k] !== false);
-                refreshDocumentList();
-            });
-        });
-        // 分组行：点击展开折叠；按钮 + / ✏️ / ×
+        // 文件夹行：点击展开折叠；按钮见下
         container.querySelectorAll('.db-tnode-row').forEach(function (row) {
             row.addEventListener('click', function (ev) {
                 if (ev.target.closest('button')) return;
@@ -758,6 +750,15 @@ async function refreshDocumentList() {
                     var f = _dbTree.folders.find(function (x) { return x.id === gid; });
                     if (f) _editGroup(f.id, null, '', f.name, f.intro || '');
                 } else if (act === 'del') _deleteGroupConfirm(gid);
+                else if (act === 'upload') {
+                    // ★ 上传到该文件夹（按钮下沉）—— 落在 parse=true 的夹会自动解析
+                    _dbUploadFolder = gid;
+                    var fi = document.getElementById('db-file-input');
+                    if (fi) fi.click();
+                } else if (act === 'addentry') {
+                    // 在该文件夹下新建笔记条目（不解析）
+                    dbAddEntry(gid);
+                }
             });
         });
     } catch (e) {
@@ -854,12 +855,14 @@ function dbEditEntry(id) {
     });
 }
 
-function dbAddEntry() {
+function dbAddEntry(folderId) {
     var me = (typeof window.getAuthUser === 'function') ? window.getAuthUser() : null;
     if (!me || me.username === 'guest') { showToast('请先登录', 'info'); return; }
     if (typeof window.floatingEditor === 'undefined') { showToast('编辑器未就绪', 'error'); return; }
+    var _gid = folderId || '';
+    var _gn = _gid ? ((_dbTree.folders.find(function (x) { return x.id === _gid; }) || {}).name || '') : '';
     window.floatingEditor.open({
-        title: '新建数据库条目',
+        title: _gn ? ('在「' + _gn + '」新建条目') : '新建数据库条目',
         showTitle: true,
         titleValue: '',
         value: '',
@@ -868,9 +871,14 @@ function dbAddEntry() {
             fetch('/api/notes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: t, content: newContent, branch_id: DB_BRANCH, kind: 'note' })
+                body: JSON.stringify({ title: t, content: newContent, branch_id: DB_BRANCH,
+                                      kind: 'note', folder_id: _gid })
             }).then(function (r) { return r.json(); }).then(function (d) {
-                if (d.status === 'ok') { showToast('条目已创建', 'success'); refreshDocumentList(); }
+                if (d.status === 'ok') {
+                    showToast('✅ 条目已创建', 'success');
+                    if (_gid) _dbTree.openGroup[_gid] = true;
+                    refreshDocumentList();
+                }
                 else showToast('创建失败', 'error');
             }).catch(function () { showToast('创建失败', 'error'); });
         }
@@ -980,29 +988,23 @@ async function _showMoveMenu(x, y, entryId) {
 
     const title = document.createElement('div');
     title.className = 'db-move-menu-title';
-    title.textContent = '移动到分组';
+    title.textContent = '移动到文件夹';
     menu.appendChild(title);
 
-    // 「移出分组」（回到未分组）
-    const rootItem = document.createElement('div');
-    rootItem.className = 'db-move-menu-item';
-    rootItem.textContent = '（未分组）';
-    rootItem.addEventListener('click', function () { _doMoveEntry(entryId, ''); });
-    menu.appendChild(rootItem);
-
+    // ★ 可以移到**任意文件夹**（含另一个根夹下）—— 用户 2026-09-25 定：移动永不触发解析
     if (!folders.length) {
         const empty = document.createElement('div');
         empty.className = 'db-move-menu-item';
         empty.style.color = 'var(--gray, #999)';
         empty.style.cursor = 'default';
-        empty.textContent = '（还没有分组，可在对话里让智能体创建）';
+        empty.textContent = '（还没有文件夹）';
         menu.appendChild(empty);
     } else {
         folders.forEach(function (f) {
             const it = document.createElement('div');
             it.className = 'db-move-menu-item';
             it.style.paddingLeft = (12 + (f.depth || 0) * 14) + 'px';
-            it.textContent = '📁 ' + f.name;
+            it.textContent = '📁 ' + f.name + (f.system ? '（根）' : '');
             if (f.intro) it.title = f.intro;
             it.addEventListener('click', function () { _doMoveEntry(entryId, f.id); });
             menu.appendChild(it);

@@ -1203,6 +1203,10 @@
             font-size: .82rem; color: var(--gray, #999);
             padding: .8rem .6rem; text-align: center;
         }
+        .db-tsys {
+            font-size: .66rem; color: #3b5bdb; background: #eef2ff;
+            padding: 0 5px; border-radius: 20px; line-height: 1.5;
+        }
 
         /* 分组管理面板（用户 2026-09-25 定：手动控制分组）*/
         .db-group-item {
