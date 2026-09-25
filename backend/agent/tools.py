@@ -121,18 +121,25 @@ class SharedSearchParams(BaseModel):
                      "  update_group  —— 改分组名或简介（需 group_id；可给 name、intro）\n"
                      "  move_group    —— 移动分组（需 group_id；parent_id 为目标父，空=移到根级）\n"
                      "  delete_group  —— 删除分组（需 group_id；mode=move_up 子上移(默认) / cascade 连子删）\n"
-                     "  list_entries  —— 列出条目（可给 group_id 限定某分组；不给则全部）\n"
+                     "  list_entries  —— 列出条目（**支持 owner/year/kind/sort/summary_only 过滤，见下**）\n"
                      "  move_entry    —— 把条目移到分组（需 entry_id、to_group_id；to_group_id 空=移出分组）"),
     )
     query: str = Field(default="", description="search 用：搜索关键词或自然语言问题，例如 'Fenton 催化剂制备条件'")
     top_k: int = Field(default=5, description="search 用：返回最相关的条数，默认 5")
-    group_id: str = Field(default="", description="update/move/delete_group 用：要操作的分组 id（8 位短 id 即可）")
+    group_id: str = Field(default="", description="list_entries 用：限定某分组（空=全部；\"__root__\"=未分组）；update/move/delete_group 用：要操作的分组 id（支持 8 位短 id）")
     name: str = Field(default="", description="create/update_group 用：分组名")
     parent_id: str = Field(default="", description="create/move_group 用：父分组 id；空字符串 = 根级")
     intro: str = Field(default="", description="create/update_group 用：分组简介（用户手写或你代写的一句话说明，供人阅读与检索导航）")
     mode: str = Field(default="move_up", description="delete_group 用：move_up=子分组与条目上移到父级（默认）；cascade=连同子分组一起删")
-    entry_id: str = Field(default="", description="list_entries/move_entry 用：条目 id（list_entries 可不传；move_entry 必传）")
+    entry_id: str = Field(default="", description="move_entry 用：要移动的条目 id")
     to_group_id: str = Field(default="", description="move_entry 用：目标分组 id；空字符串 = 移出分组（回到未分组）")
+    owner: str = Field(default="", description="list_entries 用：只看某用户上传的（如 \"xhq1\"；空=全部用户）")
+    year: str = Field(default="", description="list_entries 用：只看某年上传的（如 \"2026\"；按上传时间 createdAt；空=全部年份）")
+    kind: str = Field(default="", description="list_entries 用：\"note\"=笔记 / \"document\"=文档；空=两者都要")
+    sort: str = Field(default="time", description="list_entries 用：\"time\"=上传时间新→旧(默认) / \"time_asc\"=旧→新 / \"title\"=按名称")
+    summary_only: bool = Field(default=False, description=("list_entries 用：True 时**只返回各分组的条目数量**，不返回明细。\n"
+                                                           "**当你不确定资料在哪个分组时，先用 summary_only=True 看「哪个组有货」，"
+                                                           "再针对具体 group_id 拉明细 —— 这样最省 token，不要先拉全部再自己筛。**"))
 
 
 # ── 工具工厂函数 ─────────────────────────────────
@@ -614,16 +621,31 @@ tools_registry["shared_upload"] = _make_async_tool(
 tools_registry["shared_search"] = _make_async_tool(
     name="shared_search",
     description=(
-        "组内共享知识库的统一入口：语义检索 + 分组树管理。\n"
+        "组内共享知识库的统一入口：语义检索 + 分组树管理 + 条目查询。\n"
         "\n"
-        "【检索】action=search（默认）：在共享库（服务器上所有人上传的文献/文档）中做语义搜索。\n"
-        "  当问题可能涉及组内共享资料、别人上传的文献、或本地知识库没有的背景资料时使用。\n"
-        "  返回相关片段、来源文档名及相似度（含「高/中/低/弱相关」分级）。\n"
+        "【共享库的组织方式】\n"
+        "  顶层按条目类型分：笔记（人写的总结，附件不解析）与文档（上传自动解析）。\n"
+        "  下层是分组树，每个分组有【简介】说明这组放什么 —— 找资料先看简介判断方向。\n"
+        "  条目归属于某个分组，并记录了上传者(owner)与上传时间。\n"
         "\n"
-        "【分组】共享库的条目按「分组树」组织（每个分组有人写的简介，说明这组放什么）。\n"
-        "  找资料时建议先 action=list_groups 看分组树与简介，据此判断该去哪个方向找，再 search。\n"
-        "  用户说「建个分组/把这组移到xx下/改一下简介」等，用对应 action 直接做，不必问怎么做。\n"
-        "  分组顶层按条目类型天然分开：笔记（人写的总结，附件不解析）与文档（上传自动解析）。\n"
+        "【找资料的正确顺序 —— 请按这个流程，能大幅省 token】\n"
+        "  1) action=list_groups      看分组树与简介，了解有哪些方向\n"
+        "  2) action=list_entries + summary_only=True\n"
+        "     看「哪个分组有多少条」。**不确定资料在哪组时先做这步，不要直接拉全部明细。**\n"
+        "  3) action=list_entries 针对具体 group_id 拉明细（只返回标题/id/owner/时间，不含正文）\n"
+        "  4) 需要正文再 action=search 做语义检索，或读具体条目\n"
+        "\n"
+        "【过滤条件下推 —— 直接用参数筛，不要把全部拉回来自己筛】\n"
+        "  例：用户问「26 年 xhq1 传的 XX 组的内容」\n"
+        "     → action=list_entries, owner=\"xhq1\", year=\"2026\", group_id=\"<该组>\"\n"
+        "  例：不知道在哪组 → 先 summary_only=True + owner=\"xhq1\" + year=\"2026\"\n"
+        "     返回各组的条数，再挑有货的组拉明细。\n"
+        "\n"
+        "【语义检索】action=search（默认）：在共享库中做语义搜索，返回相关片段与来源文档。\n"
+        "  适合「我不知道具体在哪，按意思找」的场景。\n"
+        "\n"
+        "【管理】用户说「建个分组/把这组移到xx下/改一下简介/把某条移到某组」等，\n"
+        "  用 create_group / move_group / update_group / move_entry / delete_group 直接做，不必问怎么做。\n"
         "  注意：分组只是分类，删除分组不会删除条目（子分组与条目默认上移到父级）。"
     ),
     args_schema=SharedSearchParams,

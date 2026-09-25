@@ -383,7 +383,9 @@ def _resolve_group_id(gid: str) -> str:
 async def knowledge(action: str = "search", query: str = "", top_k: int = 5,
                     group_id: str = "", name: str = "", parent_id: str = "",
                     intro: str = "", mode: str = "move_up",
-                    entry_id: str = "", to_group_id: str = "") -> str:
+                    entry_id: str = "", to_group_id: str = "",
+                    owner: str = "", year: str = "", sort: str = "",
+                    kind: str = "", summary_only: bool = False) -> str:
     """共享知识库统一入口：语义检索 + 分组树管理 + 条目归类。
 
     分组数据在共享库（云端 pool/_folders.json）：
@@ -412,7 +414,9 @@ async def knowledge(action: str = "search", query: str = "", top_k: int = 5,
     if base:
         # 本地实例：转发到云端（云端的 /api/groups 与 /api/notes 都能处理）
         if action in ("list_entries", "move_entry"):
-            return await _entries_via_hub(action, base, gid, entry_id, tgid)
+            return await _entries_via_hub(action, base, gid, entry_id, tgid,
+                                          owner=owner, year=year, sort=sort,
+                                          kind=kind, summary_only=summary_only)
         payload = {"action": action, "group_id": gid, "name": name,
                    "parent_id": pid, "intro": intro, "mode": mode}
         timeout = httpx.Timeout(connect=30, read=120, write=120, pool=30)
@@ -437,19 +441,81 @@ async def knowledge(action: str = "search", query: str = "", top_k: int = 5,
     if action == "delete_group":
         return FT.delete_group(gid, mode)
     if action == "list_entries":
-        return await _list_entries_local(gid)
+        return await _list_entries_local(gid, owner, year, sort, kind, summary_only)
     if action == "move_entry":
         return await _move_entry_local(entry_id, tgid)
     return json.dumps({"error": f"未实现: {action}"}, ensure_ascii=False)
 
 
-async def _list_entries_local(group_id: str = "") -> str:
-    """列出共享库条目（id/标题/kind/分组），**不含正文** —— 目录用途，避免撑爆上下文。"""
-    from tools.file_tools import list_notes
-    d = json.loads(await list_notes("__db__", "xhq1", "", group_id or ""))
+async def _list_entries_local(group_id: str = "", owner: str = "",
+                              year: str = "", sort: str = "",
+                              kind: str = "", summary_only: bool = False) -> str:
+    """列出共享库条目（默认**不含正文** —— 目录用途，避免撑爆上下文）。
+
+    过滤条件（全部**下推到后端**，不要先 list 全部再让模型自己筛）：
+      group_id     — 只列某分组（""=全部；"__root__"=未分组）
+      owner        — 只列某用户上传的（""=全部）
+      year         — 只列某年上传的（"2026"；按 createdAt，""=全部）
+      kind         — "note" / "document"（""=全部）
+      sort         — "time"（默认，新→旧）/ "time_asc" / "title"
+      summary_only — True 时**只返回各分组的条目计数**，不返回明细
+                     （智能体先看「哪个组有货」，再决定按组拉明细 —— 省 token）
+    """
+    from tools.folder_tree import _load as _load_folders, _recompute_paths
+    from tools.file_tools import list_all_users_notes
+
+    notes = list_all_users_notes() or []
+    notes = [n for n in notes if (n.get("branch_id") or "") == "__db__"]
+    if group_id == "__root__":
+        notes = [n for n in notes if not (n.get("folder_id") or "")]
+    elif group_id:
+        notes = [n for n in notes if (n.get("folder_id") or "") == group_id]
+    if owner:
+        notes = [n for n in notes if (n.get("owner") or "") == owner]
+    if kind:
+        notes = [n for n in notes if (n.get("kind") or "note") == kind]
+    if year:
+        notes = [n for n in notes
+                 if str(n.get("createdAt") or n.get("updatedAt") or "").startswith(str(year))]
+
+    if sort == "title":
+        notes.sort(key=lambda n: (n.get("title") or ""))
+    elif sort == "time_asc":
+        notes.sort(key=lambda n: str(n.get("createdAt") or ""))
+    else:
+        notes.sort(key=lambda n: str(n.get("createdAt") or ""), reverse=True)
+
+    if summary_only:
+        folders = _load_folders()
+        _recompute_paths(folders)
+        fname = {f["id"]: f for f in folders}
+        buckets = {}
+        for n in notes:
+            fid = n.get("folder_id") or ""
+            buckets[fid] = buckets.get(fid, 0) + 1
+        groups = []
+        for fid, cnt in buckets.items():
+            f = fname.get(fid)
+            groups.append({
+                "group_id": fid,
+                "name": (f or {}).get("name") or "（未分组）",
+                "path": (f or {}).get("path") or "（未分组）",
+                "intro": (f or {}).get("intro") or "",
+                "count": cnt,
+            })
+        groups.sort(key=lambda g: -g["count"])
+        return json.dumps({
+            "status": "ok", "mode": "summary_only",
+            "total_entries": len(notes), "groups": groups,
+            "note": "以上是各分组的条目数（不含明细）。要看某组明细再用 "
+                    "action=list_entries 并传 group_id。",
+        }, ensure_ascii=False)
+
     items = [{"id": n.get("id"), "title": n.get("title"),
               "kind": n.get("kind") or "note",
-              "folder_id": n.get("folder_id") or ""} for n in (d.get("notes") or [])]
+              "folder_id": n.get("folder_id") or "",
+              "owner": n.get("owner") or "",
+              "created": str(n.get("createdAt") or "")} for n in notes]
     return json.dumps({"status": "ok", "total": len(items), "entries": items},
                       ensure_ascii=False)
 
@@ -468,18 +534,51 @@ async def _move_entry_local(entry_id: str, to_group_id: str) -> str:
 
 
 async def _entries_via_hub(action: str, base: str, group_id: str,
-                           entry_id: str, to_group_id: str) -> str:
+                           entry_id: str, to_group_id: str,
+                           owner: str = "", year: str = "", sort: str = "",
+                           kind: str = "", summary_only: bool = False) -> str:
     """本地实例：条目类操作转发到云端。"""
     timeout = httpx.Timeout(connect=30, read=120, write=120, pool=30)
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             if action == "list_entries":
-                q = "/api/notes?branch_id=__db__" + (f"&folder_id={group_id}" if group_id else "")
+                q = "/api/notes?branch_id=__db__"
+                if group_id:
+                    q += f"&folder_id={group_id}"
+                if kind:
+                    q += f"&kind={kind}"
                 r = await client.get(base + q, headers=_hub_headers())
                 d = json.loads(_friendly(r.text))
+                notes = d.get("notes") or []
+                # owner / year / sort 本地侧再过滤
+                # （云端 /api/notes 只支持 folder_id / kind；但结果默认不含正文，token 可接受）
+                if owner:
+                    notes = [n for n in notes if (n.get("owner") or "") == owner]
+                if year:
+                    notes = [n for n in notes if str(n.get("createdAt") or n.get("updatedAt")
+                                                     or "").startswith(str(year))]
+                if sort == "title":
+                    notes.sort(key=lambda n: (n.get("title") or ""))
+                elif sort == "time_asc":
+                    notes.sort(key=lambda n: str(n.get("createdAt") or ""))
+                else:
+                    notes.sort(key=lambda n: str(n.get("createdAt") or ""), reverse=True)
+                if summary_only:
+                    buckets = {}
+                    for n in notes:
+                        fid = n.get("folder_id") or ""
+                        buckets[fid] = buckets.get(fid, 0) + 1
+                    return json.dumps({"status": "ok", "mode": "summary_only",
+                                       "total_entries": len(notes),
+                                       "groups": [{"group_id": k, "count": v}
+                                                  for k, v in sorted(buckets.items(),
+                                                                     key=lambda x: -x[1])]},
+                                      ensure_ascii=False)
                 items = [{"id": n.get("id"), "title": n.get("title"),
                           "kind": n.get("kind") or "note",
-                          "folder_id": n.get("folder_id") or ""} for n in (d.get("notes") or [])]
+                          "folder_id": n.get("folder_id") or "",
+                          "owner": n.get("owner") or "",
+                          "created": str(n.get("createdAt") or "")} for n in notes]
                 return json.dumps({"status": "ok", "total": len(items), "entries": items},
                                   ensure_ascii=False)
             r = await client.put(base + "/api/notes",

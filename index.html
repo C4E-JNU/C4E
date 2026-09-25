@@ -30,7 +30,7 @@
     <!-- 本地样式文件 -->
     <link rel="stylesheet" href="css/variables.css?v=5">
     <link rel="stylesheet" href="css/reset.css?v=4">
-    <link rel="stylesheet" href="css/layout.css?v=17">
+    <link rel="stylesheet" href="css/layout.css?v=18">
     <link rel="stylesheet" href="css/sidebar.css?v=6">
     <link rel="stylesheet" href="css/messages.css?v=2">
     <link rel="stylesheet" href="css/input.css?v=7">
@@ -103,30 +103,31 @@
             <div class="notes-panel-actions">
                 <button id="db-upload-btn" title="上传文档：自动解析并新建「文档条目」">📤 上传</button>
                 <button id="db-add-entry-btn" title="新建笔记条目（手写内容）">＋ 笔记</button>
-                <!-- 分组管理：查看/新建/编辑简介/移动/删除分组 -->
-                <button id="db-groups-btn" title="管理分组（新建 / 编辑简介 / 移动 / 删除）">📁 分组</button>
-                <!-- 筛选：切换查看「笔记」或「文档」条目（两者结构一致，仅分类不同） -->
+                <!-- 筛选/排序：外置到上传旁边（用户 2026-09-25 定） -->
                 <span class="db-filter-wrap">
-                    <button id="db-filter-btn" title="筛选：笔记 / 文档" aria-haspopup="true" aria-expanded="false">
-                        <span id="db-filter-label">📝 笔记</span> ▾
+                    <button id="db-f-owner-btn" title="按上传者筛选" aria-haspopup="true">
+                        <span id="db-f-owner-label">👤 全部</span> ▾
                     </button>
-                    <div class="db-filter-menu" id="db-filter-menu" role="menu" hidden>
-                        <button class="db-filter-item active" data-kind="note" role="menuitem">📝 笔记</button>
-                        <button class="db-filter-item" data-kind="document" role="menuitem">📄 文档</button>
+                    <div class="db-filter-menu" id="db-f-owner-menu" role="menu" hidden></div>
+                </span>
+                <span class="db-filter-wrap">
+                    <button id="db-f-year-btn" title="按上传年份筛选" aria-haspopup="true">
+                        <span id="db-f-year-label">📅 全部</span> ▾
+                    </button>
+                    <div class="db-filter-menu" id="db-f-year-menu" role="menu" hidden></div>
+                </span>
+                <span class="db-filter-wrap">
+                    <button id="db-f-sort-btn" title="排序方式" aria-haspopup="true">
+                        <span id="db-f-sort-label">🕒 最新</span> ▾
+                    </button>
+                    <div class="db-filter-menu" id="db-f-sort-menu" role="menu" hidden>
+                        <button class="db-filter-item active" data-sort="time" role="menuitem">🕒 上传时间（新→旧）</button>
+                        <button class="db-filter-item" data-sort="time_asc" role="menuitem">🕒 上传时间（旧→新）</button>
+                        <button class="db-filter-item" data-sort="title" role="menuitem">🔤 名称</button>
                     </div>
                 </span>
                 <button id="db-close-btn" class="notes-close-btn" title="关闭">×</button>
             </div>
-        </div>
-        <!-- 分组管理面板（覆盖条目列表区域） -->
-        <div id="db-groups-view" style="display:none;flex:1;overflow-y:auto;padding:0.6rem;">
-            <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.5rem;">
-                <button id="db-groups-back" title="返回条目列表"
-                    style="background:none;border:none;cursor:pointer;font-size:.85rem;color:var(--gray);padding:.2rem .3rem;">← 返回</button>
-                <button id="db-groups-new" title="在根级新建分组"
-                    style="margin-left:auto;font-size:.82rem;">＋ 新建分组</button>
-            </div>
-            <div id="db-groups-list"></div>
         </div>
         <input type="file" id="db-file-input" style="display:none;" multiple
             accept="image/*,.txt,.md,.js,.py,.c,.cpp,.h,.html,.css,.json,.csv,.log,.yaml,.yml,.sql,.sh,.xml,.ts,.java,.go,.rs,.docx,.pdf,.pptx,.odt,.rtf,.toml,.ini,.tex">
@@ -886,7 +887,7 @@
     <script src="js/file_preview.js?v=11"></script>
     <script src="js/auth.js?v=19"></script>
     <script src="js/api.js?v=5"></script>
-    <script src="js/database.js?v=16"></script>
+    <script src="js/database.js?v=17"></script>
     <script src="js/sidebar.js?v=9"></script>
     <script src="js/branching.js?v=9"></script>
     <script src="js/provider.js?v=4"></script>

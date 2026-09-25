@@ -53,9 +53,15 @@ chk backend/agent/tools.py 'knowledge as _knowledge' '知识库工具统一入�
 chk backend/tools/shared_hub.py 'async def knowledge' 'shared_hub 统一 knowledge 分发'
 chk backend/app.py '@app.post("/api/groups")' 'app.py 分组端点'
 chk js/database.js '_showMoveMenu' '前端右键条目「移动到分组」菜单'
-chk js/database.js 'openGroupsPanel' '前端分组管理面板'
 chk js/database.js '_editGroup' '分组新建/编辑走经典浮窗'
-chk index.html 'db-groups-btn' 'header 有「📁 分组」按钮'
+# 树为骨架（用户 2026-09-25 定）：类型是根节点，分组在下，筛选排序外置
+chk js/database.js '_renderGroupChildren' '树形渲染（类型→分组→条目）'
+chk js/database.js '_dbTree' '树状态（展开态/筛选/排序）'
+chk index.html 'db-f-owner-btn' '筛选器外置：上传者'
+chk index.html 'db-f-year-btn' '筛选器外置：年份'
+chk index.html 'db-f-sort-btn' '排序器外置'
+chk backend/tools/shared_hub.py 'summary_only' 'list_entries 支持 summary_only（省 token）'
+chk backend/tools/shared_hub.py 'year: str = ""' 'list_entries 支持 year 过滤（条件下推）'
 # Neo4j 失败必须降级而非终止对话（三处：两流式 + 一非流式）
 _n4="$(grep -c '连不上只降级摘掉图谱工具' backend/agent/agent.py 2>/dev/null || echo 0)"
 if [ "$_n4" -ge 3 ]; then ok "Neo4j 失败降级 ($_n4 处)"; else bad "Neo4j 降级仅 $_n4 处（应≥3）"; fi

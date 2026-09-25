@@ -147,51 +147,47 @@ function initDatabase() {
     var addEntryBtn = document.getElementById('db-add-entry-btn');
     if (addEntryBtn) addEntryBtn.addEventListener('click', dbAddEntry);
 
-    // 筛选按钮：下拉切换「笔记 / 文档」——用户 2026-09-22 定
-    // （原 Tab 条占一整行、且未登录时两栏内容相同，看着像"点了没反应"，故改为单按钮）
-    var _gbtn = document.getElementById('db-groups-btn');
-    if (_gbtn) {
-        _gbtn.addEventListener('click', function () {
-            if (typeof openGroupsPanel === 'function') openGroupsPanel();
-        });
-    }
-    var _gback = document.getElementById('db-groups-back');
-    if (_gback) {
-        _gback.addEventListener('click', function () {
-            _showGroupsView(false);
-            if (typeof refreshDocumentList === 'function') refreshDocumentList();
-        });
-    }
-    var _gnew = document.getElementById('db-groups-new');
-    if (_gnew) {
-        _gnew.addEventListener('click', function () { _editGroup(null, '', ''); });
-    }
-
-    var _fbtn = document.getElementById('db-filter-btn');
-    var _fmenu = document.getElementById('db-filter-menu');
-    if (_fbtn && _fmenu) {
-        _fbtn.addEventListener('click', function (e) {
+    // 筛选/排序按钮（外置在上传旁边）—— 用户 2026-09-25 定
+    // 三者都是「点开下拉 → 选中 → 作用到整棵树」
+    function _bindFilter(btnId, menuId) {
+        var b = document.getElementById(btnId), m = document.getElementById(menuId);
+        if (!b || !m) return;
+        b.addEventListener('click', function (e) {
             e.stopPropagation();
-            var open = !_fmenu.hidden;
-            _fmenu.hidden = open;
-            _fbtn.setAttribute('aria-expanded', open ? 'false' : 'true');
+            var wasHidden = m.hidden;
+            // 先关掉其它菜单
+            ['db-f-owner-menu', 'db-f-year-menu', 'db-f-sort-menu'].forEach(function (id) {
+                var x = document.getElementById(id);
+                if (x && x !== m) x.hidden = true;
+            });
+            m.hidden = !wasHidden;
         });
-        _fmenu.querySelectorAll('.db-filter-item').forEach(function (b) {
+        m.addEventListener('click', function (e) { e.stopPropagation(); });
+        document.addEventListener('click', function () { m.hidden = true; });
+    }
+    _bindFilter('db-f-owner-btn', 'db-f-owner-menu');
+    _bindFilter('db-f-year-btn', 'db-f-year-menu');
+    _bindFilter('db-f-sort-btn', 'db-f-sort-menu');
+
+    // 排序菜单：静态项，绑定一次
+    var _sm = document.getElementById('db-f-sort-menu');
+    if (_sm) {
+        _sm.querySelectorAll('.db-filter-item').forEach(function (b) {
             b.addEventListener('click', function (e) {
                 e.stopPropagation();
-                _fmenu.hidden = true;
-                _fbtn.setAttribute('aria-expanded', 'false');
-                _switchDbKind(b.dataset.kind || 'note');
+                var s = b.dataset.sort || 'time';
+                _dbTree.sort = s;
+                _sm.querySelectorAll('.db-filter-item').forEach(function (x) {
+                    x.classList.toggle('active', x === b);
+                });
+                document.getElementById('db-f-sort-label').textContent =
+                    s === 'title' ? '🔤 名称' : (s === 'time_asc' ? '🕒 最早' : '🕒 最新');
+                _sm.hidden = true;
+                refreshDocumentList();
             });
         });
-        // 点别处收起
-        document.addEventListener('click', function () {
-            if (!_fmenu.hidden) {
-                _fmenu.hidden = true;
-                _fbtn.setAttribute('aria-expanded', 'false');
-            }
-        });
     }
+
     document.getElementById('db-file-input').addEventListener('change', async (e) => {
         // 支持多选：逐个上传（每个文件各自建立一个条目）
         const files = Array.from(e.target.files || []);
@@ -214,8 +210,7 @@ function initDatabase() {
 function openDatabaseModal() {
     var p = document.getElementById('database-panel');
     if (!p) return;
-    // 每次打开都回到条目列表（避免上次停在分组面板上造成"打开是空的"错觉）
-    if (typeof _showGroupsView === 'function') _showGroupsView(false);
+    // 直接进入条目树（分组管理已合并进树，无独立面板）
     // 用浮窗控制器打开（应用记忆的尺寸/位置）；控制器未就绪时退化为基础显示
     if (window.__dbPanelFloat && window.__dbPanelFloat.open) {
         window.__dbPanelFloat.open();
@@ -394,8 +389,8 @@ async function uploadDocument(file) {
             return;
         }
         showToast(`✅ 「${file.name}」已入共享数据库，全组可检索`, 'success');
-        // 上传建的是「文档条目」→ 自动切到文档 Tab，否则用户在笔记 Tab 看不到结果
-        if (_dbKind !== 'document' && typeof _switchDbKind === 'function') _switchDbKind('document');
+        // 树同时展示「笔记/文档」两类，上传后刷新即可（并展开文档根）
+        _dbTree.openKind.document = true;
         refreshDocumentList();
     } catch (e) {
         showToast('❌ 上传失败: ' + e.message, 'error');
@@ -451,7 +446,7 @@ var _dbEntryCollapsed = {};
 var _dbEntries = [];   // 最近一次条目缓存（供编辑回显）
 // 当前展示的条目类型：note=笔记（默认，人写）/ document=文档（机器解析，供检索）
 // 用户 2026-09-22 定：两者数据结构完全一致，只是分类不同，用于 Tab 切换展示。
-var _dbKind = 'note';
+// _dbKind 已废弃：树模式下「笔记/文档」是根节点，同时展示，无需切换
 
 function _dbEntryBodyHtml(n) {
     return n.content
@@ -512,21 +507,93 @@ function _enhanceFileCardDelete(container, getNote, onChanged) {
 window._enhanceFileCardDelete = _enhanceFileCardDelete;
 
 // 切换条目分类（笔记/文档）：更新按钮文案 + 菜单态 + 重新拉取
-function _switchDbKind(kind) {
-    kind = kind || 'note';
-    if (kind === _dbKind) return;
-    _dbKind = kind;
-    var label = document.getElementById('db-filter-label');
-    if (label) label.textContent = (kind === 'document') ? '📄 文档' : '📝 笔记';
-    var menu = document.getElementById('db-filter-menu');
-    if (menu) {
-        menu.querySelectorAll('.db-filter-item').forEach(function (b) {
-            b.classList.toggle('active', (b.dataset.kind || 'note') === kind);
-        });
-    }
-    refreshDocumentList();
+
+// ── 分组树状态 ─────────────────────────────────
+var _dbTree = {
+    folders: [],          // 全部文件夹（含 path/depth/parent_id/intro）
+    openKind: { note: true, document: true },  // 根节点展开态
+    openGroup: {},        // 分组展开态（gid -> bool）
+    owner: '',            // 筛选：上传者（''=全部）
+    year: '',             // 筛选：上传年份（''=全部）
+    sort: 'time'          // 排序
+};
+
+/** 某分组的后代 id 集合（含自己） */
+function _gDescendants(gid) {
+    var out = [gid];
+    var walk = function (p) {
+        _dbTree.folders.filter(function (f) { return (f.parent_id || '') === p; })
+            .forEach(function (k) { out.push(k.id); walk(k.id); });
+    };
+    walk(gid);
+    return out;
 }
 
+/** 渲染一个分组的子节点（递归） */
+function _renderGroupChildren(parentId, noteLookup, myName, isAdmin) {
+    var kids = _dbTree.folders.filter(function (f) { return (f.parent_id || '') === (parentId || ''); });
+    if (!kids.length) return '';
+
+    return kids.map(function (g) {
+        // 该分组（含所有后代）下的条目
+        var ids = _gDescendants(g.id);
+        var mine = [];
+        ids.forEach(function (id) { (noteLookup[id] || []).forEach(function (n) { mine.push(n); }); });
+        // 树上只显示有内容的组（筛选后为空则隐藏）—— 用户 2026-09-25 定
+        var kidCount = _dbTree.folders.filter(function (f) { return (f.parent_id || '') === g.id; }).length;
+        if (!mine.length && !kidCount) return '';
+
+        var isOpen = !!_dbTree.openGroup[g.id];
+        var caret = (kidCount || mine.length) ? '▶' : '';
+        var h = '<div class="db-tnode" data-gid="' + g.id + '">';
+        h += '<div class="db-tnode-row' + (isOpen ? ' open' : '') + '" data-gid="' + g.id + '">';
+        h += '<span class="db-tcaret' + (isOpen ? ' open' : '') + '">' + caret + '</span>';
+        h += '<span class="db-tname">📁 ' + escHtml(g.name) + '</span>';
+        h += '<span class="db-tcount">' + mine.length + '</span>';
+        h += '<span class="db-tacts">';
+        h += '<button data-gact="add" data-gid="' + g.id + '" title="在此分组下新建子分组">＋</button>';
+        h += '<button data-gact="edit" data-gid="' + g.id + '" title="编辑名称与简介">✏️</button>';
+        h += '<button data-gact="del" data-gid="' + g.id + '" title="删除分组（条目不会删除）">×</button>';
+        h += '</span></div>';
+        var intro = (g.intro || '').trim();
+        h += '<div class="db-tintro' + (intro ? '' : ' empty') + '">'
+            + (intro ? escHtml(intro) : '（无简介，点 ✏️ 添加）') + '</div>';
+        if (isOpen) {
+            h += '<div class="db-tchildren">';
+            h += _renderGroupChildren(g.id, noteLookup, myName, isAdmin);
+            mine.forEach(function (n) { h += _dbEntryCardHtml(n, myName, isAdmin); });
+            h += '</div>';
+        }
+        h += '</div>';
+        return h;
+    }).join('');
+}
+
+/** 单条条目的卡片 HTML（与改造前完全一致的渲染） */
+function _dbEntryCardHtml(n, myName, isAdmin) {
+    var owner = n.owner || 'admin';
+    var canEdit = (owner === myName) || isAdmin;
+    var collapsed = _dbEntryCollapsed[n.id] !== undefined ? _dbEntryCollapsed[n.id] : true;
+    var refBtn = '<button class="db-entry-ref" data-id="' + n.id + '" title="引用给智能体（发送时带上该条目全文，可让它增删改查）" style="background:none;border:none;cursor:pointer;font-size:.9rem;padding:.1rem .3rem;">📌</button>';
+    var actions = refBtn + (canEdit
+        ? ('<button class="db-entry-edit" data-id="' + n.id + '" title="编辑条目" style="background:none;border:none;cursor:pointer;font-size:.95rem;padding:.1rem .3rem;">✏️</button>'
+        +  '<button class="db-entry-del" data-id="' + n.id + '" title="删除条目" style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:1.05rem;padding:.1rem .3rem;">×</button>')
+        : '');
+    return '<div class="note-card" data-eid="' + n.id + '" data-owner="' + escHtml(owner) + '">'
+        + '<div class="note-card-header db-entry-toggle" data-id="' + n.id + '" style="cursor:pointer;">'
+        + '<span class="note-card-title">' + escHtml(n.title || '未命名条目') + '</span>'
+        + '<div class="note-card-header-actions" style="display:flex;gap:.15rem;" onclick="event.stopPropagation();">' + actions + '</div>'
+        + '</div>'
+        + '<div class="note-card-body" id="db-entry-body-' + n.id + '"' + (collapsed ? ' style="display:none;"' : '') + '>'
+        + '<div class="message-content">' + _dbEntryBodyHtml(n) + '</div>'
+        + '</div></div>';
+}
+
+// ═══════════════════════════════════════════════
+// 列表渲染（用户 2026-09-25 定：树为骨架）
+//   根节点 = 类型（笔记/文档）；下层 = 分组树；叶子 = 条目卡片（与改造前一致）
+//   筛选（上传者/年份/排序）外置在标题栏，作用于整棵树
+// ═══════════════════════════════════════════════
 async function refreshDocumentList() {
     const container = document.getElementById('db-doc-list');
     const badge = document.getElementById('database-status-badge');
@@ -537,61 +604,91 @@ async function refreshDocumentList() {
         return;
     }
     container.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--gray);">加载中…</div>';
-    const _kind = _dbKind;
+
     try {
-        const r = await fetch('/api/notes?branch_id=' + encodeURIComponent(DB_BRANCH) + '&kind=' + _kind);
-        const d = await r.json();
-        const notes = d.notes || [];
-        _dbEntries = notes;
-        badge.textContent = notes.length + ' 个' + (_kind === 'document' ? '文档' : '笔记');
-        if (!notes.length) {
-            container.innerHTML = _kind === 'document'
-                ? '<div style="text-align:center;padding:2rem;color:var(--gray);font-size:0.9rem;">暂无文档条目<br><span style="font-size:.78rem;">点「📤 上传」自动解析文件并建条目</span></div>'
-                : '<div style="text-align:center;padding:2rem;color:var(--gray);font-size:0.9rem;">暂无笔记<br><span style="font-size:.78rem;">点「＋ 笔记」手写，或从个人笔记「上传到数据库」</span></div>';
+        // 拉全部条目（含 kind/folder_id/owner/时间，不含正文）+ 分组树
+        const [notes, folders] = await Promise.all([
+            fetch('/api/notes?branch_id=' + encodeURIComponent(DB_BRANCH))
+                .then(function (r) { return r.json(); })
+                .then(function (d) { return d.notes || []; }),
+            _fetchGroups()
+        ]);
+        _dbTree.folders = folders || [];
+
+        // 应用筛选（上传者 / 年份 / 排序）—— 条件作用在整棵树
+        var all = notes.slice();
+        if (_dbTree.owner) {
+            all = all.filter(function (n) { return (n.owner || '') === _dbTree.owner; });
+        }
+        if (_dbTree.year) {
+            all = all.filter(function (n) {
+                return String(n.createdAt || n.updatedAt || '').indexOf(_dbTree.year) === 0;
+            });
+        }
+        if (_dbTree.sort === 'title') {
+            all.sort(function (a, b) { return String(a.title || '').localeCompare(String(b.title || '')); });
+        } else if (_dbTree.sort === 'time_asc') {
+            all.sort(function (a, b) { return String(a.createdAt || '').localeCompare(String(b.createdAt || '')); });
+        } else {
+            all.sort(function (a, b) { return String(b.createdAt || '').localeCompare(String(a.createdAt || '')); });
+        }
+
+        _dbEntries = all;
+        var myName = me.username, isAdmin = (me.username === 'admin');
+        _refreshFilterMenus(all);
+
+        if (!all.length) {
+            badge.textContent = '0 个条目';
+            container.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--gray);font-size:0.9rem;">'
+                + (_dbTree.owner || _dbTree.year ? '当前筛选条件下没有条目<br><span style="font-size:.78rem;">试试把「👤 / 📅」改回「全部」</span>'
+                   : '暂无条目<br><span style="font-size:.78rem;">点「📤 上传」或「＋ 笔记」</span>') + '</div>';
             return;
         }
-        var myName = me.username, isAdmin = (me.username === 'admin');
-        // 按 owner 分组：每组一个 "👤 用户名" 小标题（本人排最前）
-        var groups = {};
-        var order = [];
-        notes.forEach(function (n) {
-            var o = n.owner || 'admin';
-            if (!groups[o]) { groups[o] = []; order.push(o); }
-            groups[o].push(n);
-        });
-        order.sort(function (a, b) {
-            if (a === myName) return -1;
-            if (b === myName) return 1;
-            return a.localeCompare(b);
-        });
-        container.innerHTML = order.map(function (o) {
-            var sectionHead = '<div style="padding:.45rem .2rem .25rem;font-size:.78rem;color:var(--gray,#999);font-weight:600;">👤 '
-                + escHtml(o) + (o === myName ? '（我）' : '') + '</div>';
-            return sectionHead + groups[o].map(function (n) {
-                var owner = n.owner || 'admin';
-                var canEdit = (owner === myName) || isAdmin;
-                var collapsed = _dbEntryCollapsed[n.id] !== undefined ? _dbEntryCollapsed[n.id] : true;
-                var refBtn = '<button class="db-entry-ref" data-id="' + n.id + '" title="引用给智能体（发送时带上该条目全文，可让它增删改查）" style="background:none;border:none;cursor:pointer;font-size:.9rem;padding:.1rem .3rem;">📌</button>';
-                var actions = refBtn + (canEdit
-                    ? ('<button class="db-entry-edit" data-id="' + n.id + '" title="编辑条目" style="background:none;border:none;cursor:pointer;font-size:.95rem;padding:.1rem .3rem;">✏️</button>'
-                    +  '<button class="db-entry-del" data-id="' + n.id + '" title="删除条目" style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:1.05rem;padding:.1rem .3rem;">×</button>')
-                    : '');
-                return '<div class="note-card" data-eid="' + n.id + '" data-owner="' + escHtml(owner) + '">'
-                    + '<div class="note-card-header db-entry-toggle" data-id="' + n.id + '" style="cursor:pointer;">'
-                    + '<span class="note-card-title">' + escHtml(n.title || '未命名条目') + '</span>'
-                    + '<div class="note-card-header-actions" style="display:flex;gap:.15rem;" onclick="event.stopPropagation();">' + actions + '</div>'
-                    + '</div>'
-                    + '<div class="note-card-body" id="db-entry-body-' + n.id + '"' + (collapsed ? ' style="display:none;"' : '') + '>'
-                    + '<div class="message-content">' + _dbEntryBodyHtml(n) + '</div>'
-                    + '</div></div>';
-            }).join('');
-        }).join('');
 
-        // 附件卡片 × 删除（编辑权限内）：从条目正文移除对应 {{file:..}} 占位
+        // 按 kind 分桶，再按 folder_id 归位
+        var kinds = ['note', 'document'];
+        var html = '';
+        kinds.forEach(function (k) {
+            var bucket = all.filter(function (n) { return (n.kind || 'note') === k; });
+            var isOpen = _dbTree.openKind[k] !== false;
+            var label = (k === 'document') ? '📄 文档' : '📝 笔记';
+            html += '<div class="db-troot" data-kind="' + k + '">';
+            html += '<div class="db-troot-row' + (isOpen ? ' open' : '') + '" data-kind="' + k + '">';
+            html += '<span class="db-tcaret' + (isOpen ? ' open' : '') + '">▶</span>';
+            html += '<span class="db-tname">' + label + '</span>';
+            html += '<span class="db-tcount">' + bucket.length + '</span>';
+            html += '<span class="db-tacts"><button data-gact="add" data-gid="" data-kind="' + k + '" title="在「' + label + '」下新建分组">＋</button></span>';
+            html += '</div>';
+            if (isOpen) {
+                // folder_id -> 条目数组
+                var lookup = {};
+                bucket.forEach(function (n) {
+                    var fid = n.folder_id || '';
+                    if (!lookup[fid]) lookup[fid] = [];
+                    lookup[fid].push(n);
+                });
+                html += '<div class="db-tchildren">';
+                if (!_dbTree.folders.length) {
+                    html += '<div class="db-tempty">还没有分组。点上面的 ＋ 新建，或直接「📤 上传」到根级。</div>';
+                }
+                html += _renderGroupChildren('', lookup, myName, isAdmin);
+                // 未分组条目（folder_id 为空）
+                (lookup[''] || []).forEach(function (n) { html += _dbEntryCardHtml(n, myName, isAdmin); });
+                html += '</div>';
+            }
+            html += '</div>';
+        });
+        container.innerHTML = html;
+        badge.textContent = all.length + ' 个条目'
+            + (_dbTree.owner ? ' · ' + _dbTree.owner : '')
+            + (_dbTree.year ? ' · ' + _dbTree.year + '年' : '');
+
+        // 附件卡片 × 删除
         _enhanceFileCardDelete(container, function (noteId) {
             return _dbEntries.find(function (x) { return x.id === noteId; });
         }, function () { refreshDocumentList(); });
 
+        // 条目展开/折叠
         container.querySelectorAll('.db-entry-toggle').forEach(function (el) {
             el.addEventListener('click', function () {
                 var id = el.dataset.id;
@@ -609,12 +706,11 @@ async function refreshDocumentList() {
         container.querySelectorAll('.db-entry-del').forEach(function (btn) {
             btn.addEventListener('click', function () { dbDeleteEntry(btn.dataset.id); });
         });
-        // 引用给智能体（任何可见条目都能引用，用于让智能体读取/修改）
         container.querySelectorAll('.db-entry-ref').forEach(function (btn) {
             btn.addEventListener('click', function () { if (window.refDbEntry) window.refDbEntry(btn.dataset.id); });
         });
 
-        // 右键菜单：把条目移到分组（用户 2026-09-25 定：方案 B —— 右键「移动到…」）
+        // 右键条目 → 移动到分组
         container.querySelectorAll('.note-card[data-eid]').forEach(function (card) {
             card.addEventListener('contextmenu', function (ev) {
                 ev.preventDefault();
@@ -623,10 +719,114 @@ async function refreshDocumentList() {
                 _showMoveMenu(ev.clientX, ev.clientY, card.dataset.eid);
             });
         });
+
+        // ── 树交互 ──
+        // 根节点（类型）展开折叠 / 选中
+        container.querySelectorAll('.db-troot-row').forEach(function (row) {
+            row.addEventListener('click', function (ev) {
+                if (ev.target.closest('button')) return;
+                var k = row.dataset.kind;
+                _dbTree.openKind[k] = !(_dbTree.openKind[k] !== false);
+                refreshDocumentList();
+            });
+        });
+        // 分组行：点击展开折叠；按钮 + / ✏️ / ×
+        container.querySelectorAll('.db-tnode-row').forEach(function (row) {
+            row.addEventListener('click', function (ev) {
+                if (ev.target.closest('button')) return;
+                var gid = row.dataset.gid;
+                if (ev.target.classList.contains('db-tcaret')) {
+                    _dbTree.openGroup[gid] = !_dbTree.openGroup[gid];
+                    refreshDocumentList();
+                } else {
+                    _dbTree.openGroup[gid] = true;
+                    refreshDocumentList();
+                }
+            });
+            // 右键分组 → 移动
+            row.addEventListener('contextmenu', function (ev) {
+                ev.preventDefault();
+                _showMoveGroupMenu(ev.clientX, ev.clientY, row.dataset.gid);
+            });
+        });
+        container.querySelectorAll('.db-tacts button').forEach(function (b) {
+            b.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                var act = b.dataset.gact, gid = b.dataset.gid || '';
+                if (act === 'add') _editGroup(null, gid, '');
+                else if (act === 'edit') {
+                    var f = _dbTree.folders.find(function (x) { return x.id === gid; });
+                    if (f) _editGroup(f.id, null, '', f.name, f.intro || '');
+                } else if (act === 'del') _deleteGroupConfirm(gid);
+            });
+        });
     } catch (e) {
         console.error('加载数据库条目失败:', e);
         container.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--error);">加载失败</div>';
     }
+}
+
+/** 刷新筛选菜单选项（上传者列表从实际数据里取） */
+function _refreshFilterMenus(notes) {
+    // 上传者
+    var owners = {};
+    notes.forEach(function (n) { var o = n.owner || 'admin'; owners[o] = (owners[o] || 0) + 1; });
+    var om = document.getElementById('db-f-owner-menu');
+    if (om) {
+        var items = ['<button class="db-filter-item' + (_dbTree.owner === '' ? ' active' : '')
+                     + '" data-owner="" role="menuitem">👤 全部上传者</button>'];
+        Object.keys(owners).sort().forEach(function (o) {
+            items.push('<button class="db-filter-item' + (_dbTree.owner === o ? ' active' : '')
+                       + '" data-owner="' + escHtml(o) + '" role="menuitem">👤 ' + escHtml(o)
+                       + ' <span style="color:var(--gray);font-size:.8rem;">(' + owners[o] + ')</span></button>');
+        });
+        om.innerHTML = items.join('');
+        om.querySelectorAll('.db-filter-item').forEach(function (b) {
+            b.addEventListener('click', function () {
+                _dbTree.owner = b.dataset.owner || '';
+                document.getElementById('db-f-owner-label').textContent =
+                    _dbTree.owner ? ('👤 ' + _dbTree.owner) : '👤 全部';
+                om.hidden = true;
+                refreshDocumentList();
+            });
+        });
+    }
+    // 年份：从「全部条目」里取（不受当前筛选影响，否则选了就只有一个选项）
+    var ym = document.getElementById('db-f-year-menu');
+    if (ym && !ym.dataset.filled) {
+        _fetchAllYears();
+    }
+}
+
+async function _fetchAllYears() {
+    var ym = document.getElementById('db-f-year-menu');
+    if (!ym) return;
+    var years = {};
+    try {
+        var d = await fetch('/api/notes?branch_id=' + encodeURIComponent(DB_BRANCH)).then(function (r) { return r.json(); });
+        (d.notes || []).forEach(function (n) {
+            var y = String(n.createdAt || n.updatedAt || '').slice(0, 4);
+            if (y.length === 4) years[y] = (years[y] || 0) + 1;
+        });
+    } catch (e) { /* 取不到就只给「全部」 */ }
+    var items = ['<button class="db-filter-item' + (_dbTree.year === '' ? ' active' : '')
+                 + '" data-year="" role="menuitem">📅 全部年份</button>'];
+    Object.keys(years).sort().reverse().forEach(function (y) {
+        items.push('<button class="db-filter-item' + (_dbTree.year === y ? ' active' : '')
+                   + '" data-year="' + y + '" role="menuitem">📅 ' + y + ' 年'
+                   + ' <span style="color:var(--gray);font-size:.8rem;">(' + years[y] + ')</span></button>');
+    });
+    ym.innerHTML = items.join('');
+    ym.dataset.filled = '1';
+    ym.querySelectorAll('.db-filter-item').forEach(function (b) {
+        b.addEventListener('click', function () {
+            _dbTree.year = b.dataset.year || '';
+            document.getElementById('db-f-year-label').textContent =
+                _dbTree.year ? ('📅 ' + _dbTree.year) : '📅 全部';
+            ym.hidden = true;
+            refreshDocumentList();
+        });
+    });
 }
 
 function dbToggleCollapse(id) { /* 由 header 点击委托处理 */ }
@@ -842,7 +1042,6 @@ async function _doMoveEntry(entryId, groupId) {
 
 window._showMoveMenu = _showMoveMenu;
 
-
 // ═══════════════════════════════════════════════
 // 分组管理面板（用户 2026-09-25 定：手动控制分组）
 // 「📁 分组」按钮 → 列表；每项可编辑（经典浮窗改名字+简介）/移动/删除/加子组
@@ -860,82 +1059,10 @@ async function _groupOp(payload) {
     return d;
 }
 
-function _showGroupsView(show) {
-    const gv = document.getElementById('db-groups-view');
-    const dl = document.getElementById('db-doc-list');
-    const em = document.getElementById('db-empty');
-    if (!gv) return;
-    gv.style.display = show ? 'block' : 'none';
-    if (dl) dl.style.display = show ? 'none' : '';
-    if (em && show) em.style.display = 'none';
-}
-
-/** 打开分组管理面板 */
-async function openGroupsPanel() {
-    _showGroupsView(true);
-    await refreshGroupsList();
-}
-
-/** 渲染分组列表（缩进显示层级） */
-async function refreshGroupsList() {
-    const box = document.getElementById('db-groups-list');
-    if (!box) return;
-    let folders = [];
-    try {
-        const d = await _groupOp({ action: 'list_groups' });
-        folders = d.folders || [];
-    } catch (e) {
-        box.innerHTML = '<div style="padding:1rem;text-align:center;color:var(--gray);">'
-            + '读取分组失败：' + escHtml(e.message) + '</div>';
-        return;
-    }
-
-    if (!folders.length) {
-        box.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--gray);font-size:.88rem;">'
-            + '还没有分组<br><span style="font-size:.8rem;">点右上「＋ 新建分组」开始，'
-            + '或直接在对话里让智能体帮你建</span></div>';
-        return;
-    }
-
-    box.innerHTML = folders.map(function (f) {
-        const pad = 8 + (f.depth || 0) * 16;
-        const intro = (f.intro || '').trim();
-        return '<div class="db-group-item" data-gid="' + f.id + '" style="padding-left:' + pad + 'px;">'
-            + '<div class="db-group-row">'
-            + '<span class="db-group-name" title="' + escHtml(f.path || f.name) + '">📁 ' + escHtml(f.name) + '</span>'
-            + '<span class="db-group-count" data-count-for="' + f.id + '"></span>'
-            + '<span class="db-group-actions">'
-            + '<button class="db-group-add" data-gid="' + f.id + '" title="在此分组下新建子分组">＋</button>'
-            + '<button class="db-group-edit" data-gid="' + f.id + '" title="编辑名称与简介">✏️</button>'
-            + '<button class="db-group-del" data-gid="' + f.id + '" title="删除分组（不会删条目）">×</button>'
-            + '</span></div>'
-            + (intro
-                ? '<div class="db-group-intro">' + escHtml(intro) + '</div>'
-                : '<div class="db-group-intro db-group-intro-empty">（无简介，点 ✏️ 添加）</div>')
-            + '</div>';
-    }).join('');
-
-    // 事件绑定
-    box.querySelectorAll('.db-group-add').forEach(function (b) {
-        b.addEventListener('click', function () { _editGroup(null, b.dataset.gid, ''); });
-    });
-    box.querySelectorAll('.db-group-edit').forEach(function (b) {
-        const f = folders.find(function (x) { return x.id === b.dataset.gid; });
-        if (f) b.addEventListener('click', function () {
-            _editGroup(f.id, null, '', f.name, f.intro || '');
-        });
-    });
-    box.querySelectorAll('.db-group-del').forEach(function (b) {
-        b.addEventListener('click', function () { _deleteGroupConfirm(b.dataset.gid); });
-    });
-    // 右键分组 → 移动到…
-    box.querySelectorAll('.db-group-item').forEach(function (it) {
-        it.addEventListener('contextmenu', function (ev) {
-            ev.preventDefault();
-            _showMoveGroupMenu(ev.clientX, ev.clientY, it.dataset.gid);
-        });
-    });
-}
+// 分组管理已合并进条目树（用户 2026-09-25 定）—— 不再有独立面板；
+// 分组的新建/编辑/移动分散在树的每行操作按钮与右键菜单里。
+// refreshGroupsList 保留为「刷新树」的薄封装，供 _editGroup / _deleteGroupConfirm 调用。
+async function refreshGroupsList() { await refreshDocumentList(); }
 
 /**
  * 新建 / 编辑分组 —— 统一用「经典浮窗」（window.floatingEditor）：
@@ -1054,5 +1181,4 @@ async function _doMoveGroup(gid, newParentId) {
     }
 }
 
-window.openGroupsPanel = openGroupsPanel;
 window.refreshGroupsList = refreshGroupsList;
