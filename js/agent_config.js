@@ -181,7 +181,7 @@ function saveSubagentConfigFromPanel() {
     if (_sn) state.settings.subagentNudge = Math.max(0, parseInt(_sn.value) || 0);
     if (_sw) state.settings.subagentWarn = Math.max(0, parseInt(_sw.value) || 0);
     if (_sa) state.settings.subagentAbort = Math.min(3600, Math.max(30, parseInt(_sa.value) || 300));
-    try { localStorage.setItem('ai-settings', JSON.stringify(state.settings)); } catch (e) { /* ignore */ }
+    try { setUserSetting('ai-settings', JSON.stringify(state.settings)); } catch (e) { /* ignore */ }
 }
 
 function initAgentConfigPanel() {
@@ -297,7 +297,7 @@ function loadToolsConfigFromState() {
 
 function saveAgentConfigToLocal() {
     try {
-        localStorage.setItem('ragagent-agent-config', JSON.stringify(state.agentConfig));
+        setUserSetting('ragagent-agent-config', JSON.stringify(state.agentConfig));
     } catch (e) { /* ignore */ }
 }
 
@@ -357,7 +357,7 @@ function saveAgentConfig() {
     if (_tn) state.settings.timeoutNudge = Math.max(0, parseInt(_tn.value) || 0);
     if (_tw) state.settings.timeoutWarn = Math.max(0, parseInt(_tw.value) || 0);
     if (_ta) state.settings.timeoutAbort = Math.max(0, parseInt(_ta.value) || 0);
-    try { localStorage.setItem('ai-settings', JSON.stringify(state.settings)); } catch (e) { /* ignore */ }
+    try { setUserSetting('ai-settings', JSON.stringify(state.settings)); } catch (e) { /* ignore */ }
 
     // 收起面板
     if (agentConfigPanel) agentConfigPanel.classList.remove('active');
@@ -436,7 +436,7 @@ if (panelNeo4jConnect) {
             state.neo4j.uri = uri;
             state.neo4j.user = user;
             state.neo4j.password = password;
-            localStorage.setItem('ragagent-neo4j-config', JSON.stringify(state.neo4j));
+            setUserSetting('ragagent-neo4j-config', JSON.stringify(state.neo4j));
             if (neo4jUri) neo4jUri.value = uri;
             if (neo4jUser) neo4jUser.value = user;
             if (neo4jPassword) neo4jPassword.value = password;

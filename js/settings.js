@@ -105,13 +105,13 @@
               } else if ((providerSettings['qwen-local'].endpoint || '').indexOf('c4eai') >= 0) {
                   providerSettings['qwen-local'].endpoint = 'http://<HUB-IP>:8080/v1';
                   providerSettings['qwen-local'].apiKey = providerSettings['qwen-local'].apiKey || 'sk-local';
-                  localStorage.setItem('ragagent-provider-settings', JSON.stringify(providerSettings));
+                  setUserSetting('ragagent-provider-settings', JSON.stringify(providerSettings));
               }
 
               // 本地千问写死可用：确保 qwen3-local 始终在“已亮起”列表
               if (!state.enabledModels.includes('qwen3-local')) {
                   state.enabledModels.unshift('qwen3-local');
-                  localStorage.setItem('ragagent-enabled-models', JSON.stringify(state.enabledModels));
+                  setUserSetting('ragagent-enabled-models', JSON.stringify(state.enabledModels));
               }
 
             // 2. 加载自定义服务商和模型覆盖项
@@ -175,13 +175,13 @@
         }
 
         function saveProviderSettings() {
-            localStorage.setItem('ragagent-provider-settings', JSON.stringify(providerSettings));
+            setUserSetting('ragagent-provider-settings', JSON.stringify(providerSettings));
             rebuildModelConfig();
             updateChatModelSelector(); // 更新聊天输入框的模型下拉
         }
 
         function saveCustomProviders(customProviders) {
-            localStorage.setItem('ragagent-custom-providers', JSON.stringify(customProviders));
+            setUserSetting('ragagent-custom-providers', JSON.stringify(customProviders));
             //initProviderSystem(); // Reload
         }
 

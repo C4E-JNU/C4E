@@ -29,11 +29,18 @@ PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_FILES = [
     "index.html",
     "css/layout.css", "css/components.css", "css/messages.css",
-    "css/mobile.css", "css/sidebar.css", "css/xiaoe.css",
+    "css/mobile.css", "css/sidebar.css", "css/xiaoe.css", "css/agent.css",
+    "css/input.css", "css/modals.css",
     "js/api.js", "js/auth.js", "js/branching.js", "js/bubble_actions.js",
     "js/bubbles.js", "js/database.js", "js/file_preview.js", "js/graph_rag.js",
     "js/image_tools.js", "js/main.js", "js/messages.js", "js/sidebar.js",
     "js/state.js", "js/subagent_view.js", "js/xiaoe.js",
+    # 以下原先漏在校验外（用户曾因「漏部署」出过 3 次问题）—— 补齐
+    "js/agent_config.js", "js/dom.js", "js/editing.js", "js/formatting.js",
+    "js/mobile.js", "js/note_refs.js", "js/provider.js", "js/settings.js",
+    "js/skill_system.js", "js/tools.js", "js/ui.js", "js/user_settings.js",
+    "js/utils.js",
+    "backend/app.py", "backend/tools/user_settings.py",
 ]
 
 

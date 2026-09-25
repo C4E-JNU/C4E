@@ -3,7 +3,7 @@
         function selectModel(modelId) {
             state.currentModel = modelId;
             // 保存到 localStorage，下次启动恢复
-            try { localStorage.setItem('ai-current-model', modelId); } catch(e) {}
+            try { setUserSetting('ai-current-model', modelId); } catch(e) {}
 
             // 1. 更新新版UI的高亮状态
             // 重新渲染以更新高亮
@@ -189,7 +189,7 @@
             renderProviderConfig(currentEditingProviderId);
             updateChatModelSelector();
 
-            localStorage.setItem('ragagent-enabled-models', JSON.stringify(state.enabledModels));
+            setUserSetting('ragagent-enabled-models', JSON.stringify(state.enabledModels));
         }
 
         function deleteModel(providerId, modelId) {
@@ -225,13 +225,13 @@
                 }
             }
 
-            localStorage.setItem('ragagent-provider-overrides', JSON.stringify(providerOverrides));
+            setUserSetting('ragagent-provider-overrides', JSON.stringify(providerOverrides));
 
             // 如果在已激活列表中，也要移除
             const enabledIdx = state.enabledModels.indexOf(modelId);
             if (enabledIdx > -1) {
                 state.enabledModels.splice(enabledIdx, 1);
-                localStorage.setItem('ragagent-enabled-models', JSON.stringify(state.enabledModels));
+                setUserSetting('ragagent-enabled-models', JSON.stringify(state.enabledModels));
             }
 
             initProviderSystem(); // 重新加载
@@ -342,7 +342,7 @@
                         providerOverrides[currentEditingProviderId] = { addedModels: [], deletedModels: [] };
                     }
                     providerOverrides[currentEditingProviderId].addedModels.push(newModel);
-                    localStorage.setItem('ragagent-provider-overrides', JSON.stringify(providerOverrides));
+                    setUserSetting('ragagent-provider-overrides', JSON.stringify(providerOverrides));
                 }
 
                 initProviderSystem(); // 重新加载数据和UI

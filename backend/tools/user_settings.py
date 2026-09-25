@@ -87,17 +87,23 @@ def save_user_settings(username: str, patch: dict) -> str:
     os.replace(tmp, path)
 
     # ★ 落盘核对：回读确认（不轻信写入回执）
+    # 判据 = 「本次**打算写入**的键」是否都真的落盘了 —— 即白名单内且值非 None。
+    # 白名单外被拒绝的键不参与核对（它们本就不该落盘）。
     back = {}
     try:
         with open(path, "r", encoding="utf-8") as f:
             back = json.load(f)
     except Exception:
         back = {}
-    ok = all((k not in patch) or (back.get(k) == patch[k]) for k in (patch or {}) if patch[k] is not None)
+    intended = [k for k, v in (patch or {}).items() if k in MANAGED_KEYS and v is not None]
+    ok = all(back.get(k) == (patch or {})[k] for k in intended)
+
+    rejected = [k for k in (patch or {}) if k not in MANAGED_KEYS]
 
     return json.dumps({
         "status": "ok" if ok else "error",
         "verified": bool(ok),
         "settings": {k: v for k, v in back.items() if k in MANAGED_KEYS},
         "count": len([k for k in back if k in MANAGED_KEYS]),
+        "rejected": rejected,
     }, ensure_ascii=False)

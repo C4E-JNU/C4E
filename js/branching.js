@@ -154,14 +154,14 @@
               applyFontSizes();
 
               // 知识库搜索模式（已废弃，纯向量搜索）
-              localStorage.setItem('ai-settings', JSON.stringify(state.settings));
+              setUserSetting('ai-settings', JSON.stringify(state.settings));
 
               // 保存 Neo4j 连接配置
               if (neo4jUri && neo4jUser && neo4jPassword) {
                   state.neo4j.uri = neo4jUri.value.trim();
                   state.neo4j.user = neo4jUser.value.trim();
                   state.neo4j.password = neo4jPassword.value;
-                  localStorage.setItem('ragagent-neo4j-config', JSON.stringify(state.neo4j));
+                  setUserSetting('ragagent-neo4j-config', JSON.stringify(state.neo4j));
                   // 如果密码变了，断开重连
                   if (neo4jConnector && neo4jConnector.isConnected()) {
                       neo4jConnector.disconnect();

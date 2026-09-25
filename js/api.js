@@ -1,9 +1,5 @@
-        function init() {
-            // 探测后端部署平台：非 Windows（Linux/服务器）时隐藏「本机打开」类按钮
-            fetch('/api/platform').then(function (r) { return r.json(); }).then(function (d) {
-                window.C4EAI_PLATFORM = d.platform || 'win32';
-            }).catch(function () { window.C4EAI_PLATFORM = 'win32'; });
-
+        /** 依赖个人设置的初始化（在 hydrateUserSettings 完成后调用） */
+        function initAfterSettings() {
             initProviderSystem(); // 新的服务商系统初始化 (替代 loadApiKeys)
             loadSettings();
             loadBranches();
@@ -25,6 +21,17 @@
                 const models = Object.keys(modelConfig);
                 if (models.length > 0) selectModel(models[0]);
             }
+        }
+
+        function init() {
+            // 探测后端部署平台：非 Windows（Linux/服务器）时隐藏「本机打开」类按钮
+            fetch('/api/platform').then(function (r) { return r.json(); }).then(function (d) {
+                window.C4EAI_PLATFORM = d.platform || 'win32';
+            }).catch(function () { window.C4EAI_PLATFORM = 'win32'; });
+
+            // 个人设置先拉回 localStorage 缓存，再初始化依赖设置的模块。
+            // （事件监听不依赖设置，保持在外面照旧绑定）
+            hydrateUserSettings().finally(initAfterSettings);
 
             // 事件监听
             startExperienceBtn.addEventListener('click', () => {
