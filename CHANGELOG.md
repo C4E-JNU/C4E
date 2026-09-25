@@ -6,6 +6,68 @@
 
 ---
 
+## [2026-09-25] feat(hub): 共享库分组树 + 知识库工具统一入口
+
+**用户设计**（2026-09-25）
+- 顶层分「笔记组 / 文档组」→ **用现有 `kind` 区分**（不建真文件夹，少一层嵌套）
+- 下层是**用户自建任意深度分组树**，每个分组有**【简介】(intro)，手写**
+- 简介用途：**供人阅读 + 供 LLM 推理导航**（先看目录判断该去哪找，再深入）
+- 移动方式：**B（前端右键「移动到…」）** + **C（对话让智能体移动）**
+- **工具要统一**：「知识库工具统一，不要多写太多新工具」
+
+**用户的关键判断**（记下来，影响后续设计）
+> 「作为智能体，含有数据库工具，这些功能就是必须的，数据库工具肯定了解自己。
+> 甚至我没有数据库工具，智能体也能帮我操作这些功能（只要能阅读自身的代码就能知道怎么动手）。
+> 做成工具就是快些，省了智能体读代码思考的时间。」
+→ 即：**工具是"快路径"，不是"唯一路径"**。不必为每个功能都造工具；
+   该造的是**高频、参数易说清**的操作。
+
+**借鉴 WeKnora（`wiki_folders`）的四个设计**
+1. **ParentID 邻接表 = 唯一真相**；`Path`/`Depth` 是**缓存**，每次写入重算
+   （注释原文：Path "kept purely for cheap display/sort"）
+2. **空分组可存在** —— 允许先搭骨架再往里放条目
+3. **深度上限是业务规则**（MAX_DEPTH=5），不是防呆兜底
+4. **防循环移动**：不能把分组移到自己或自己的后代下
+
+**改动**
+- 新增 `backend/tools/folder_tree.py`（分组树：`list/create/update/move/delete_group`）
+  · `_recompute_paths()` 写入时重算物化路径
+  · `_tree_order()` **深度优先排序**（初版按 path 字符串排会让根级混进子级中间）
+  · `delete_group(mode)`：`move_up`（子与条目上移，默认）/ `cascade`（连子删）
+  · **删除分组永不删条目** —— 分组只是分类
+- `shared_hub.py` 新增 **`knowledge()` 统一入口**（用户要求：不散着写新工具）
+  · action: search / list_groups / create_group / update_group / move_group /
+    delete_group / list_entries / move_entry
+  · `list_entries` **不返回正文**（目录用途，避免撑爆上下文）
+  · `_resolve_group_id()` 支持 8 位短 id（工具描述里显示的就是短 id）
+  · 云端直读本地；本地实例 HTTP 转发
+- `agent/tools.py`：**`shared_search` 工具扩展**为统一入口（不是新增工具）
+- `app.py`：新增 `POST /api/groups` 端点（云端执行；本地实例经此代理）
+- `file_tools.py`：`add_note(folder_id=)`、`update_note(folder_id=)`、
+  `list_notes(folder_id=)`（`__root__` = 未分组）
+- `app.py`：`NoteAddReq/NoteUpdateReq.folder_id`；GET `/api/notes` 支持 `folder_id` 过滤
+- `js/database.js`：条目卡片**右键菜单**「移动到分组」（列出全部分组，缩进显示层级）
+- `css/layout.css`：`.db-move-menu*` 样式
+
+**实测（云端真机）**
+| 组 | 结果 |
+|---|---|
+| API 端点（8）| 建/列/改名/移动/防成环/删 全通过；**`folder_id` PUT 后重新 GET 核对真落盘** |
+| 智能体工具（9）| 9 个 action 全通过；`list_entries` **每项无 content 字段**；未知 action 返回可用列表 |
+| 前端右键（9）| 67 张卡片渲染；右键弹菜单（列 `['（未分组）','📁 前端验证组']`）；点击后**重新拉取核对**到位；移出同理 |
+| 权限 | 无 token → 401 |
+
+**测试自身的两个 bug（已修，非产品问题）**
+1. 防成环用例把 B 先移到根级 → A/B 成兄弟，移动合法；应在 B 仍属 A 时测
+2. 浏览器测试只调 fetch 登录 → 未写 localStorage，前端仍显示"请先登录"；
+   须写 `c4eai_token`/`c4eai_user` 并重载页面
+
+**canonical check 增强**：新增 6 条不变量（分组树重算/防循环/工具统一/端点/右键菜单）
+
+**验证后清理**：测试分组已删（`_folders.json` 为空），无 `folder_id` 残留
+
+---
+
 ## [2026-09-25] feat(hub): 笔记附件不解析（天然分层：笔记=总结，附件=补充）
 
 **用户设计**：「笔记不需要解析，因为笔记通常是总结，其附带的文档都是补充信息，

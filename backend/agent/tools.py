@@ -21,7 +21,7 @@ from tools.code_sandbox import run_python as _run_python
 from tools.terminal_tool import terminal as _terminal
 from tools.file_tools import read_file as _read_file, write_file as _write_file, list_files as _list_files
 from tools.vector_search import search_history as _search_history
-from tools.shared_hub import shared_upload as _shared_upload, shared_search as _shared_search
+from tools.shared_hub import shared_upload as _shared_upload, shared_search as _shared_search, knowledge as _knowledge
 from tools.mineru_tools import parse_pdfs, load_token
 
 
@@ -105,8 +105,34 @@ class SharedUploadParams(BaseModel):
 
 
 class SharedSearchParams(BaseModel):
-    query: str = Field(description="搜索关键词或自然语言问题，例如: 'Fenton 催化剂制备条件'")
-    top_k: int = Field(default=5, description="返回最相关的条数，默认 5")
+    """共享知识库工具 —— 检索 + 分组管理统一入口（用户 2026-09-25 定：
+    「知识库工具统一，不要多写太多新工具」）。
+
+    检索类：action="search"（默认），走语义检索。
+    分组类：action=list_groups / create_group / update_group / move_group / delete_group。
+    每次只做一件事，用 action 指定。
+    """
+    action: str = Field(
+        default="search",
+        description=("要执行的操作，取值：\n"
+                     "  search        —— 语义检索共享库（默认）\n"
+                     "  list_groups   —— 查看分组树（含每个分组的简介，用于定位资料在哪组）\n"
+                     "  create_group  —— 新建分组（需 name；可给 parent_id、intro）\n"
+                     "  update_group  —— 改分组名或简介（需 group_id；可给 name、intro）\n"
+                     "  move_group    —— 移动分组（需 group_id；parent_id 为目标父，空=移到根级）\n"
+                     "  delete_group  —— 删除分组（需 group_id；mode=move_up 子上移(默认) / cascade 连子删）\n"
+                     "  list_entries  —— 列出条目（可给 group_id 限定某分组；不给则全部）\n"
+                     "  move_entry    —— 把条目移到分组（需 entry_id、to_group_id；to_group_id 空=移出分组）"),
+    )
+    query: str = Field(default="", description="search 用：搜索关键词或自然语言问题，例如 'Fenton 催化剂制备条件'")
+    top_k: int = Field(default=5, description="search 用：返回最相关的条数，默认 5")
+    group_id: str = Field(default="", description="update/move/delete_group 用：要操作的分组 id（8 位短 id 即可）")
+    name: str = Field(default="", description="create/update_group 用：分组名")
+    parent_id: str = Field(default="", description="create/move_group 用：父分组 id；空字符串 = 根级")
+    intro: str = Field(default="", description="create/update_group 用：分组简介（用户手写或你代写的一句话说明，供人阅读与检索导航）")
+    mode: str = Field(default="move_up", description="delete_group 用：move_up=子分组与条目上移到父级（默认）；cascade=连同子分组一起删")
+    entry_id: str = Field(default="", description="list_entries/move_entry 用：条目 id（list_entries 可不传；move_entry 必传）")
+    to_group_id: str = Field(default="", description="move_entry 用：目标分组 id；空字符串 = 移出分组（回到未分组）")
 
 
 # ── 工具工厂函数 ─────────────────────────────────
@@ -587,10 +613,21 @@ tools_registry["shared_upload"] = _make_async_tool(
 
 tools_registry["shared_search"] = _make_async_tool(
     name="shared_search",
-    description="在组内共享库中做语义搜索（服务器上所有人上传的文献/文档）。当问题可能涉及组内共享资料、"
-                "别人上传的文献、或本地知识库里没有的背景资料时使用。返回相关片段、来源文档名及相似度。",
+    description=(
+        "组内共享知识库的统一入口：语义检索 + 分组树管理。\n"
+        "\n"
+        "【检索】action=search（默认）：在共享库（服务器上所有人上传的文献/文档）中做语义搜索。\n"
+        "  当问题可能涉及组内共享资料、别人上传的文献、或本地知识库没有的背景资料时使用。\n"
+        "  返回相关片段、来源文档名及相似度（含「高/中/低/弱相关」分级）。\n"
+        "\n"
+        "【分组】共享库的条目按「分组树」组织（每个分组有人写的简介，说明这组放什么）。\n"
+        "  找资料时建议先 action=list_groups 看分组树与简介，据此判断该去哪个方向找，再 search。\n"
+        "  用户说「建个分组/把这组移到xx下/改一下简介」等，用对应 action 直接做，不必问怎么做。\n"
+        "  分组顶层按条目类型天然分开：笔记（人写的总结，附件不解析）与文档（上传自动解析）。\n"
+        "  注意：分组只是分类，删除分组不会删除条目（子分组与条目默认上移到父级）。"
+    ),
     args_schema=SharedSearchParams,
-    func=_shared_search,
+    func=_knowledge,
 )
 
 # ── MinerU PDF 解析工具 ──────────────────────────

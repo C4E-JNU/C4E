@@ -358,3 +358,134 @@ async def shared_search(query: str, top_k: int = 5) -> str:
         return _friendly(r.text)
     except Exception as e:
         return json.dumps({"error": f"共享服务器搜索失败: {e}"}, ensure_ascii=False)
+
+
+# ═══════════════════════════════════════════════
+# 共享知识库统一工具 —— 检索 + 分组管理（用户 2026-09-25 定）
+# ═══════════════════════════════════════════════
+
+def _resolve_group_id(gid: str) -> str:
+    """支持用 8 位短 id（工具描述里显示的就是短 id）——按前缀匹配补全。
+
+    唯一匹配才补全；歧义/找不到则原样返回（让下游报「分组不存在」）。
+    """
+    gid = (gid or "").strip()
+    if not gid:
+        return ""
+    from tools.folder_tree import _load
+    folders = _load()
+    if any(f.get("id") == gid for f in folders):
+        return gid
+    hits = [f["id"] for f in folders if f.get("id", "").startswith(gid)]
+    return hits[0] if len(hits) == 1 else gid
+
+
+async def knowledge(action: str = "search", query: str = "", top_k: int = 5,
+                    group_id: str = "", name: str = "", parent_id: str = "",
+                    intro: str = "", mode: str = "move_up",
+                    entry_id: str = "", to_group_id: str = "") -> str:
+    """共享知识库统一入口：语义检索 + 分组树管理 + 条目归类。
+
+    分组数据在共享库（云端 pool/_folders.json）：
+      云端实例（无 C4EAI_HUB）→ 直接操作本地文件
+      本地实例（有 C4EAI_HUB）→ HTTP 转发到云端
+    """
+    action = (action or "search").strip().lower()
+
+    if action == "search":
+        if not (query or "").strip():
+            return json.dumps({"error": "search 需要提供 query"}, ensure_ascii=False)
+        return await shared_search(query, top_k)
+
+    # ── 分组类操作 ──
+    _ACTIONS = {"list_groups", "create_group", "update_group", "move_group", "delete_group",
+                "list_entries", "move_entry"}
+    if action not in _ACTIONS:
+        return json.dumps({"error": f"未知 action: {action}；可用: search / " + " / ".join(sorted(_ACTIONS))},
+                          ensure_ascii=False)
+
+    gid = _resolve_group_id(group_id)
+    pid = _resolve_group_id(parent_id) if parent_id else ""
+    tgid = _resolve_group_id(to_group_id) if to_group_id else ""
+
+    base = _hub_base()
+    if base:
+        # 本地实例：转发到云端（云端的 /api/groups 与 /api/notes 都能处理）
+        if action in ("list_entries", "move_entry"):
+            return await _entries_via_hub(action, base, gid, entry_id, tgid)
+        payload = {"action": action, "group_id": gid, "name": name,
+                   "parent_id": pid, "intro": intro, "mode": mode}
+        timeout = httpx.Timeout(connect=30, read=120, write=120, pool=30)
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                r = await client.post(f"{base}/api/groups", json=payload,
+                                      headers=_hub_headers())
+            return _friendly(r.text)
+        except Exception as e:
+            return json.dumps({"error": f"共享服务器分组操作失败: {e}"}, ensure_ascii=False)
+
+    # 云端实例：直接操作本地
+    import tools.folder_tree as FT
+    if action == "list_groups":
+        return FT.list_groups()
+    if action == "create_group":
+        return FT.create_group(name, pid, intro)
+    if action == "update_group":
+        return FT.update_group(gid, name or None, intro if intro else None)
+    if action == "move_group":
+        return FT.move_group(gid, pid)
+    if action == "delete_group":
+        return FT.delete_group(gid, mode)
+    if action == "list_entries":
+        return await _list_entries_local(gid)
+    if action == "move_entry":
+        return await _move_entry_local(entry_id, tgid)
+    return json.dumps({"error": f"未实现: {action}"}, ensure_ascii=False)
+
+
+async def _list_entries_local(group_id: str = "") -> str:
+    """列出共享库条目（id/标题/kind/分组），**不含正文** —— 目录用途，避免撑爆上下文。"""
+    from tools.file_tools import list_notes
+    d = json.loads(await list_notes("__db__", "xhq1", "", group_id or ""))
+    items = [{"id": n.get("id"), "title": n.get("title"),
+              "kind": n.get("kind") or "note",
+              "folder_id": n.get("folder_id") or ""} for n in (d.get("notes") or [])]
+    return json.dumps({"status": "ok", "total": len(items), "entries": items},
+                      ensure_ascii=False)
+
+
+async def _move_entry_local(entry_id: str, to_group_id: str) -> str:
+    """把共享库条目移到指定分组（空 = 移出分组）。"""
+    if not (entry_id or "").strip():
+        return json.dumps({"error": "move_entry 需要 entry_id"}, ensure_ascii=False)
+    from tools.file_tools import update_note, _find_note
+    n, okey = _find_note("xhq1", entry_id)
+    if n is None:
+        return json.dumps({"error": f"条目不存在: {entry_id}"}, ensure_ascii=False)
+    await update_note(entry_id, None, None, okey, folder_id=to_group_id or "")
+    return json.dumps({"status": "ok", "entry_id": entry_id,
+                       "folder_id": to_group_id or ""}, ensure_ascii=False)
+
+
+async def _entries_via_hub(action: str, base: str, group_id: str,
+                           entry_id: str, to_group_id: str) -> str:
+    """本地实例：条目类操作转发到云端。"""
+    timeout = httpx.Timeout(connect=30, read=120, write=120, pool=30)
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            if action == "list_entries":
+                q = "/api/notes?branch_id=__db__" + (f"&folder_id={group_id}" if group_id else "")
+                r = await client.get(base + q, headers=_hub_headers())
+                d = json.loads(_friendly(r.text))
+                items = [{"id": n.get("id"), "title": n.get("title"),
+                          "kind": n.get("kind") or "note",
+                          "folder_id": n.get("folder_id") or ""} for n in (d.get("notes") or [])]
+                return json.dumps({"status": "ok", "total": len(items), "entries": items},
+                                  ensure_ascii=False)
+            r = await client.put(base + "/api/notes",
+                                 json={"note_id": entry_id, "branch_id": "__db__",
+                                       "folder_id": to_group_id or ""},
+                                 headers=_hub_headers())
+            return _friendly(r.text)
+    except Exception as e:
+        return json.dumps({"error": f"共享服务器条目操作失败: {e}"}, ensure_ascii=False)

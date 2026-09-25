@@ -1161,6 +1161,39 @@
         .notes-panel .notes-panel-actions button {
             margin: 0;
         }
+        /* 右键「移动到分组」菜单（用户 2026-09-25 定：方案 B）*/
+        .db-move-menu {
+            position: fixed;
+            z-index: 9999;
+            min-width: 150px;
+            max-width: 280px;
+            max-height: 60vh;
+            overflow-y: auto;
+            background: var(--panel-bg, #fff);
+            border: 1px solid var(--border, #e5e7eb);
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+            padding: 4px;
+            font-size: 0.88rem;
+        }
+        .db-move-menu-title {
+            padding: 5px 10px 3px;
+            font-size: 0.74rem;
+            color: var(--gray, #999);
+            font-weight: 600;
+        }
+        .db-move-menu-item {
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .db-move-menu-item:hover {
+            background: var(--hover, #f3f4f6);
+        }
+
         /* 筛选按钮 + 下拉菜单（笔记/文档）—— 用户 2026-09-22 定 */
         .db-filter-wrap {
             position: relative;

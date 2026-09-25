@@ -593,6 +593,16 @@ async function refreshDocumentList() {
         container.querySelectorAll('.db-entry-ref').forEach(function (btn) {
             btn.addEventListener('click', function () { if (window.refDbEntry) window.refDbEntry(btn.dataset.id); });
         });
+
+        // 右键菜单：把条目移到分组（用户 2026-09-25 定：方案 B —— 右键「移动到…」）
+        container.querySelectorAll('.note-card[data-eid]').forEach(function (card) {
+            card.addEventListener('contextmenu', function (ev) {
+                ev.preventDefault();
+                var owner = card.dataset.owner || '';
+                if (!((owner === myName) || isAdmin)) { showToast('只能移动自己的条目'); return; }
+                _showMoveMenu(ev.clientX, ev.clientY, card.dataset.eid);
+            });
+        });
     } catch (e) {
         console.error('加载数据库条目失败:', e);
         container.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--error);">加载失败</div>';
@@ -708,3 +718,106 @@ function escHtml(str) {
     d.textContent = str;
     return d.innerHTML;
 }
+
+// ═══════════════════════════════════════════════
+// 分组：右键菜单移动条目（用户 2026-09-25 定：方案 B）
+// 方案 C（对话让智能体操作）由 shared_search 工具的
+// create_group/move_group/move_entry 等 action 承担，不在此处。
+// ═══════════════════════════════════════════════
+
+var _moveMenuEl = null;
+
+function _closeMoveMenu() {
+    if (_moveMenuEl && _moveMenuEl.parentNode) _moveMenuEl.parentNode.removeChild(_moveMenuEl);
+    _moveMenuEl = null;
+}
+
+async function _fetchGroups() {
+    const resp = await fetch('/api/groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'list_groups' })
+    });
+    const d = await resp.json();
+    return d.folders || [];
+}
+
+/** 在鼠标位置弹出「移动到…」菜单：列出全部分组（缩进显示层级）+「移出分组」 */
+async function _showMoveMenu(x, y, entryId) {
+    _closeMoveMenu();
+    let folders = [];
+    try {
+        folders = await _fetchGroups();
+    } catch (e) {
+        showToast('读取分组失败：' + e.message, 'error');
+        return;
+    }
+
+    const menu = document.createElement('div');
+    menu.className = 'db-move-menu';
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+
+    const title = document.createElement('div');
+    title.className = 'db-move-menu-title';
+    title.textContent = '移动到分组';
+    menu.appendChild(title);
+
+    // 「移出分组」（回到未分组）
+    const rootItem = document.createElement('div');
+    rootItem.className = 'db-move-menu-item';
+    rootItem.textContent = '（未分组）';
+    rootItem.addEventListener('click', function () { _doMoveEntry(entryId, ''); });
+    menu.appendChild(rootItem);
+
+    if (!folders.length) {
+        const empty = document.createElement('div');
+        empty.className = 'db-move-menu-item';
+        empty.style.color = 'var(--gray, #999)';
+        empty.style.cursor = 'default';
+        empty.textContent = '（还没有分组，可在对话里让智能体创建）';
+        menu.appendChild(empty);
+    } else {
+        folders.forEach(function (f) {
+            const it = document.createElement('div');
+            it.className = 'db-move-menu-item';
+            it.style.paddingLeft = (12 + (f.depth || 0) * 14) + 'px';
+            it.textContent = '📁 ' + f.name;
+            if (f.intro) it.title = f.intro;
+            it.addEventListener('click', function () { _doMoveEntry(entryId, f.id); });
+            menu.appendChild(it);
+        });
+    }
+
+    document.body.appendChild(menu);
+    // 防溢出屏幕
+    const r = menu.getBoundingClientRect();
+    if (r.right > window.innerWidth - 8) menu.style.left = (window.innerWidth - r.width - 8) + 'px';
+    if (r.bottom > window.innerHeight - 8) menu.style.top = (y - r.height) + 'px';
+    _moveMenuEl = menu;
+
+    // 点别处关闭（一次性监听）
+    setTimeout(function () {
+        document.addEventListener('click', _closeMoveMenu, { once: true });
+        document.addEventListener('contextmenu', _closeMoveMenu, { once: true });
+    }, 0);
+}
+
+async function _doMoveEntry(entryId, groupId) {
+    _closeMoveMenu();
+    try {
+        const resp = await fetch('/api/notes', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ note_id: entryId, branch_id: '__db__', folder_id: groupId })
+        });
+        const d = await resp.json();
+        if (!resp.ok || d.error) { showToast('移动失败：' + (d.error || resp.status), 'error'); return; }
+        showToast(groupId ? '✅ 已移动到分组' : '✅ 已移出分组', 'success');
+        refreshDocumentList();
+    } catch (e) {
+        showToast('移动失败：' + e.message, 'error');
+    }
+}
+
+window._showMoveMenu = _showMoveMenu;

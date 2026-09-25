@@ -120,9 +120,11 @@ class FileIdRequest(BaseModel):
 class NoteAddReq(BaseModel):
     title: str; content: str = ""; branch_id: Optional[str] = ""
     kind: Optional[str] = "note"     # note=笔记（默认）/ document=文档条目
+    folder_id: Optional[str] = ""    # 归属分组（分组树 id）用户 2026-09-25 定
 class NoteUpdateReq(BaseModel):
     note_id: str; title: Optional[str] = None; content: Optional[str] = None
     kind: Optional[str] = None        # 迁移/改分类时用（note/document）
+    folder_id: Optional[str] = None   # 归属分组（分组树 id；""=移出分组）用户 2026-09-25 定
     branch_id: Optional[str] = None   # "__db__" = 数据库条目（唯一存云端，本地实例须转发）
 class NoteMoveReq(BaseModel):
     note_id: str; direction: int
@@ -1017,13 +1019,15 @@ async def api_notes_publish(req: NotePublishReq, request: Request):
 
 @app.get("/api/notes")
 async def api_notes_list(branch_id: Optional[str] = None, kind: Optional[str] = None,
-                         request: Request = None):
+                         folder_id: Optional[str] = None, request: Request = None):
     """列条目。kind=note（默认前端取）/document；不传则全部。
 
     用户 2026-09-22 定：共享库按钮切换「笔记 / 文档」，两者数据结构一致。
+    folder_id（用户 2026-09-25 定）：按分组过滤；"__root__" = 未分组。
     """
     if branch_id == DB_BRANCH_ID:
-        _q = f"/api/notes?branch_id={DB_BRANCH_ID}" + (f"&kind={kind}" if kind else "")
+        _q = f"/api/notes?branch_id={DB_BRANCH_ID}" + (f"&kind={kind}" if kind else "") \
+             + (f"&folder_id={folder_id}" if folder_id else "")
         p = await _notes_proxy("GET", _q)
         if p is not None:
             return p
@@ -1036,19 +1040,26 @@ async def api_notes_list(branch_id: Optional[str] = None, kind: Optional[str] = 
             notes = [n for n in notes if n.get("branch_id", "") == branch_id]
         if _kn:
             notes = [n for n in notes if (n.get("kind") or "note") == _kn]
+        if folder_id:
+            if folder_id == "__root__":
+                notes = [n for n in notes if not (n.get("folder_id") or "")]
+            else:
+                notes = [n for n in notes if (n.get("folder_id") or "") == folder_id]
         return {"status": "ok", "total": len(notes), "notes": notes}
-    return json.loads(await list_notes(branch_id or "", user["username"], _kn))
+    return json.loads(await list_notes(branch_id or "", user["username"], _kn, folder_id or ""))
 @app.post("/api/notes")
 async def api_notes_add(req: NoteAddReq, request: Request):
     _kd = req.kind or "note"
     if (req.branch_id or "") == DB_BRANCH_ID:
         p = await _notes_proxy("POST", "/api/notes",
                                {"title": req.title, "content": req.content,
-                                "branch_id": DB_BRANCH_ID, "kind": _kd})
+                                "branch_id": DB_BRANCH_ID, "kind": _kd,
+                                "folder_id": req.folder_id})
         if p is not None:
             return p
     return json.loads(await add_note(req.title, req.content, req.branch_id or "",
-                                     _cur_user(request)["username"], kind=_kd))
+                                     _cur_user(request)["username"], kind=_kd,
+                                     folder_id=req.folder_id or ""))
 @app.post("/api/notes/move")
 async def api_notes_move(req: NoteMoveReq, request: Request):
     user = _cur_user(request)
@@ -1066,12 +1077,14 @@ async def api_notes_update(req: NoteUpdateReq, request: Request):
     if (req.branch_id or "") == DB_BRANCH_ID and not _AUTH_ENABLED:
         p = await _notes_proxy("PUT", "/api/notes",
                                {"note_id": req.note_id, "title": req.title,
-                                "content": req.content, "kind": _kd})
+                                "content": req.content, "kind": _kd,
+                                "folder_id": req.folder_id})
         return p if p is not None else JSONResponse({"error": "共享库不可达"}, status_code=502)
     if not _owns_or_root(user, get_note_owner(req.note_id, user["username"])):
         return JSONResponse({"error": "只能修改自己的笔记"}, status_code=403)
     return json.loads(await update_note(req.note_id, req.title, req.content,
-                                        user["username"], kind=_kd))
+                                        user["username"], kind=_kd,
+                                        folder_id=req.folder_id))
 @app.delete("/api/notes/{note_id}")
 async def api_notes_delete(note_id: str, request: Request, source: Optional[str] = None):
     user = _cur_user(request)
@@ -1200,6 +1213,45 @@ async def api_search_knowledge(req: SearchQueryReq, request: Request):
     if _AUTH_ENABLED and not _is_authorized(user):
         return JSONResponse({"error": "已注册，等待管理员开通数据库权限"}, status_code=403)
     return json.loads(await search_knowledge(req.query, req.top_k or 3))
+
+
+class GroupOpReq(BaseModel):
+    """分组树操作（分组数据在共享库 = 云端 pool/_folders.json）"""
+    action: str = "list_groups"
+    group_id: str = ""
+    name: str = ""
+    parent_id: str = ""
+    intro: str = ""
+    mode: str = "move_up"
+
+
+@app.post("/api/groups")
+async def api_groups(req: GroupOpReq, request: Request):
+    """共享库分组树：查看/新建/改名/移动/删除。
+
+    分组属于共享库（与条目同侧）—— 本地实例经此端点代理到云端；
+    云端实例直接操作本机 pool/_folders.json。
+    权限：与共享库一致（需已开通数据库权限）。
+    """
+    user = _cur_user(request)
+    if _AUTH_ENABLED and not _is_authorized(user):
+        return JSONResponse({"error": "已注册，等待管理员开通数据库权限"}, status_code=403)
+
+    import tools.folder_tree as FT
+    action = (req.action or "list_groups").strip().lower()
+    if action == "list_groups":
+        return json.loads(FT.list_groups())
+    if action == "create_group":
+        return json.loads(FT.create_group(req.name, req.parent_id or "", req.intro or ""))
+    if action == "update_group":
+        return json.loads(FT.update_group(req.group_id, req.name or None,
+                                          req.intro if req.intro != "" else None))
+    if action == "move_group":
+        return json.loads(FT.move_group(req.group_id, req.parent_id or ""))
+    if action == "delete_group":
+        return json.loads(FT.delete_group(req.group_id, req.mode or "move_up"))
+    return JSONResponse({"error": f"未知 action: {action}"}, status_code=400)
+
 
 # ── LangChain Agent ──────────────────────────────
 
