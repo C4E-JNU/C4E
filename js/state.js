@@ -125,11 +125,6 @@
             // 已废弃
         }
 
-        function splitIntoSentences(text) {
-            const delimiters = /[。！？!?；;\n]+/;
-            return text.split(delimiters).map(s => s.trim()).filter(s => s.length > 0);
-        }
-
         var FILE_OPEN_MODE_LABEL = {
             backend: '后端打开',
             browser: '浏览器新标签',
@@ -168,10 +163,5 @@
             }
         }
 
-        function updateDatabaseStats() {
-            // 旧的后端已废弃，保留空函数避免报错
-            const statusEl = document.getElementById('database-status');
-            if (statusEl) statusEl.textContent = state.database.loaded ? '已加载' : '未加载';
-        }
 
         // ==================== DOM元素 ====================

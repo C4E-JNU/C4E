@@ -7,7 +7,6 @@
             initProviderSystem(); // 新的服务商系统初始化 (替代 loadApiKeys)
             loadSettings();
             loadBranches();
-            loadDatabaseState();
             updateUI();
             initSidebar();
             initFileAttachments(); // 新的文件附件系统
@@ -182,7 +181,6 @@
 
             // 渲染当前分支的消息
             renderMessages();
-            updateDatabaseStats();
 
             // 监听对话容器滚动，检测用户是否手动向上滚动
             messagesContainer.addEventListener('scroll', () => {

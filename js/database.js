@@ -53,91 +53,10 @@ function _chunkText(text, maxChars = 500, overlap = 50) {
     return chunks.length ? chunks : [text.slice(0, maxChars)];
 }
 
-// ── IndexedDB 操作 ──────────────────────────
-
-// IndexedDB 按登录身份分库（identityKey）：切换账号=各自的文档库
-const DB_NAME = 'C4EAI_KB_' + ((window.C4EAI_IDENTITY || 'guest').replace(/[^A-Za-z0-9_-]/g, '_') || 'guest');
-const DB_VER = 1, STORE = 'docs';
-
-function _openDB() {
-    return new Promise((resolve, reject) => {
-        const req = indexedDB.open(DB_NAME, DB_VER);
-        req.onupgradeneeded = () => {
-            const db = req.result;
-            if (!db.objectStoreNames.contains(STORE)) {
-                db.createObjectStore(STORE, { keyPath: 'id' });
-            }
-        };
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-    });
-}
-
-// 旧版单一库 C4EAI_KB → 当前身份库（仅 guest 首次启动时迁移一次）
-async function _migrateLegacyDBIfNeeded() {
-    if (window.C4EAI_IDENTITY !== 'guest') return;
-    try {
-        const dbs = await indexedDB.databases ? indexedDB.databases() : [];
-        const hasLegacy = (dbs || []).some(function (d) { return d.name === 'C4EAI_KB'; });
-        if (!hasLegacy) return;
-        const marked = localStorage.getItem('c4eai_idb_migrated_guest');
-        if (marked) return;
-        const oldDb = await new Promise(function (res, rej) {
-            const r = indexedDB.open('C4EAI_KB', 1);
-            r.onsuccess = function () { res(r.result); };
-            r.onerror = function () { rej(r.error); };
-        });
-        const oldDocs = await new Promise(function (res, rej) {
-            try {
-                const tx = oldDb.transaction('docs', 'readonly');
-                const q = tx.objectStore('docs').getAll();
-                q.onsuccess = function () { res(q.result || []); };
-                q.onerror = function () { rej(q.error); };
-            } catch (e) { res([]); }
-        });
-        oldDb.close();
-        for (const d of oldDocs) {
-            try { await _dbPut(d); } catch (e) {}
-        }
-        localStorage.setItem('c4eai_idb_migrated_guest', '1');
-        if (oldDocs.length) showToast(`已将 ${oldDocs.length} 个旧文档归入游客文档库`, 'info');
-    } catch (e) { /* 迁移失败不阻塞 */ }
-}
-
-async function _dbPut(doc) {
-    const db = await _openDB();
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE, 'readwrite');
-        tx.objectStore(STORE).put(doc);
-        tx.oncomplete = () => { db.close(); resolve(); };
-        tx.onerror = () => { db.close(); reject(tx.error); };
-    });
-}
-
-async function _dbGetAll() {
-    const db = await _openDB();
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE, 'readonly');
-        const req = tx.objectStore(STORE).getAll();
-        req.onsuccess = () => { db.close(); resolve(req.result || []); };
-        req.onerror = () => { db.close(); reject(req.error); };
-    });
-}
-
-async function _dbDelete(id) {
-    const db = await _openDB();
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE, 'readwrite');
-        tx.objectStore(STORE).delete(id);
-        tx.oncomplete = () => { db.close(); resolve(); };
-        tx.onerror = () => { db.close(); reject(tx.error); };
-    });
-}
-
 // ── 初始化 ──────────────────────────────────
 
 function initDatabase() {
-    _migrateLegacyDBIfNeeded().finally(function () { refreshDocumentList(); });
+    refreshDocumentList();
     document.getElementById('db-close-btn').addEventListener('click', closeDatabaseModal);
     // 上传/添加按钮已下沉到每个文件夹行（用户 2026-09-25 定）；
     // 这里保留全局隐藏的 file input 与默认上传目标
@@ -400,46 +319,6 @@ async function uploadDocument(file) {
     } catch (e) {
         showToast('❌ 上传失败: ' + e.message, 'error');
     }
-}
-
-// ── 重命名文档 ──────────────────────────────
-
-async function renameDocument(docId, newName) {
-    const db = await _openDB();
-    try {
-        const tx = db.transaction(STORE, 'readonly');
-        const req = tx.objectStore(STORE).get(docId);
-        req.onsuccess = async () => {
-            const doc = req.result;
-            if (!doc) { showToast('❌ 文档未找到', 'error'); return; }
-            doc.name = newName;
-            await _dbPut(doc);
-            showToast('✏️ 已重命名', 'success');
-            refreshDocumentList();
-        };
-    } finally {
-        db.close();
-    }
-}
-
-// ── 删除文档 ────────────────────────────────
-
-async function deleteDocument(docId) {
-    // 先查 doc，拿到后端 file_id 一并删除
-    const all0 = await _dbGetAll();
-    const doc0 = all0.find(d => d.id === docId);
-    await _dbDelete(docId);
-    if (doc0 && doc0.file_id) {
-        fetch('/api/file/delete', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ file_id: doc0.file_id })
-        }).catch(function(e) { console.warn('删除后端源文件失败:', e.message); });
-    }
-    const all = await _dbGetAll();
-    state.database.loaded = all.length > 0;
-    showToast('🗑️ 文档已删除', 'info');
-    refreshDocumentList();
 }
 
 // ── 数据库条目列表（笔记形态：每条 = 标题 + markdown 正文 + 附件/图片内嵌）────────────────
@@ -894,47 +773,6 @@ function dbDeleteEntry(id) {
             else { showToast('删除失败：' + (d.error || d.message || d.detail || '未知原因'), 'error'); }
         }).catch(function (e) { showToast('删除失败：' + (e && e.message ? e.message : '网络错误'), 'error');
     });
-}
-
-// ── 向量搜索（纯向量，正则已移除） ────────────
-async function searchDocuments(query) {
-    const docs = await _dbGetAll();
-    if (!docs.length) return { context: '', results: [], total: 0 };
-
-    // 向量搜索
-    try {
-        const qVec = _computeEmbedding(query);
-        const scored = [];
-        for (const doc of docs) {
-            for (let i = 0; i < doc.chunks.length; i++) {
-                const sim = _cosineSimilarity(qVec, doc.embeddings[i]);
-                scored.push({ score: sim, doc, idx: i });
-            }
-        }
-        scored.sort((a, b) => b.score - a.score);
-        const top = scored.slice(0, 5);
-
-        const seen = new Set();
-        const results = [];
-        for (const r of top) {
-            if (seen.has(r.doc.id)) continue;
-            seen.add(r.doc.id);
-            const start = Math.max(0, r.idx - 1);
-            const end = Math.min(r.doc.chunks.length, r.idx + 2);
-            results.push({
-                doc_name: r.doc.name,
-                chunk: r.doc.chunks[r.idx],
-                context: r.doc.chunks.slice(start, end).join('\n'),
-                score: r.score
-            });
-        }
-
-        const context = results.map(r => `[${r.doc_name} (${(r.score*100).toFixed(0)}%)]\n${r.context}`).join('\n\n');
-        return { context, results, total: results.length };
-    } catch (e) {
-        showToast('❌ 向量搜索失败: ' + e.message, 'error');
-        return { context: '', results: [], total: 0 };
-    }
 }
 
 // ── 导出搜索函数给智能体使用 ────────────────────

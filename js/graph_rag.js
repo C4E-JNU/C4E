@@ -50,48 +50,6 @@ function extractFinalAnswer(text) {
     return m ? m[1].trim() : null;
 }
 
-// ── 流式 LLM ───────────────────────────────────────
-async function streamLLMResponse(messages, onToken) {
-    const model = state.currentModel;
-    const apiKey = state.apiKeys[model];
-    const config = modelConfig[model];
-    const headers = { 'Content-Type': 'application/json' };
-    if (config.apiKeyHeader && config.apiKeyPrefix) headers[config.apiKeyHeader] = config.apiKeyPrefix + apiKey;
-    else headers['Authorization'] = `Bearer ${apiKey}`;
-    if (state.abortController) state.abortController.abort();
-    state.abortController = new AbortController();
-    const resp = await fetch(config.endpoint, {
-        method: 'POST', headers,
-        body: JSON.stringify({ model: config.modelParam, messages, temperature: state.settings.temperature, max_tokens: state.settings.maxTokens, stream: true }),
-        signal: state.abortController.signal
-    });
-    if (!resp.ok) { let e=`API请求失败: ${resp.status}`; try{const d=await resp.json(); e=d.error?.message||e}catch(e2){} throw new Error(e); }
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-    let buf='', ft='', fr='';
-    while(true) {
-        const {done,value} = await reader.read();
-        if(done) break;
-        buf += decoder.decode(value,{stream:true});
-        const lines = buf.split('\n');
-        buf = lines.pop()||'';
-        for(const line of lines) {
-            if(!line.trim()||!line.startsWith('data: ')) continue;
-            const d=line.slice(6);
-            if(d==='[DONE]') return {content:ft, reasoning:fr};
-            try {
-                const p=JSON.parse(d);
-                const delta=p.choices?.[0]?.delta;
-                let ru=false;
-                if(delta.reasoning_content!==undefined){fr+=delta.reasoning_content||'';ru=true}
-                if(delta.thinking!==undefined){fr+=delta.thinking||'';ru=true}
-                if(delta?.content||ru){if(delta?.content)ft+=delta.content;if(onToken)onToken(ft,fr)}
-            }catch(e){}
-        }
-    }
-    return {content:ft, reasoning:fr};
-}
-
 // ── 后端 API 地址（如需改端口，改这里） ────────
 const BACKEND_API_URL = '';  // 空 = 同源（前后端都在 8080 端口）
 
