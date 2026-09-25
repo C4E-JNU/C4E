@@ -6,6 +6,45 @@
 
 ---
 
+## [2026-09-26] fix(settings): 修「在 hydrate 前读设置」导致的 3 处时序 bug
+
+> 用户提醒：「因为改了后端，然后发送给 llm 的对话形式、设置里面的对话轮次什么的，
+> 可能挺多按钮受影响的，你确保处理好」—— 自查果然抓到 3 处。
+
+**根因**：`hydrateUserSettings()` 是**异步**的（要先 GET 后端），
+而下列代码在它完成前就读 localStorage 里的设置 → 新设备/新浏览器上读到空值：
+
+| # | 位置 | 症状 |
+|---|---|---|
+| 1 | `js/state.js` 的 state 字面量里 `enabledModels: JSON.parse(localStorage...)` | 字面量在**脚本解析时**求值（比 init() 还早）→ 新设备「已启用模型」为空 → 模型列表全灭、勾选态全错 |
+| 2 | `js/main.js` 顶层紧跟 `init()` 的 `loadAgentConfigFromLocal(); initAgentConfigPanel();` | init() 现在立即返回 → 新设备上智能体配置（工具勾选/skills/引擎/轮次/超时）全为默认值 |
+| 3 | `js/main.js` 顶层 `updateNeo4jStatusUI(state.neo4j.connected)` | `state.neo4j` 由 `loadSettings()` 填（也在 hydrate 后）→ Neo4j 指示灯显示错误状态 |
+
+**修法（统一到一个入口，杜绝再漏）**
+- `api.js::initAfterSettings()` 成为**唯一**「读个人设置」的初始化入口：
+  先重读 `state.enabledModels` → `initProviderSystem` / `loadSettings` / …
+  → 末尾补上从 main.js 移来的 `loadAgentConfigFromLocal` / `initAgentConfigPanel` /
+  `updateNeo4jStatusUI`
+- `state.js`：`enabledModels` 改为 `[]` 占位（注释说明为何不在此读）
+- `main.js`：删掉那 3 行（保留注释说明为何移走）
+- `scripts/check.sh`：新增 **5 条时序不变量**，防止将来又把读设置的代码放回 hydrate 之前
+
+**★ 排查纪律（同类问题通用）**：
+凡是「读 localStorage 里的个人设置」的初始化，**必须**放在 `initAfterSettings()` 里 ——
+`state.js` 的 state 字面量、任何 js 的顶层语句、`DOMContentLoaded` 处理器都**早于** hydrate。
+
+**验证（云端真机 31/31，独立测试账号，不碰 admin）**
+| 组 | 结果 |
+|---|---|
+| A. 新设备 state | temperature=0.3 · **contextLength=7（对话轮次）** · maxTokens=4000 · **enabledModels=['qwen3-local']** · **engine=langchain/maxRounds=20/skills=['graph-guide']** · **neo4j.user=newdev-user** · currentModel=qwen3-local |
+| B. 设置面板 UI | #temperature=0.3 · **#context-length=7** · #max-tokens=4000 · 超时三级=111 |
+| B2. 智能体面板按钮 | tool 勾选=['shared_search'] · engine=langchain · **工具循环轮次下拉=20** · 超时三级=111 |
+| C. 端到端 | 改对话轮次 7→13 → 保存 → **后端 settings.json 的 contextLength 真为 13** |
+
+另：`check.sh` 的 `chk` 用 `grep -F`（固定字符串），写判据不需要 `\[\]` 转义。
+
+---
+
 ## [2026-09-26] feat(settings): 个人设置改为后端存储（localStorage → 个人账号数据）
 
 > 「密钥当初在的设计就是保存在个人浏览器，在后端的话，那就放在个人账号数据上吧，
