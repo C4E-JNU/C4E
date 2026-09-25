@@ -24,7 +24,7 @@
 {
   "count": 3,
   "data": [
-    {"source": "论文1.pdf", "score": 0.85, "content": "TiO2在可见光下..."},
+    {"source": "论文1.pdf", "score": 0.85, "content": "相关正文片段..."},
     ...
   ]
 }

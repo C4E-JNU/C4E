@@ -81,7 +81,7 @@ conversation_notes(action="add", scope="notes", title="<论文名>｜中文全�
 ```html
 <div style="display:flex;flex-wrap:wrap;justify-content:center;align-items:flex-start;gap:8px;">
 <img src="/workspace/mineru_output/<论文名>/images/Figure2/<h1>.jpg" alt="图2a 膜分离示意" style="width:290px;height:auto;border-radius:6px;cursor:zoom-in;" />
-<img src="/workspace/mineru_output/<论文名>/images/Figure2/<h2>.jpg" alt="图2b 电催化示意" style="width:290px;height:auto;border-radius:6px;cursor:zoom-in;" />
+<img src="/workspace/mineru_output/<论文名>/images/Figure2/<h2>.jpg" alt="图2b 装置示意" style="width:290px;height:auto;border-radius:6px;cursor:zoom-in;" />
 …（共 8 张，全部在这个 div 里）
 </div>
 

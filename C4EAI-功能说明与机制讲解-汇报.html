@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>C4EAI 功能说明与机制讲解</title>
+<style>
+  :root{
+    --bg:#f6f8fa; --slide:#ffffff; --ink:#1f2933; --ink2:#52606d; --ink3:#7b8794;
+    --accent:#0f766e; --accent2:#0ea5a3; --accent-soft:#e6f5f4;
+    --warn:#b45309; --warn-soft:#fef3e2; --bad:#b91c1c; --bad-soft:#fdeaea;
+    --line:#d9e2ec; --code-bg:#f0f4f8; --chip:#eef2f6;
+    --shadow:0 1px 3px rgba(31,41,51,.08);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:"Microsoft YaHei","PingFang SC","Segoe UI",system-ui,sans-serif;
+    background:var(--bg);color:var(--ink);overflow:hidden;font-size:16px;
+  }
+  /* ---------- 幻灯片框架 ---------- */
+  .deck{height:100vh;position:relative}
+  .slide{
+    position:absolute;inset:0;display:none;flex-direction:column;
+    padding:44px 72px 74px;overflow-y:auto;background:var(--slide);
+  }
+  .slide.active{display:flex;animation:fadeIn .28s ease}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  .slide-inner{max-width:1180px;width:100%;margin:0 auto;flex:1}
+  h1{font-size:44px;line-height:1.25;font-weight:700}
+  h2{font-size:30px;line-height:1.3;font-weight:700;margin-bottom:6px}
+  h3{font-size:19px;font-weight:700;margin:18px 0 8px}
+  .kicker{color:var(--accent);font-weight:700;font-size:14px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:10px}
+  .sub{color:var(--ink2);font-size:16px;margin-bottom:22px}
+  p{line-height:1.75}
+  ul,ol{padding-left:1.4em;line-height:1.8}
+  li{margin:4px 0}
+  li::marker{color:var(--accent)}
+  strong{color:var(--ink)}
+  .muted{color:var(--ink3)}
+  code{font-family:Consolas,"JetBrains Mono",monospace;font-size:.88em;background:var(--code-bg);
+       padding:1px 6px;border-radius:4px;color:#0b5563}
+  pre{background:#22303c;color:#dce8f0;border-radius:10px;padding:16px 20px;overflow-x:auto;
+      font-size:13.5px;line-height:1.6;margin:10px 0}
+  pre code{background:none;color:inherit;padding:0}
+  /* ---------- 组件 ---------- */
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .card{background:#fbfdfe;border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow)}
+  .card h4{font-size:15.5px;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+  .card p,.card li{font-size:13.5px;line-height:1.65;color:var(--ink2)}
+  .card .big{font-size:26px;font-weight:700;color:var(--accent);margin-bottom:2px}
+  .num{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;border-radius:50%;
+       background:var(--accent);color:#fff;font-size:13px;font-weight:700;flex:none}
+  table{border-collapse:collapse;width:100%;margin:12px 0;font-size:13.5px}
+  th{background:var(--accent-soft);color:var(--accent);text-align:left;font-weight:700}
+  th,td{border:1px solid var(--line);padding:7px 12px;vertical-align:top;line-height:1.55}
+  tbody tr:nth-child(even){background:#fafcfd}
+  .tag{display:inline-block;background:var(--chip);color:var(--ink2);border-radius:999px;
+       padding:3px 12px;font-size:13px;margin:3px 4px 3px 0}
+  .tag.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+  .note{background:var(--warn-soft);border-left:4px solid var(--warn);border-radius:0 8px 8px 0;
+        padding:10px 14px;font-size:13.5px;color:#7c4a09;margin:12px 0;line-height:1.7}
+  .note b{color:var(--warn)}
+  .danger{background:var(--bad-soft);border-left-color:var(--bad)}
+  .danger b{color:var(--bad)}
+  /* 流程图 */
+  .flow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap;margin:14px 0}
+  .fnode{background:#fbfdfe;border:1.5px solid var(--line);border-radius:10px;padding:10px 14px;
+         font-size:13px;line-height:1.5;min-width:120px;display:flex;flex-direction:column;justify-content:center}
+  .fnode b{font-size:13.5px}
+  .fnode small{color:var(--ink3);font-size:12px}
+  .farrow{display:flex;align-items:center;padding:0 8px;color:var(--accent);font-weight:700;font-size:18px}
+  .flowcol{flex-direction:column}
+  .flowcol .farrow{transform:rotate(90deg);padding:4px 0;justify-content:center}
+  .layer{border-radius:12px;padding:14px 18px;margin:8px 0;border:1.5px solid var(--line)}
+  .layer .lt{font-weight:700;font-size:14px;margin-bottom:8px;display:flex;gap:8px;align-items:center}
+  .pillrow{display:flex;flex-wrap:wrap;gap:8px}
+  .pill{background:#fff;border:1px solid var(--line);border-radius:8px;padding:5px 12px;font-size:12.5px;color:var(--ink2)}
+  .pill b{color:var(--ink)}
+  .l-front{background:#f0f7ff;border-color:#bcd8f5}.l-front .lt{color:#1d4ed8}
+  .l-api{background:#f0fdf9;border-color:#9adfd4}.l-api .lt{color:var(--accent)}
+  .l-tool{background:#fdf6ec;border-color:#f0d9ae}.l-tool .lt{color:#92650c}
+  .l-ext{background:#f5f3ff;border-color:#d5ccf5}.l-ext .lt{color:#6d28d9}
+  /* 封面 */
+  .cover{justify-content:center;text-align:center;align-items:center}
+  .cover .logo{width:84px;height:84px;border-radius:20px;background:var(--accent);color:#fff;
+       display:flex;align-items:center;justify-content:center;font-size:36px;font-weight:800;margin-bottom:26px}
+  .cover .subtitle{font-size:20px;color:var(--ink2);margin:14px 0 8px}
+  .cover .meta{color:var(--ink3);font-size:14px;margin-top:26px}
+  /* 底部导航 */
+  .hud{position:fixed;bottom:0;left:0;right:0;height:52px;display:flex;align-items:center;
+       justify-content:space-between;padding:0 24px;background:rgba(255,255,255,.92);
+       border-top:1px solid var(--line);backdrop-filter:blur(6px);z-index:50}
+  .hud .brand{font-size:13px;color:var(--ink3);font-weight:600}
+  .hud .ctrl{display:flex;align-items:center;gap:10px}
+  .hud button{border:1px solid var(--line);background:#fff;border-radius:8px;width:34px;height:30px;
+       cursor:pointer;font-size:15px;color:var(--ink2)}
+  .hud button:hover{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+  .hud .page{font-size:13px;color:var(--ink2);min-width:64px;text-align:center}
+  .progress{position:fixed;top:0;left:0;height:3px;background:var(--accent2);z-index:60;transition:width .25s}
+  .bar{height:6px;background:var(--chip);border-radius:4px;overflow:hidden;margin:8px 0 4px}
+  .bar i{display:block;height:100%;background:var(--accent);border-radius:4px}
+  .toc{columns:2;column-gap:36px}
+  .toc li{break-inside:avoid}
+  @media (max-width:900px){
+    .slide{padding:28px 22px 70px}
+    .grid2,.grid3,.grid4{grid-template-columns:1fr}
+    h1{font-size:32px}h2{font-size:24px}
+    .toc{columns:1}
+  }
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+<div class="deck" id="deck">
+
+<!-- ═══════════ S1 封面 ═══════════ -->
+<section class="slide cover active">
+  <div class="logo">C4</div>
+  <h1>C4EAI · Shared Wiki</h1>
+  <div class="subtitle">组内科研辅助 / 共享 Wiki 智能体 —— 功能说明与机制讲解（组内技术分享）</div>
+  <div>
+    <span class="tag on">FastAPI</span><span class="tag on">纯前端 SPA</span><span class="tag on">Neo4j 图谱</span>
+    <span class="tag on">MinerU 文献解析</span><span class="tag on">向量检索</span><span class="tag on">六级权限</span>
+  </div>
+  <div class="meta">2026-09 ｜ 江南大学 · C4EAI 项目组</div>
+</section>
+
+<!-- ═══════════ S2 项目概览 ═══════════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="kicker">Overview</div>
+    <h2>C4EAI 是什么</h2>
+    <p class="sub">面向<strong>组内科研辅助与共享知识库</strong>的多用户、多工具智能体平台 —— 一个代码库，两种部署形态</p>
+    <div class="grid4">
+      <div class="card"><div class="big">16</div><p><b>后端工具</b><br>图谱 / 联网 / 文件 / 代码 / 记忆 / 解析</p></div>
+      <div class="card"><div class="big">6</div><p><b>技能</b><br>SKILL.md + 索引，可自我生成与修改</p></div>
+      <div class="card"><div class="big">2</div><p><b>Agent 引擎</b><br>手搓流式 custom ＋ LangChain 备选</p></div>
+      <div class="card"><div class="big">7</div><p><b>身份等级</b><br>L0 游客 ～ L5 金 + admin</p></div>
+    </div>
+    <h3>两种部署形态（同一代码库）</h3>
+    <table>
+      <tr><th></th><th>本地实例</th><th>云端实例（共享库）</th></tr>
+      <tr><td><b>位置</b></td><td>每人笔记本 <code>127.0.0.1:8080</code></td><td>服务器 <code><HUB-IP>:8088</code>，内网域名 <code>http://c4eai</code></td></tr>
+      <tr><td><b>规模</b></td><td>个人使用</td><td>约 50 人共用</td></tr>
+      <tr><td><b>鉴权</b></td><td>未设 <code>C4EAI_AUTH</code> → 全放行</td><td><code>C4EAI_AUTH=1</code> → 六级权限生效</td></tr>
+      <tr><td><b>账号</b></td><td>可选登录</td><td>账号唯一存在地（<code>workspace/_auth/users.json</code>）</td></tr>
+    </table>
+    <p class="muted" style="font-size:13.5px">设计对齐 Hermes Agent：工具能力由 OpenAI function-calling schema 提供；技能以简列注入系统提示词、详情按需读取。</p>
+  </div>
+</section>
+
+<!-- ═══════════ S3 总体架构 ═══════════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="kicker">Architecture</div>
+    <h2>总体架构：纯前端 SPA ＋ FastAPI 后端</h2>
+    <p class="sub">前端负责交互与渲染，后端负责 Agent 推理、文件解析、图谱与知识库访问；前后端通过 REST ＋ SSE 通信</p>
+    <div class="layer l-front">
+      <div class="lt">🖥️ 前端（浏览器，静态 HTML/JS/CSS）</div>
+      <div class="pillrow">
+        <span class="pill"><b>graph_rag.js</b> Agent 主引擎 reactAgentLoop</span>
+        <span class="pill"><b>messages.js</b> 消息渲染 / 发送</span>
+        <span class="pill"><b>agent_config.js</b> 工具/技能/引擎配置面板</span>
+        <span class="pill"><b>database.js</b> 共享库面板</span>
+        <span class="pill"><b>auth.js</b> 登录 / 身份芯片</span>
+        <span class="pill"><b>sidebar.js / branching.js</b> 笔记 / 分支</span>
+        <span class="pill"><b>xiaoe.js</b> 桌宠小 e</span>
+        <span class="pill"><b>state.js</b> 全局状态 → localStorage</span>
+      </div>
+    </div>
+    <div class="farrow" style="justify-content:center;margin:2px 0">⇅ &nbsp;POST /api/agent/stream（SSE 流）＋ REST /api/*</div>
+    <div class="layer l-api">
+      <div class="lt">⚙️ 后端（FastAPI，:8080，同时托管前端静态页）</div>
+      <div class="pillrow">
+        <span class="pill"><b>app.py</b> 全部 REST 端点（1250+ 行）</span>
+        <span class="pill"><b>agent/agent.py</b> 三入口：stream_agent / stream_agent_lc / run_agent</span>
+        <span class="pill"><b>agent/tools.py</b> tools_registry 工具注册表</span>
+        <span class="pill"><b>agent/subagent.py</b> 子智能体调度</span>
+        <span class="pill"><b>role_policy.py</b> 六级权限</span>
+        <span class="pill"><b>auth.py</b> 账号与会话</span>
+      </div>
+    </div>
+    <div class="farrow" style="justify-content:center;margin:2px 0">⇅ 调用</div>
+    <div class="layer l-tool">
+      <div class="lt">🧰 tools/ 工具实现</div>
+      <div class="pillrow">
+        <span class="pill">file_tools.py 文档解析</span><span class="pill">neo4j_tools.py 图谱</span>
+        <span class="pill">vector_search.py 向量检索</span><span class="pill">web_tools.py 联网</span>
+        <span class="pill">skill_tools.py 技能读写</span><span class="pill">code_sandbox.py 代码沙箱</span>
+        <span class="pill">mineru_tools.py PDF→MD</span><span class="pill">shared_hub.py 共享库</span>
+      </div>
+    </div>
+    <div class="farrow" style="justify-content:center;margin:2px 0">⇅</div>
+    <div class="layer l-ext">
+      <div class="lt">🌐 外部系统</div>
+      <div class="pillrow">
+        <span class="pill">LLM API（DeepSeek / 千问 / OpenAI 兼容）</span>
+        <span class="pill">Neo4j 知识图谱</span><span class="pill">MinerU v4 云解析</span>
+        <span class="pill">Bing 网页抓取（免 key）</span><span class="pill">本地文件系统 / workspace</span>
+        <span class="pill">Qdrant ＋ bge-small-zh 向量库</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ S4 对话生命周期 ═══════════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="kicker">Core Loop</div>
+    <h2>核心链路：一次对话的生命周期</h2>
+    <p class="sub">前端 <code>sendMessage → reactAgentLoop</code>，后端 <code>/api/agent/stream</code> 内跑 ReAct 工具循环，逐事件流回渲染</p>
+    <div class="flow">
+      <div class="fnode"><b>① 用户发送</b><small>messages.js 构造消息＋附件（file_id / 图片）</small></div>
+      <div class="farrow">→</div>
+      <div class="fnode"><b>② reactAgentLoop</b><small>组装请求体：history · enabled_tools · loaded_skills · engine · max_rounds</small></div>
+      <div class="farrow">→</div>
+      <div class="fnode"><b>③ POST /api/agent/stream</b><small>SSE 长连接</small></div>
+      <div class="farrow">→</div>
+      <div class="fnode"><b>④ ReAct 循环</b><small>LLM → tool_calls → 执行工具 → 结果回填 → 再问，直到产出正文</small></div>
+      <div class="farrow">→</div>
+      <div class="fnode"><b>⑤ 事件流回</b><small>token / reasoning / tool / final</small></div>
+      <div class="farrow">→</div>
+      <div class="fnode"><b>⑥ 渲染＋落盘</b><small>推理框＋正文；存 currentBranch.messages → localStorage</small></div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <h4><span class="num">⏹</span>停止生成（前后端协同）</h4>
+        <p>点 ■ → 前端 <code>abort()</code> 断连 → 后端 watchdog（0.4s 轮询断连）→ <code>cancel_active_generation</code> 置停止令牌 → 各检查点 yield stopped 并 return。避免"断了还在烧 token"。</p>
+      </div>
+      <div class="card">
+        <h4><span class="num">✎</span>续写与重新生成</h4>
+        <p><b>继续生成</b>：<code>mergeInto: messageId</code>，新内容合并进原消息框（原文＋续写＋推理同框），不新建消息。<br>
+        <b>重新生成</b>：<code>regenerateMessage</code> 先 <code>deleteMessagesAfter</code> —— 历史不堆叠、上下文不膨胀。</p>
+      </div>
+    </div>
+    <div class="note"><b>上下文治理</b>：历史只取 <code>contextLength×2</code> 条窗口；<code>_build_context</code> 内置单条 8k ＋ 总量 30 万字符兜底封顶。</div>
+  </div>
+</section>
+
+<!-- ═══════════ S5 双引擎 ═══════════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="kicker">Engine</div>
+    <h2>双引擎设计：custom（手搓流式）为主，LangChain 备选</h2>
+    <p class="sub">请求体 <code>engine: "custom | langchain"</code> 决定后端走 <code>stream_agent</code> 还是 <code>stream_agent_lc</code>，共享同一套系统提示词与上下文构建</p>
+    <div class="grid2">
+      <div class="card">
+        <h4><span class="num">A</span>custom 引擎（stream_agent）</h4>
+        <ul>
+          <li>直接走 OpenAI 兼容 HTTP 协议，<b>无框架依赖</b></li>
+          <li><code>asyncio.Queue</code> ＋ 后台任务推送事件 → <b>真正的逐 token 流式</b></li>
+          <li>子智能体可流式上屏（emit <code>subagent_step</code> 事件，前端 subagent_view 实时展示）</li>
+          <li>检查点响应停止令牌，停止即时</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4><span class="num">B</span>LangChain 引擎（stream_agent_lc）</h4>
+        <ul>
+          <li>复用 LangChain 生态（模型抽象 / 工具绑定）</li>
+          <li>事件为<b>批处理</b>粒度（round start / end），无逐 token 流</li>
+          <li>作为对照组保留：一旦需要更复杂的 chain 编排可平滑切换</li>
+        </ul>
+      </div>
+    </div>
+    <h3>两引擎共享的底层机制（agent.py）</h3>
+    <table>
+      <tr><th>机制</th><th>实现</th></tr>
+      <tr><td><b>系统提示词</b></td><td><code>_build_system_prompt()</code>：角色设定 ＋ 启用技能简列注入 ＋ 工具使用规范</td></tr>
+      <tr><td><b>上下文构建</b></td><td><code>_build_context()</code>：截取历史窗口；附件按 file_id 注入解析全文；图片转多模态 base64</td></tr>
+      <tr><td><b>模型兼容</b></td><td>思考型模型兜底：max_tokens ≥ 2048、<code>enable_thinking:false</code>、兼容读取 <code>reasoning_content</code></td></tr>
+      <tr><td><b>权限保留</b></td><td>管理级用户可保留 <code>permission_mode</code>（safe / ask / full）</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════ S6 工具系统 ═══════════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="kicker">Tools</div>
+    <h2>工具系统：16 个工具，前端只管勾选</h2>
+    <p class="sub">注册表收敛在后端 <code>agent/tools.py</code>，前端不再持有工具表；配置面板按分组动态勾选</p>
+    <table>
+      <tr><th>分组</th><th>工具</th><th>说明</th></tr>
+      <tr><td><b>图谱</b></td><td><code>graph_schema</code> · <code>execute_cypher</code></td><td>先取图谱结构再查询；cypher 删除类操作仅 admin</td></tr>
+      <tr><td><b>联网</b></td><td><code>web_search</code> · <code>web_extract</code></td><td>免费 Bing 抓取，无需 API key</td></tr>
+      <tr><td><b>技能</b></td><td><code>skill_list</code> · <code>skill_view</code> · <code>skill_write</code></td><td>列表 / 按需读取 / <b>自我生成与修改技能</b>（自动同步索引）</td></tr>
+      <tr><td><b>文件</b></td><td><code>read_file</code> · <code>write_file</code> · <code>list_files</code></td><td>支持按 file_id 读上传附件 / 图片转 base64；沙箱按角色锁定目录</td></tr>
+      <tr><td><b>代码</b></td><td><code>run_code</code> · <code>terminal</code></td><td>run_code 沙箱禁 subprocess/eval，超时≤60s；terminal 走项目真实环境（可 pip/uv 装包），仅 admin</td></tr>
+      <tr><td><b>记忆</b></td><td><code>search_history</code> · <code>search_knowledge</code> · <code>conversation_notes</code></td><td>向量检索历史与知识库；对话笔记</td></tr>
+      <tr><td><b>任务</b></td><td><code>todo</code></td><td>任务清单</td></tr>
+      <tr><td><b>解析</b></td><td><code>mineru_parse</code></td><td>MinerU v4 批量 PDF→Markdown（只下载 zip，解压归档由技能脚本完成）</td></tr>
+    </table>
+    <h3>传递链路</h3>
+    <div class="flow">
+      <div class="fnode"><b>配置面板勾选</b><small>agent_config.js → localStorage</small></div>
+      <div class="farrow">→</div>
+      <div class="fnode"><b>enabled_tools</b><small>随请求体传后端</small></div>
+      <div class="farrow">→</div>
+      <div class="fnode"><b>过滤注册表</b><small>＋按角色权限二次过滤</small></div>
+      <div class="farrow">→</div>
+      <div class="fnode"><b>生成 tools schema</b><small>OpenAI function-calling 格式</small></div>
+      <div class="farrow">→</div>
+      <div class="fnode"><b>LLM 调用</b><small>_make_async_tool 包装执行</small></div>
+      <div class="farrow">→</div>
+      <div class="fnode"><b>结果回填 LLM</b></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ S7 文件机制 ═══════════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="kicker">Files</div>
+    <h2>文件与附件机制：Hermes 式 file_id 引用</h2>
+    <p class="sub">文件<b>全后端解析</b>，前端消息只存 <code>file_id</code> 不存内容 —— 多轮对话中后端按 id 自动注入，历史不膨胀</p>
+    <div class="flow">
+      <div class="fnode"><b>上传</b><small>bubbles.js → POST /api/file/upload</small></div>
+      <div class="farrow">→</div>
+      <div class="fnode"><b>解析落盘</b><small>按扩展名分派 → uploads/{id}/text.txt</small></div>
+      <div class="farrow">→</div>
+      <div class="fnode"><b>消息存 file_id</b><small>附件即引用</small></div>
+      <div class="farrow">→</div>
+      <div class="fnode"><b>后端注入</b><small>遍历 file_ids：文档读全文 / 图片转 base64</small></div>
+    </div>
+    <div class="grid2">
+      <div>
+        <h3>解析器分派（file_tools.py）</h3>
+        <table>
+          <tr><th>类型</th><th>解析库</th></tr>
+          <tr><td>pdf</td><td>fitz（PyMuPDF）全文</td></tr>
+          <tr><td>docx / odt</td><td>python-docx / zip+xml</td></tr>
+          <tr><td>xlsx / xls</td><td>openpyxl / xlrd 表格文本</td></tr>
+          <tr><td>pptx</td><td>python-pptx 幻灯片文本</td></tr>
+          <tr><td>txt / md / csv / json</td><td>utf-8 直读</td></tr>
+          <tr><td>图片</td><td>base64 多模态（千问等视觉模型）</td></tr>
+          <tr><td>OCR（唯一前端例外）</td><td>Tesseract，提取文字进 input</td></tr>
+        </table>
+      </div>
+      <div>
+        <h3>防上下文暴涨的封顶设计</h3>
+        <div class="card">
+          <ul>
+            <li><code>read_file</code> 单次<b>封顶 20k 字符</b>（READ_FILE_MAX_CHARS），截断带 <code>next_offset</code> 供分页续读</li>
+            <li>历史窗口 <code>contextLength×2</code> 条 ＋ 单条 8k ＋ 总量 30 万字符兜底</li>
+            <li>MinerU 产物禁止整读长行大 JSON（layout.json ~2MB），只读 <code>00_full_cleaned.md</code> 与 <code>00_images_map.json</code></li>
+          </ul>
+        </div>
+        <div class="note" style="margin-top:10px"><b>教训</b>：早期附件注入无字符上限，长行 JSON 一次数 MB 进入 state，是上下文暴涨的根因 —— 已全部封顶。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ S8 技能系统 ═══════════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="kicker">Skills</div>
+    <h2>技能系统：可自我生成的能力包</h2>
+    <p class="sub">技能 = <code>skills/&lt;name&gt;/SKILL.md</code>（frontmatter ＋ 指南 ＋ scripts 等子文件）＋ <code>index.json</code> 索引；<code>skill_write</code> 可让 Agent 自己写技能并自动同步索引</p>
+    <div class="grid2">
+      <div>
+        <h3>注入机制（Hermes 对齐）</h3>
+        <div class="flow flowcol">
+          <div class="fnode"><b>① 简列注入</b><small>选中技能的描述进系统提示词 &lt;available_skills&gt; —— 省 token</small></div>
+          <div class="farrow">→</div>
+          <div class="fnode"><b>② 按需详情</b><small>LLM 判断相关时调 skill_view 读完整 SKILL.md</small></div>
+          <div class="farrow">→</div>
+          <div class="fnode"><b>③ 执行脚本</b><small>SKILL.md 指引 Agent 用 run_code / terminal 跑 scripts/ 下的脚本</small></div>
+        </div>
+      </div>
+      <div>
+        <h3>当前技能库（6 个）</h3>
+        <table>
+          <tr><th>技能</th><th>用途</th></tr>
+          <tr><td><code>mineru-agent-parse</code></td><td>MinerU 解压＋图像归档＋多子图聚类排版（00_images_map.json 预排 flex 网格，笔记直接照抄）</td></tr>
+          <tr><td><code>literature-translate</code></td><td>文献翻译，含 read_file 白名单铁律</td></tr>
+          <tr><td><code>literature-contradiction</code></td><td>文献矛盾发现（配合子智能体 verify 角色）</td></tr>
+          <tr><td><code>graph-guide</code></td><td>图谱查询导览</td></tr>
+          <tr><td><code>self-modify</code></td><td>演示技能自我修改</td></tr>
+          <tr><td><code>demo-skill</code></td><td>示例模板</td></tr>
+        </table>
+      </div>
+    </div>
+    <div class="note"><b>白名单铁律</b>：mineru-agent-parse / literature-translate 的 SKILL.md 明文限定 read_file 只读产物文件（00_images_map / 00_full_cleaned / FigureN.txt）—— 防止 Agent 误读超大 JSON 炸掉上下文。改这两个技能时必须保留此规则。</div>
+  </div>
+</section>
+
+<!-- ═══════════ S9 子智能体 ═══════════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="kicker">Subagent</div>
+    <h2>子智能体：主 Agent 可委派的隔离执行单元</h2>
+    <p class="sub">主 Agent 通过 <code>delegate_task</code> 工具派发任务；角色提示词预设集中在 <code>subagent.py 的 SUBAGENT_ROLE_PROMPTS</code></p>
+    <div class="grid3">
+      <div class="card">
+        <h4><span class="num">1</span>contradiction 矛盾发现</h4>
+        <p>跨文献找互相矛盾的结论，输出证据对。</p>
+      </div>
+      <div class="card">
+        <h4><span class="num">2</span>extraction 信息抽取</h4>
+        <p>从解析产物中按模板抽取结构化字段。</p>
+      </div>
+      <div class="card">
+        <h4><span class="num">3</span>verify 互证校验</h4>
+        <p>对提取结果做交叉核验；互证时优先放大原图核对"图例-曲线"对应关系，防多面板颜色错配。</p>
+      </div>
+    </div>
+    <h3>调度约束（防失控）</h3>
+    <div class="flow">
+      <div class="fnode"><b>深度 = 1</b><small>子智能体不能再派子智能体</small></div>
+      <div class="farrow">→</div>
+      <div class="fnode"><b>并发 ≤ 2</b><small>同时最多两个子任务</small></div>
+      <div class="farrow">→</div>
+      <div class="fnode"><b>轮次 ≤ 4</b><small>单任务最多 4 轮工具循环</small></div>
+      <div class="farrow">→</div>
+      <div class="fnode"><b>超时 300s</b><small>裸 HTTP 循环，无框架开销</small></div>
+    </div>
+    <div class="grid2">
+      <div class="card"><h4>流式上屏（仅 custom 引擎）</h4><p>后台任务通过 <code>asyncio.Queue</code> emit <code>subagent_step</code> 事件 → 前端 subagent_view.js 实时渲染子任务步骤；LangChain 引擎退化为批处理 start/end。</p></div>
+      <div class="card"><h4>典型工作流</h4><p>文献挖掘场景：主 Agent 归档图像 → 派 extraction 填 schema → 派 verify 互证 → 汇总写 06_schema.json（下游对账脚本只认这个文件名）。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ S10 图谱与记忆 ═══════════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="kicker">Knowledge</div>
+    <h2>知识图谱 与 向量记忆</h2>
+    <p class="sub">结构化知识走 Neo4j 图谱，非结构化走向量检索 —— 两条互补的知识通道</p>
+    <div class="grid2">
+      <div class="card" style="border-top:3px solid #6d28d9">
+        <h4>🕸️ Neo4j 知识图谱（结构化）</h4>
+        <ul>
+          <li>图谱结构可配置；当前库内存有科研实体关系数据（历史沉淀，可扩展）</li>
+          <li>配置面板填 URI/账号 → <code>/api/neo4j/connect</code></li>
+          <li>Agent 查询套路：<code>graph_schema</code> 先取结构 → 生成 Cypher → <code>execute_cypher</code> 执行 → 基于结果作答</li>
+          <li>安全：<b>cypher 删除类操作仅 admin</b> 可用</li>
+        </ul>
+      </div>
+      <div class="card" style="border-top:3px solid var(--accent)">
+        <h4>🧠 向量记忆（非结构化）</h4>
+        <ul>
+          <li>本地 <b>Qdrant ＋ bge-small-zh</b> 嵌入模型（model_cache 缓存 91MB）</li>
+          <li><code>search_history</code>：检索历史对话，"上次聊到哪了"随取随用</li>
+          <li><code>search_knowledge</code>：检索共享库条目正文 —— 笔记与机器解析文档<b>都进索引</b></li>
+          <li><code>conversation_notes</code>：对话笔记落 <code>workspace/users/&lt;名&gt;/notes.json</code>，后端实时读取</li>
+        </ul>
+      </div>
+    </div>
+    <div class="note"><b>为什么两条都要</b>：图谱回答"A 与 B 是什么关系"这类结构化查询，精确可追溯；向量检索覆盖长文本语义模糊匹配。Agent 按问题性质自行选择工具。</div>
+  </div>
+</section>
+
+<!-- ═══════════ S11 共享库 Hub ═══════════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="kicker">Shared Hub</div>
+    <h2>云端共享库：组级知识中枢</h2>
+    <p class="sub"><code>branch_id=__db__</code>；唯一一份数据在服务器 <code>workspace/pool/</code>；近期重构为「文件夹树」模型</p>
+    <div class="grid2">
+      <div>
+        <h3>树形结构（类型 → 分组 → 条目）</h3>
+        <div class="flow flowcol">
+          <div class="fnode"><b>📁 笔记（根文件夹）</b><small>kind=note：人写的，适合直接阅读 —— 默认展示 Tab</small></div>
+          <div class="farrow">→</div>
+          <div class="fnode"><b>📁 文档（根文件夹）</b><small>kind=document：机器解析正文，文本乱但用于检索/向量索引</small></div>
+          <div class="farrow">→</div>
+          <div class="fnode"><b>🗂️ 分组（手动管理）</b><small>分组管理面板：新建 / 编辑简介 / 移动 / 删除</small></div>
+          <div class="farrow">→</div>
+          <div class="fnode"><b>📄 条目</b><small>文本 ＋ 附件，两类共用同一套 CRUD，数据结构完全一致</small></div>
+        </div>
+      </div>
+      <div>
+        <h3>附件同步机制（防 404 的关键）</h3>
+        <table>
+          <tr><th>场景</th><th>行为</th></tr>
+          <tr><td>云端版本上传</td><td>直存服务器；共享条目 = 个人 1 份 ＋ 共享 1 份</td></tr>
+          <tr><td>本地版本 → 共享库</td><td><code>/api/file/upload?source=database</code> <b>代理转发到云端</b>写 <code>pool/uploads/</code>，并把条目正文里的 file_id 换成云端新 id</td></tr>
+          <tr><td>本地读取共享附件</td><td>本地找不到 → <code>/raw</code> <code>/{id}</code> <code>/text</code> 三接口代理到云端取</td></tr>
+        </table>
+        <div class="note danger"><b>历史坑（已修）</b>：早期只写占位符不传文件 → 云端 file_id 指向本机 id，服务器 pool/uploads 没有文件 → 云端打开 404。<b>排查口诀：云端打不开但本地能开 = 查 pool/uploads 里有没有该 file_id。</b></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ S12 权限体系 ═══════════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="kicker">Access Control</div>
+    <h2>六级权限体系（方案 B）</h2>
+    <p class="sub">实现于 <code>backend/role_policy.py</code>，云端 <code>C4EAI_AUTH=1</code> 时生效；注册默认 L1</p>
+    <table style="font-size:13px">
+      <tr><th>等级</th><th>云端库上传/查询</th><th>改删他人数据</th><th>服务器文件</th><th>工具数</th><th>本地千问配额</th><th>身份管理</th></tr>
+      <tr><td><b style="color:#9aa9be">L0 游客</b></td><td>❌</td><td>❌</td><td>❌</td><td>限 4 个</td><td>5M/日</td><td>—</td></tr>
+      <tr><td><b style="color:#3b82f6">L1 蓝</b></td><td>自己</td><td>❌</td><td>锁本人目录</td><td>6 个</td><td>5M/日</td><td>—</td></tr>
+      <tr><td><b style="color:#a855f7">L2 紫</b></td><td>自己</td><td>❌</td><td>锁本人目录</td><td>6 个</td><td>5M/日</td><td>—</td></tr>
+      <tr><td><b style="color:#f59e0b">L3 橙</b></td><td><b>所有人</b></td><td>❌</td><td>锁本人目录</td><td>6 个</td><td>5M/日</td><td>—</td></tr>
+      <tr><td><b style="color:#ef4444">L4 红</b></td><td>所有人</td><td>❌</td><td>✅ 全盘读写</td><td>✅ 9 个</td><td>不限</td><td>—</td></tr>
+      <tr><td><b style="color:#eab308">L5 金</b></td><td>所有人</td><td>❌</td><td>✅ 全盘读写</td><td>✅ 9 个</td><td>不限</td><td>可调 L0–L4</td></tr>
+      <tr><td><b>admin</b></td><td>所有人</td><td>✅ 所有人</td><td>✅ 全盘读写</td><td>✅ 9 个</td><td>不限</td><td>授任何等级 · 可删账号</td></tr>
+    </table>
+    <div class="grid2">
+      <div class="card">
+        <h4>两个判据函数，不可混用</h4>
+        <p><code>is_super(user)</code> = L5 <b>或</b> admin → 管理级（管理面板 / 全套工具 / 全盘文件）<br>
+        <code>is_root(user)</code> = <b>仅 admin</b> → 删账号 / 授 L5 / 改删他人数据<br>
+        混用后果：金色会获得删账号权限，违背方案 B。</p>
+      </div>
+      <div class="card">
+        <h4>其他落地细节</h4>
+        <p>· 文件沙箱 <code>user_sandbox</code>：L3 及以下锁本人目录，L4+ 返回 None 不锁<br>
+        · 工具 <code>filter_tools</code> 按等级过滤；run_code / terminal 仅 admin<br>
+        · admin 账号不可降级/删除；L5 不能授予 L5<br>
+        · 前端 isAdmin 按 <code>username === 'admin'</code> 判，不按 role 字段（历史账号脏数据）</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ S13 部署运维 ═══════════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="kicker">Deployment</div>
+    <h2>部署、域名与前端防缓存</h2>
+    <p class="sub">本地与云端同一代码库，靠环境变量与启动方式区分；改动必须「双份同步」才对全组生效</p>
+    <div class="grid2">
+      <div>
+        <h3>云端发布（deploy_cloud.py）</h3>
+        <div class="flow flowcol">
+          <div class="fnode"><b>① paramiko 连接</b><small>密码走环境变量 C4EAI_SSH_PASSWORD（代码里无硬编码）</small></div>
+          <div class="farrow">→</div>
+          <div class="fnode"><b>② 远端备份</b><small>先打包 c4eai-hub_backup_*.tar.gz</small></div>
+          <div class="farrow">→</div>
+          <div class="fnode"><b>③ 排除上传</b><small>排除 workspace/（用户数据）与 model_cache/</small></div>
+          <div class="farrow">→</div>
+          <div class="fnode"><b>④ 重启＋验证</b><small>Python 不热加载，改 .py 必须重启进程</small></div>
+        </div>
+      </div>
+      <div>
+        <h3>内网免配置访问</h3>
+        <ul>
+          <li>dnsmasq 跑在 <HUB-IP>:53：<code>c4eai</code> / <code>c4eai.lab</code> → 自身，<code>*.c4eai.lab</code> 通配，上游转发 223.5.5.5，开机自启</li>
+          <li>全组免配置需路由器 DHCP 下发该 DNS，兜底用项目根 <code>C4EAI_hosts设置.bat</code></li>
+          <li>端点一律 IP 直连（hub / qwen-local / start.bat 三处同步），组员零配置</li>
+        </ul>
+        <h3>前端防缓存三件套</h3>
+        <ul>
+          <li>改 js/*.js 必须<b>同步递增</b> index.html 里 <code>&lt;script ?v=&gt;</code> 版本号</li>
+          <li>入口 <code>/</code> 与 *.html 均 no-cache（曾因漏设导致浏览器缓存旧 index.html，升级全部失效）</li>
+          <li>页面不更新先 Ctrl+F5 再排查；验证以<b>线上文件内容</b>为准，不能只看版本号</li>
+        </ul>
+      </div>
+    </div>
+    <div class="note"><b>双份同步铁律</b>：技能 / 子智能体 / 后端改动，本地＋云端两份都要同步（skills 整目录＋改动的 py/js，勿碰 workspace 用户数据）并重启云端进程才生效。</div>
+  </div>
+</section>
+
+<!-- ═══════════ S14 工程经验 ═══════════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="kicker">Lessons</div>
+    <h2>工程实践：几条踩出来的纪律</h2>
+    <p class="sub">这些不是"最佳实践理论"，是项目里真实付过学费的教训</p>
+    <div class="grid2">
+      <div class="card">
+        <h4>📏 上下文治理优先</h4>
+        <p>附件注入、read_file、MinerU 长行 JSON —— 每一条进 prompt 的通道都要封顶。现在的三层防线：单条 8k ＋ 总量 30 万 ＋ read_file 20k 分页。</p>
+      </div>
+      <div class="card">
+        <h4>🔁 写后必须回读核对</h4>
+        <p>批量迁移脚本"HTTP 200 ＝ 成功"是假象（云端跑旧代码 ＋ PUT 漏传字段）。铁律：<b>写入后重新 GET 核对</b>，只信回读结果。</p>
+      </div>
+      <div class="card">
+        <h4>🧪 验证纪律</h4>
+        <p><code>scripts/check.sh</code> 秒级静态自检（语法＋关键不变量）；行为验证用 Edge headless ＋ CDP 写断言脚本，跑完即删；只改前端也必须部署云端。</p>
+      </div>
+      <div class="card">
+        <h4>🔐 密钥与分发卫生</h4>
+        <p>deploy_cloud.py 只读环境变量；分发清理清单剔除 workspace/、test_sse.py（含失效 key）；auth admin 走 env，代码本体无暗藏密钥。</p>
+      </div>
+    </div>
+    <h3>典型排查口诀</h3>
+    <table>
+      <tr><th>现象</th><th>第一反应</th></tr>
+      <tr><td>改了没生效</td><td>Python 不热加载 → 重启进程；前端 → 查 ?v= 版本号 ＋ Ctrl+F5</td></tr>
+      <tr><td>云端打开 404、本地正常</td><td>查服务器 <code>pool/uploads</code> 里有没有该 file_id</td></tr>
+      <tr><td>对账扫到 0 篇</td><td>schema 产物文件名必须叫 <code>06_schema.json</code>（下游脚本只认此名）</td></tr>
+      <tr><td>图像任务 no_image</td><td>归档错位（图误归邻文件夹 / 图注粘连）→ 目检后补建 FigureN 再重跑归档</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════ S15 总结 ═══════════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="kicker">Summary</div>
+    <h2>总结与下一步</h2>
+    <div class="grid2">
+      <div>
+        <h3>一句话总结</h3>
+        <p>C4EAI = <b>双引擎 ReAct 智能体</b> ＋ <b>16 工具注册表</b> ＋ <b>可自我生成的技能系统</b> ＋ <b>云端共享 Wiki</b> ＋ <b>六级权限</b>，组内科研辅助与知识共享、50 人可用的科研工作台。</p>
+        <h3>设计亮点</h3>
+        <ul>
+          <li>Hermes 式 file_id 引用 —— 历史不膨胀、附件即引用</li>
+          <li>技能简列注入 ＋ 按需读取 —— token 效率与能力兼得</li>
+          <li>子智能体硬约束（深度/并发/轮次/超时）—— 能力强但不失控</li>
+          <li>权限、配额、文件沙箱三位一体 —— 多用户环境下的安全底座</li>
+        </ul>
+      </div>
+      <div>
+        <h3>待办 / 未决（诚实的清单）</h3>
+        <ul>
+          <li><b>无自动化测试</b> —— 目前只有临时断言脚本；计划补最小测试套件（权限矩阵 / 多选上传 / 文件代理）</li>
+          <li>旧数据库条目正文回填（权限改造前的占位符条目）</li>
+          <li>model_cache 不入库 → 新环境需联网重下 bge-small-zh</li>
+          <li>本地实例的共享库读写依赖 hub_session token，过期需重新登录</li>
+        </ul>
+        <div class="card" style="margin-top:16px;text-align:center">
+          <p style="font-size:17px;color:var(--ink);font-weight:700">谢谢，欢迎提问与拍砖 🙌</p>
+          <p class="muted" style="font-size:13px">更多细节：项目架构说明.md / HANDOFF.md / CHANGELOG.md</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</div>
+
+<!-- 底部导航 -->
+<div class="hud">
+  <div class="brand">C4EAI · 功能说明与机制讲解</div>
+  <div class="ctrl">
+    <button id="prev" title="上一页（←）">‹</button>
+    <span class="page" id="page">1 / 15</span>
+    <button id="next" title="下一页（→ / 空格）">›</button>
+    <button id="fs" title="全屏（F）">⛶</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  var slides = document.querySelectorAll('.slide');
+  var idx = 0, total = slides.length;
+  var pageEl = document.getElementById('page');
+  var progressEl = document.getElementById('progress');
+  function show(i){
+    idx = Math.max(0, Math.min(total-1, i));
+    slides.forEach(function(s, k){ s.classList.toggle('active', k===idx); });
+    pageEl.textContent = (idx+1) + ' / ' + total;
+    progressEl.style.width = ((idx+1)/total*100) + '%';
+  }
+  document.getElementById('prev').onclick = function(){ show(idx-1); };
+  document.getElementById('next').onclick = function(){ show(idx+1); };
+  document.getElementById('fs').onclick = function(){
+    if(document.fullscreenElement){ document.exitFullscreen(); }
+    else{ document.documentElement.requestFullscreen(); }
+  };
+  document.addEventListener('keydown', function(e){
+    if(e.key==='ArrowRight' || e.key===' ' || e.key==='PageDown'){ e.preventDefault(); show(idx+1); }
+    else if(e.key==='ArrowLeft' || e.key==='PageUp'){ e.preventDefault(); show(idx-1); }
+    else if(e.key==='Home'){ show(0); }
+    else if(e.key==='End'){ show(total-1); }
+    else if(e.key==='f' || e.key==='F'){ document.getElementById('fs').click(); }
+  });
+  /* 点击页面左右 1/4 翻页（顶部 HUD 与文本选择除外） */
+  document.getElementById('deck').addEventListener('click', function(e){
+    if(e.target.closest('a,button,pre,table')) return;
+    var x = e.clientX / window.innerWidth;
+    if(x > 0.8) show(idx+1);
+    else if(x < 0.12) show(idx-1);
+  });
+  /* 支持 URL #页码 直达指定页（如 index.html#12） */
+  var hashStart = parseInt(location.hash.slice(1), 10);
+  show(isNaN(hashStart) ? 0 : hashStart - 1);
+})();
+</script>
+</body>
+</html>

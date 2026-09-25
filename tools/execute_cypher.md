@@ -37,7 +37,7 @@ RETURN c.name, avg(r.efficiency) ORDER BY avg(r.efficiency) DESC
   "count": 5,
   "truncated": false,
   "columns": ["name", "efficiency"],
-  "data": [{"name": "TiO2", "efficiency": 95}, ...]
+  "data": [{"name": "示例节点", "efficiency": 95}, ...]
 }
 ```
 

@@ -853,3 +853,69 @@
             display: block;
         }
 
+
+        /* ==================== 启动页（非全屏态）====================
+           非全屏 = 只有大 logo 与「立即开始探索」；点按钮进全屏即对话界面，退出全屏回启动页 */
+        body:not(.full-screen-mode) {
+            overflow: hidden;
+        }
+
+        body:not(.full-screen-mode) .chat-section {
+            display: none !important;
+        }
+
+        body:not(.full-screen-mode) main.container {
+            min-height: calc(100vh - 58px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        body:not(.full-screen-mode) .hero {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 0 0 2rem;
+        }
+
+        /* 启动页里 logo 铺满大屏 */
+        body:not(.full-screen-mode) .hero-logo {
+            height: clamp(180px, 34vh, 320px);
+        }
+
+        /* ==================== 宽版模态框（模型与服务商配置）==================== */
+        .modal-content.modal-wide {
+            max-width: 1000px;
+            width: 92vw;
+            max-height: 86vh;
+            overflow-y: auto;
+        }
+
+        /* 全屏模式下模态框默认被限到 500px，宽版要解除 */
+        body.full-screen-mode .modal-content.modal-wide {
+            max-width: 1000px;
+        }
+
+        .modal-head-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        .modal-close-x {
+            border: none;
+            background: transparent;
+            font-size: 1.05rem;
+            cursor: pointer;
+            color: var(--gray);
+            line-height: 1;
+            padding: 4px 10px;
+            border-radius: 8px;
+        }
+
+        .modal-close-x:hover {
+            background: var(--primary-soft);
+            color: var(--primary);
+        }

@@ -28,11 +28,11 @@ from tools.mineru_tools import parse_pdfs, load_token
 # ── Pydantic 参数模型（提供给 LLM 的 JSON Schema） ──
 
 class CypherParams(BaseModel):
-    cypher: str = Field(description="要执行的 Cypher 查询语句，例如: MATCH (n:Pollutant) WHERE n.name CONTAINS $q RETURN n.name LIMIT 10")
-    params: dict = Field(default={}, description="查询参数（可选），例如: {'q': 'CIP'}")
+    cypher: str = Field(description="要执行的 Cypher 查询语句，例如: MATCH (n) WHERE n.name CONTAINS $q RETURN n.name LIMIT 10")
+    params: dict = Field(default={}, description="查询参数（可选），例如: {'q': '关键词'}")
 
 class SearchParams(BaseModel):
-    query: str = Field(description="搜索关键词，例如: 'CIP 光催化降解 TiO2'")
+    query: str = Field(description="搜索关键词，例如: '向量数据库 Qdrant 用法'")
     limit: int = Field(default=5, description="返回结果数量 1-10")
 
 class FetchParams(BaseModel):
@@ -96,7 +96,7 @@ class SkillWriteParams(BaseModel):
     file_path: str = Field(default="SKILL.md", description="子文件路径（如 references/x.md、templates/x、scripts/x.py），默认 SKILL.md")
 
 class SearchMemoryParams(BaseModel):
-    query: str = Field(description="搜索关键词，例如: 'CIP 光催化降解 TiO2'")
+    query: str = Field(description="搜索关键词，例如: '实验记录 仪器标定'")
     scope: str = Field(default="auto", description="搜索范围: auto=自动判断, history=历史对话, knowledge=知识库")
 
 class SharedUploadParams(BaseModel):
@@ -124,7 +124,7 @@ class SharedSearchParams(BaseModel):
                      "  list_entries  —— 列出条目（**支持 owner/year/kind/sort/summary_only 过滤，见下**）\n"
                      "  move_entry    —— 把条目移到分组（需 entry_id、to_group_id；to_group_id 空=移出分组）"),
     )
-    query: str = Field(default="", description="search 用：搜索关键词或自然语言问题，例如 'Fenton 催化剂制备条件'")
+    query: str = Field(default="", description="search 用：搜索关键词或自然语言问题，例如 '组内仪器使用规范'")
     top_k: int = Field(default=5, description="search 用：返回最相关的条数，默认 5")
     group_id: str = Field(default="", description="list_entries 用：限定某分组（空=全部；\"__root__\"=未分组）；update/move/delete_group 用：要操作的分组 id（支持 8 位短 id）")
     name: str = Field(default="", description="create/update_group 用：分组名")
@@ -182,9 +182,9 @@ tools_registry["web_search"] = _make_async_tool(
     name="web_search",
     description=(
         "搜索互联网获取实时信息，返回多个结果（标题、URL、摘要）。\n\n"
-        "WHEN to use: 用户问到最新研究、新闻、论文、领域进展，或你对事实不确定、知识可能过时（如催化降解最新成果、某材料性能数据、市场信息）时，先搜索再回答；不要用自己可能过时的知识直接下结论。\n\n"
+        "WHEN to use: 用户问到最新研究、新闻、论文、领域进展，或你对事实不确定、知识可能过时（如最新研究进展、某技术性能数据、市场信息）时，先搜索再回答；不要用自己可能过时的知识直接下结论。\n\n"
         "WHEN NOT: 能直接从图谱/上传文档/用户给定资料可靠回答时，优先用那些，不必搜索。\n\n"
-        "HOW: 构造一个客观、聚焦的查询（可用关键词组合，如 'Fe2O3 光催化 降解 CIP 机理 2023'）。若第一次结果不佳，换关键词或加限定词再搜一次；不要无限重试同一查询。\n\n"
+        "HOW: 构造一个客观、聚焦的查询（可用关键词组合，如 'Qwen3 发布 特性 评测 2026'）。若第一次结果不佳，换关键词或加限定词再搜一次；不要无限重试同一查询。\n\n"
         "After searching: 结合多条结果交叉判断，优先采信权威来源，注明不确定性；用 web_extract 读取需要全文的关键结果。"
     ),
     args_schema=SearchParams,
@@ -533,7 +533,7 @@ tools_registry["delegate_task"] = _make_async_tool(
     description=(
         "派发子智能体（子智能体=独立上下文的小助手）并行去做**互相独立的子任务**，你负责汇总它们的结论。"
         "【什么时候用】任务可以切成 2-4 块彼此独立、且每块都需要多步检索/阅读时（例如"
-        "「分别查 A、B、C 三种污染物的降解条件」「一篇文章读结构、一篇文章读数据」）；"
+        "「分别查 A、B、C 三个课题的文献进展」「一篇文章读结构、一篇文章读数据」）；"
         "或者需要并行搜集多方资料以节省时间时。"
         "【什么时候不要用】① 一个问题就能答完（自己调工具更快）；② 子任务之间存在前后依赖（必须先拿到前一个结果才能定下一个）——"
         "这种情况应你自己按顺序做；③ 只是想写笔记/改数据库（用 conversation_notes）；④ 不要为了「显得正式」而派子智能体。"

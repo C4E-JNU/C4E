@@ -6,8 +6,9 @@
  *  - 数据：不落盘（内存变量），关闭即丢
  *  - 开关：设置面板「显示小e」
  */
+/* 默认停右上角：top 78px 让开顶部状态栏（桌面端 header 约 64px 高）；用户可拖走 */
 #xiaoe-root {
-    position: fixed; z-index: 3500; left: 22px; bottom: 22px; width: 104px; height: 104px;
+    position: fixed; z-index: 3500; right: 22px; top: 78px; width: 104px; height: 104px;
     cursor: grab; user-select: none; -webkit-user-drag: none;
     /* ⚠️ 手机端拖拽必需：不写 touch-action:none 的话，手指一滑会被浏览器
        当成页面滚动 → 触发 pointercancel，pointermove 收不到 → 小e 拖不动。 */
@@ -151,20 +152,20 @@
 }
 .xiaoe-body.anim-land { animation: xiaoe-land .68s cubic-bezier(.34,1.56,.64,1); }
 
-/* 睡眠：整体瘪下去 + 缓慢呼吸 */
+/* 睡眠：只缓慢起伏呼吸 + 头顶 zZz，**不压扁**（旧版 scale(1.1,.85) 会让小e 常态变扁） */
 @keyframes xiaoe-sleep {
-    0%, 100% { transform: scale(1.06, .9) translateY(4px); }
-    50%      { transform: scale(1.1, .85) translateY(6px); }
+    0%, 100% { transform: translateY(2px) scale(1, 1); }
+    50%      { transform: translateY(5px) scale(1.008, .996); }
 }
 .xiaoe-body.anim-sleep { animation: xiaoe-sleep 3.4s ease-in-out infinite; }
 
-/* 惊醒：猛地弹起 */
+/* 惊醒：原地猛地弹起（起始帧不再从扁态开始） */
 @keyframes xiaoe-wake {
-    0%   { transform: scale(1.1, .85) translateY(5px); }
-    22%  { transform: scale(.84, 1.24) translateY(-16px); }
-    46%  { transform: scale(1.18, .86) translateY(0); }
-    68%  { transform: scale(.94, 1.07) translateY(-3px); }
-    100% { transform: scale(1, 1) translateY(0); }
+    0%   { transform: translateY(3px) scale(1, 1); }
+    22%  { transform: translateY(-16px) scale(.9, 1.14); }
+    46%  { transform: translateY(0) scale(1.08, .93); }
+    68%  { transform: translateY(-3px) scale(.97, 1.04); }
+    100% { transform: translateY(0) scale(1, 1); }
 }
 .xiaoe-body.anim-wake { animation: xiaoe-wake .78s cubic-bezier(.34,1.56,.64,1); }
 

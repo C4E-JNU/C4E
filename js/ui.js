@@ -365,4 +365,3 @@
             const savedTheme = localStorage.getItem('ragagent-theme') || 'default';
             setGlobalTheme(savedTheme);
         }
-

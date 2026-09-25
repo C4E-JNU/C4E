@@ -155,13 +155,13 @@
             if (isEntering) {
                 document.body.classList.add('full-screen-mode');
                 btn.classList.add('active');
-                if (typeof showToast === 'function') showToast('已进入沉浸模式', 'success');
+                if (typeof showToast === 'function') showToast('已进入对话界面', 'success');
             } else {
                 document.body.classList.add('no-scroll-transition');
                 document.body.classList.remove('full-screen-mode');
                 btn.classList.remove('active');
-                const chatSection = document.querySelector('.chat-section');
-                if (chatSection) chatSection.scrollIntoView({ behavior: 'auto', block: 'start' });
+                // 退出全屏即回到启动页：滚到顶部，让大 logo 与入口按钮居中呈现
+                window.scrollTo({ top: 0, behavior: 'auto' });
                 requestAnimationFrame(() => {
                     setTimeout(() => document.body.classList.remove('no-scroll-transition'), 50);
                 });

@@ -1,7 +1,7 @@
 [project]
 name = "c4eai"
 version = "0.1.0"
-description = "C4EAI — 面向催化降解研究的智能体（图谱检索 + 文献解析 + 联网 + 文件处理）"
+description = "C4EAI · Shared Wiki — 组内科研辅助智能体（共享库 + 图谱检索 + 文献解析 + 联网 + 文件处理）"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

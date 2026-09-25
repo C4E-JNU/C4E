@@ -49,46 +49,46 @@
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
         }
 
-        /* 艺术圆润LOGO字样替代方案 */
+        /* 品牌标记：C4E 图形 LOGO ＋ 一圈圆环（环色跟随主题 --primary）
+           注意：容器原本是"渐变字裁剪"，放图片后必须把 background-clip 复位，
+           且不要加半透明白边框——圆弧顶端会与背景接缝混出灰脏色带。 */
         .c4e-art-logo,
         .c4e-sidebar-art-logo {
-            font-family: 'Segoe UI', 'Roboto', system-ui, sans-serif;
-            font-weight: 900;
-            background: linear-gradient(135deg, var(--primary), var(--secondary));
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
+            background: none;
             border: 2px solid var(--primary);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-            transition: all 0.3s ease;
-            cursor: pointer;
+            box-shadow: none;
+            transition: border-color 0.3s ease;
             flex-shrink: 0;
             user-select: none;
-            background-color: rgba(255, 255, 255, 0.8);
-            /* 半透明背景适配 */
+            overflow: hidden;
         }
 
         /* 顶部LOGO特定样式 */
         .c4e-art-logo {
             width: 28px;
             height: 28px;
-            font-size: 12px;
+        }
+
+        .c4e-art-logo img,
+        .c4e-sidebar-art-logo img {
+            width: 72%;
+            height: auto;
+            object-fit: contain;
+            display: block;
         }
 
         .c4e-art-logo:hover {
             transform: rotate(10deg) scale(1.1);
-            box-shadow: 0 6px 15px var(--primary-glow);
         }
 
         /* 侧边栏LOGO特定样式（与顶栏 28px 等大） */
         .c4e-sidebar-art-logo {
             width: 28px;
             height: 28px;
-            font-size: 12px;
             margin-right: 8px;
         }
 
@@ -321,6 +321,16 @@
             line-height: 1.2;
         }
 
+        /* 主页大屏：只放图形 LOGO，不加圆环 */
+        .hero-logo {
+            display: block;
+            margin: 0 auto 1rem;
+            width: auto;
+            height: 220px;
+            max-width: 88%;
+            object-fit: contain;
+        }
+
         .hero p {
             font-size: 1.2rem;
             color: var(--gray);
@@ -400,119 +410,6 @@
 
         .models-section.collapsed {
             padding-bottom: 0.5rem;
-        }
-
-        /* 装饰性功能横幅 (仅收起时显示) */
-        .banner-decoration {
-            display: flex;
-            justify-content: center;
-            align-items: stretch;
-            gap: 2rem;
-            margin: 1.5rem 0 3rem;
-            flex-wrap: wrap;
-            animation: slideUpIn 0.8s cubic-bezier(0.23, 1, 0.32, 1) forwards;
-        }
-
-        .decor-tile {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            padding: 2rem 1.5rem;
-            border-radius: 24px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 16px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.03);
-            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            flex: 1;
-            min-width: 220px;
-            max-width: 280px;
-            height: auto;          /* 原 100% 会禁用 stretch，导致各行卡片高度不等 */
-            cursor: default;
-            position: relative;
-            overflow: hidden;
-            backdrop-filter: blur(10px);
-        }
-
-        .decor-tile:hover {
-            transform: translateY(-10px);
-            border-color: var(--primary);
-            box-shadow: 0 20px 40px var(--primary-glow);
-        }
-
-        /* 点击瓷砖展开功能详细介绍与使用方式 */
-        .decor-tile { cursor: pointer; }
-        .decor-detail {
-            display: none;
-            width: 100%;
-            text-align: left;
-            font-size: 0.78rem;
-            line-height: 1.6;
-            color: var(--gray);
-            border-top: 1px dashed var(--border-color);
-            padding-top: 10px;
-        }
-        .decor-detail .dot { color: var(--primary); font-weight: 700; margin-right: 0.5em; }
-        .decor-tile.open .decor-detail { display: block; }
-
-        .decor-icon-container {
-            width: 54px;
-            height: 54px;
-            border-radius: 16px;
-            background: var(--primary-soft);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.6rem;
-            color: var(--primary);
-            transition: all 0.3s ease;
-        }
-
-        .decor-tile:hover .decor-icon-container {
-            background: var(--primary-gradient);
-            color: white;
-            transform: scale(1.1) rotate(5deg);
-        }
-
-        .decor-info {
-            text-align: center;
-        }
-
-        .decor-title {
-            font-weight: 700;
-            font-size: 1rem;
-            color: var(--dark);
-            margin-bottom: 4px;
-            white-space: nowrap;
-        }
-
-        .decor-desc {
-            font-size: 0.75rem;
-            color: var(--gray);
-            line-height: 1.4;
-        }
-
-        /* 极光装饰线条 */
-        .decor-aurora {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 3px;
-            background: var(--primary-gradient);
-            opacity: 0.3;
-        }
-
-        @keyframes slideUpIn {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
         }
 
         .model-grid {
@@ -1382,3 +1279,27 @@
         .notes-resize::before { content: none; display: none; }
 
         /* 侧边栏头部新设计样式 */
+
+        /* ===== 服务商配置搬进「设置」面板后收紧尺寸（原为首页大屏布局） ===== */
+        .settings-panel .provider-settings-block {
+            padding: 0;
+        }
+
+        .settings-panel .provider-layout {
+            padding: 1rem;
+            gap: 1rem;
+            min-height: 0;
+            margin-top: 0.5rem;
+            box-shadow: none;
+            border-radius: 16px;
+        }
+
+        .settings-panel .provider-sidebar {
+            flex: 0 0 150px;
+            min-width: 0;
+        }
+
+        .settings-panel .provider-content {
+            flex: 1 1 auto;
+            min-width: 0;
+        }

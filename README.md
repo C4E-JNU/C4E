@@ -1,6 +1,6 @@
-# C4EAI — 催化降解研究智能体
+# C4EAI · Shared Wiki — 组内科研辅助智能体
 
-一个面向**催化降解 / 光催化**科研场景的多工具智能体。前端纯静态 SPA + FastAPI 后端，内置知识图谱（Neo4j）检索、文献批量解析（MinerU）、联网搜索、文件处理、代码执行与技能系统。
+一个面向**组内科研辅助与共享知识库**的多用户多工具智能体。前端纯静态 SPA + FastAPI 后端，内置共享 Wiki（笔记/文档共享库）、知识图谱（Neo4j）检索、文献批量解析（MinerU）、联网搜索、文件处理、代码执行与技能系统。
 
 > 设计对齐 [Hermes Agent](https://github.com/NousResearch/hermes-agent)：工具能力由 OpenAI function-calling schema 提供，技能以 `<available_skills>` 简列注入系统提示词、详情按需 `skill_view` 读取。
 
@@ -23,7 +23,7 @@
 | 模块 | 说明 |
 |---|---|
 | 🧠 **Agent 引擎** | 手搓流式（custom）与 LangChain 两套引擎，保留候选 |
-| 🌐 **知识图谱** | Neo4j 查询（graph_schema / execute_cypher），面向污染物-催化剂-降解方法 |
+| 🌐 **知识图谱** | Neo4j 查询（graph_schema / execute_cypher），图谱结构可配置，当前库内存有科研实体关系数据 |
 | 📄 **文献解析** | MinerU v4 批量 PDF→Markdown（支持文件/文件夹） |
 | 🔍 **联网搜索** | web_search / web_extract，免费 Bing 抓取无 key |
 | 📎 **全后端文件解析** | pdf / docx / xlsx / xls / pptx / odt / txt（上传只存 file_id，历史附件即引用，Hermes 式） |

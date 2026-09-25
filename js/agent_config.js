@@ -205,6 +205,7 @@ function initAgentConfigPanel() {
         loadPermissionModeFromState();
         loadAgentEngineFromState();
         loadSubagentConfigToPanel();
+        loadTimeoutConfigToPanel();
         syncNeo4jConfigToPanel();
         renderSkillsCheckboxes();  // 动态加载技能列表
         loadMineruConfigToPanel();  // 预填 MinerU Token
@@ -349,6 +350,15 @@ function saveAgentConfig() {
     // 子智能体设置（写入 state.settings.*，独立持久化到 ai-settings）
     saveSubagentConfigFromPanel();
 
+    // 主智能体超时保护三级（已迁入本面板；id 与 branching.js 读写保持一致）
+    const _tn = document.getElementById('timeout-nudge');
+    const _tw = document.getElementById('timeout-warn');
+    const _ta = document.getElementById('timeout-abort');
+    if (_tn) state.settings.timeoutNudge = Math.max(0, parseInt(_tn.value) || 0);
+    if (_tw) state.settings.timeoutWarn = Math.max(0, parseInt(_tw.value) || 0);
+    if (_ta) state.settings.timeoutAbort = Math.max(0, parseInt(_ta.value) || 0);
+    try { localStorage.setItem('ai-settings', JSON.stringify(state.settings)); } catch (e) { /* ignore */ }
+
     // 收起面板
     if (agentConfigPanel) agentConfigPanel.classList.remove('active');
     const btn = document.getElementById('save-agent-config');
@@ -440,4 +450,15 @@ if (panelNeo4jConnect) {
             updateNeo4jStatusUI(false);
         }
     });
+}
+
+// 主智能体超时保护：打开「智能体配置」面板时从 state.settings 回填
+function loadTimeoutConfigToPanel() {
+    const st = state.settings || {};
+    const _tn = document.getElementById('timeout-nudge');
+    const _tw = document.getElementById('timeout-warn');
+    const _ta = document.getElementById('timeout-abort');
+    if (_tn) _tn.value = (st.timeoutNudge ?? 120);
+    if (_tw) _tw.value = (st.timeoutWarn ?? 240);
+    if (_ta) _ta.value = (st.timeoutAbort ?? 420);
 }
