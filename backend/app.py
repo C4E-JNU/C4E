@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse, JSONResponse
 import asyncio
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Any, Dict
 
 from tools.neo4j_tools import Neo4jClient, execute_graph_schema, execute_cypher
 from tools.web_tools import web_search, web_extract
@@ -30,6 +30,7 @@ from tools.file_tools import (
 import auth as _auth
 from tools.vector_search import search_history, search_knowledge
 from tools.shared_hub import publish_note_to_db
+import tools.user_settings as US
 from tools.mineru_tools import save_token as _mineru_save_token, load_token as _mineru_load_token
 from agent.tools import tools_registry as _tools_registry
 from agent.agent import run_agent, stream_agent, stream_agent_lc
@@ -1264,6 +1265,38 @@ async def api_groups(req: GroupOpReq, request: Request):
     if action == "delete_group":
         return json.loads(FT.delete_group(req.group_id, req.mode or "move_up"))
     return JSONResponse({"error": f"未知 action: {action}"}, status_code=400)
+
+
+# ── 个人设置（后端存储）──────────────────────────
+# 用户 2026-09-26 定：密钥/模型/智能体配置等原本存浏览器 localStorage，
+# 改为存「个人账号数据」（workspace/users/<身份>/settings.json）。
+# 「反正也就开发者知道密钥」→ 明文存本人目录即可。
+#
+# 安全：owner 一律从登录身份推导（_cur_user），**绝不用请求体传入的身份** ——
+# 否则可以越权读写他人设置。与 WeKnora「记忆工具不接受 owner 参数」同款原则。
+
+class UserSettingsReq(BaseModel):
+    settings: Dict[str, Any] = {}
+
+
+@app.get("/api/user/settings")
+async def api_user_settings_get(request: Request):
+    """读本人的后端设置。本地实例 → 转发云端（与笔记/附件同一套分流）。"""
+    p = await _notes_proxy("GET", "/api/user/settings")
+    if p is not None:
+        return p
+    user = _cur_user(request)
+    return json.loads(US.load_user_settings(user["username"]))
+
+
+@app.put("/api/user/settings")
+async def api_user_settings_put(req: UserSettingsReq, request: Request):
+    """合并写入本人的后端设置。只接受白名单键（见 user_settings.MANAGED_KEYS）。"""
+    p = await _notes_proxy("PUT", "/api/user/settings", {"settings": req.settings})
+    if p is not None:
+        return p
+    user = _cur_user(request)
+    return json.loads(US.save_user_settings(user["username"], req.settings))
 
 
 # ── LangChain Agent ──────────────────────────────

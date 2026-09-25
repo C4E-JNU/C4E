@@ -71,6 +71,13 @@ chk backend/tools/file_tools.py 'parse=False → **只存原件**' 'parse=False 
 chk js/database.js '_dbUploadFolder' '上传按钮下沉到文件夹行'
 chk js/database.js 'data-gact="upload"' '每个夹带上传按钮'
 chk js/database.js 'data-gact="addentry"' '每个夹带新建条目按钮'
+# 个人设置后端存储（用户 2026-09-26 定：密钥等改存「个人账号数据」）
+chk backend/tools/user_settings.py 'MANAGED_KEYS' '设置键白名单'
+chk backend/tools/user_settings.py 'def load_user_settings' '读个人设置'
+chk backend/tools/user_settings.py 'def save_user_settings' '写个人设置'
+chk backend/tools/user_settings.py '_user_dir(username)' '按身份隔离（本人目录）'
+chk backend/app.py '/api/user/settings' '设置读写端点'
+chk backend/app.py 'US.load_user_settings(user' 'owner 从登录身份推导（非请求体）'
 # Neo4j 失败必须降级而非终止对话（三处：两流式 + 一非流式）
 _n4="$(grep -c '连不上只降级摘掉图谱工具' backend/agent/agent.py 2>/dev/null || echo 0)"
 if [ "$_n4" -ge 3 ]; then ok "Neo4j 失败降级 ($_n4 处)"; else bad "Neo4j 降级仅 $_n4 处（应≥3）"; fi
