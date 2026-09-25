@@ -78,6 +78,12 @@ chk backend/tools/user_settings.py 'def save_user_settings' '写个人设置'
 chk backend/tools/user_settings.py '_user_dir(username)' '按身份隔离（本人目录）'
 chk backend/app.py '/api/user/settings' '设置读写端点'
 chk backend/app.py 'US.load_user_settings(user' 'owner 从登录身份推导（非请求体）'
+# 设置后端存储的时序不变量（用户 2026-09-26 提醒：改后端后很多按钮会受影响）
+chk js/api.js 'hydrateUserSettings().finally(initAfterSettings)' 'init 必须先 hydrate 再初始化'
+chk js/api.js 'state.enabledModels = JSON.parse(localStorage' 'enabledModels 在 hydrate 后读'
+chk js/api.js 'loadAgentConfigFromLocal();' '智能体配置在 hydrate 后加载（原在 main.js 顶层）'
+chk js/api.js 'updateNeo4jStatusUI(state.neo4j.connected)' 'Neo4j 状态在 hydrate 后更新'
+chk js/state.js 'enabledModels: []' 'state.js 不在解析时读设置（那时 hydrate 未跑）'
 # Neo4j 失败必须降级而非终止对话（三处：两流式 + 一非流式）
 _n4="$(grep -c '连不上只降级摘掉图谱工具' backend/agent/agent.py 2>/dev/null || echo 0)"
 if [ "$_n4" -ge 3 ]; then ok "Neo4j 失败降级 ($_n4 处)"; else bad "Neo4j 降级仅 $_n4 处（应≥3）"; fi

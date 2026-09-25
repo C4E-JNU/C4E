@@ -105,8 +105,11 @@
             isGenerating: false,
             abortController: null,
             userHasScrolledUp: false,
-            tableTheme: localStorage.getItem('ragagent-table-theme') || '', // 全局表格皮肤
-            enabledModels: JSON.parse(localStorage.getItem('ragagent-enabled-models') || '[]') // 记录已“亮起”的模型ID
+            tableTheme: localStorage.getItem('ragagent-table-theme') || '', // 全局表格皮肤（本机偏好，不同步）
+            // 已启用的模型：这里留空 —— 本对象的字面量在**脚本解析时**求值，
+            // 那时 hydrateUserSettings() 还没从后端灌回缓存。
+            // 真正读缓存的地方在 api.js::initAfterSettings()。
+            enabledModels: []
         };
 
         // ── 全局辅助函数 ────────────────────────────────

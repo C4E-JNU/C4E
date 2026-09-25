@@ -1,7 +1,13 @@
-        /** 依赖个人设置的初始化（在 hydrateUserSettings 完成后调用） */
+        /** 依赖个人设置的初始化（在 hydrateUserSettings 完成后调用）。
+         *  ⚠️ 凡是「读 localStorage 里的个人设置」的初始化都必须放这里 ——
+         *  这些键的本地缓存要等 hydrate 从后端灌回来才有值。 */
         function initAfterSettings() {
+            // 已启用模型：state 里不能读（state.js 在脚本解析时就求值，
+            // 那时 hydrate 还没跑），必须在这之后读缓存。
+            state.enabledModels = JSON.parse(localStorage.getItem('ragagent-enabled-models') || '[]');
+
             initProviderSystem(); // 新的服务商系统初始化 (替代 loadApiKeys)
-            loadSettings();
+            loadSettings();       // 填 state.settings / state.neo4j
             loadBranches();
             updateUI();
             initSidebar();
@@ -11,6 +17,12 @@
 
             // 更新聊天区模型选择器
             updateChatModelSelector();
+
+            // 以下原先在 main.js 顶层同步执行 → 会跑在 hydrate 之前读不到设置，
+            // 故统一移到这里（依赖 ragagent-agent-config / state.neo4j）
+            loadAgentConfigFromLocal();
+            initAgentConfigPanel();
+            updateNeo4jStatusUI(state.neo4j.connected);   // state.neo4j 由上面 loadSettings 填
 
             // 恢复上次使用的模型
             const savedModel = localStorage.getItem('ai-current-model');

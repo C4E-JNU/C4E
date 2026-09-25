@@ -1,11 +1,10 @@
         init();
 
-        // 初始化智能体配置面板
-        loadAgentConfigFromLocal();
-        initAgentConfigPanel();
-        // 更新 Neo4j 状态指示灯
-        updateNeo4jStatusUI(state.neo4j.connected);
-        // 注：桌宠小e 的初始化在 js/xiaoe.js 内部自行完成（它在本文件之后加载）
+        // 注：依赖个人设置的初始化（loadAgentConfigFromLocal / initAgentConfigPanel /
+        // updateNeo4jStatusUI）已移入 api.js 的 initAfterSettings() ——
+        // 那些设置现在要先由 hydrateUserSettings() 从后端灌回本地缓存才有值，
+        // 放在这里会在 hydrate 完成前执行、读到空值。
+        // 桌宠小e 的初始化在 js/xiaoe.js 内部自行完成（它在本文件之后加载）
 
         // 暴露函数给全局作用域
         window.editMessage = editMessage;
