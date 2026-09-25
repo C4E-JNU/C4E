@@ -52,7 +52,10 @@ chk backend/tools/folder_tree.py '_is_descendant' '分组树：防循环移动'
 chk backend/agent/tools.py 'knowledge as _knowledge' '知识库工具统一入口（不多写新工具）'
 chk backend/tools/shared_hub.py 'async def knowledge' 'shared_hub 统一 knowledge 分发'
 chk backend/app.py '@app.post("/api/groups")' 'app.py 分组端点'
-chk js/database.js '_showMoveMenu' '前端右键「移动到分组」菜单'
+chk js/database.js '_showMoveMenu' '前端右键条目「移动到分组」菜单'
+chk js/database.js 'openGroupsPanel' '前端分组管理面板'
+chk js/database.js '_editGroup' '分组新建/编辑走经典浮窗'
+chk index.html 'db-groups-btn' 'header 有「📁 分组」按钮'
 # Neo4j 失败必须降级而非终止对话（三处：两流式 + 一非流式）
 _n4="$(grep -c '连不上只降级摘掉图谱工具' backend/agent/agent.py 2>/dev/null || echo 0)"
 if [ "$_n4" -ge 3 ]; then ok "Neo4j 失败降级 ($_n4 处)"; else bad "Neo4j 降级仅 $_n4 处（应≥3）"; fi

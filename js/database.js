@@ -149,6 +149,24 @@ function initDatabase() {
 
     // 筛选按钮：下拉切换「笔记 / 文档」——用户 2026-09-22 定
     // （原 Tab 条占一整行、且未登录时两栏内容相同，看着像"点了没反应"，故改为单按钮）
+    var _gbtn = document.getElementById('db-groups-btn');
+    if (_gbtn) {
+        _gbtn.addEventListener('click', function () {
+            if (typeof openGroupsPanel === 'function') openGroupsPanel();
+        });
+    }
+    var _gback = document.getElementById('db-groups-back');
+    if (_gback) {
+        _gback.addEventListener('click', function () {
+            _showGroupsView(false);
+            if (typeof refreshDocumentList === 'function') refreshDocumentList();
+        });
+    }
+    var _gnew = document.getElementById('db-groups-new');
+    if (_gnew) {
+        _gnew.addEventListener('click', function () { _editGroup(null, '', ''); });
+    }
+
     var _fbtn = document.getElementById('db-filter-btn');
     var _fmenu = document.getElementById('db-filter-menu');
     if (_fbtn && _fmenu) {
@@ -196,6 +214,8 @@ function initDatabase() {
 function openDatabaseModal() {
     var p = document.getElementById('database-panel');
     if (!p) return;
+    // 每次打开都回到条目列表（避免上次停在分组面板上造成"打开是空的"错觉）
+    if (typeof _showGroupsView === 'function') _showGroupsView(false);
     // 用浮窗控制器打开（应用记忆的尺寸/位置）；控制器未就绪时退化为基础显示
     if (window.__dbPanelFloat && window.__dbPanelFloat.open) {
         window.__dbPanelFloat.open();
@@ -821,3 +841,218 @@ async function _doMoveEntry(entryId, groupId) {
 }
 
 window._showMoveMenu = _showMoveMenu;
+
+
+// ═══════════════════════════════════════════════
+// 分组管理面板（用户 2026-09-25 定：手动控制分组）
+// 「📁 分组」按钮 → 列表；每项可编辑（经典浮窗改名字+简介）/移动/删除/加子组
+// 编辑用 window.floatingEditor（与笔记编辑、AI 回复编辑同一个浮窗）
+// ═══════════════════════════════════════════════
+
+async function _groupOp(payload) {
+    const resp = await fetch('/api/groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    const d = await resp.json();
+    if (!resp.ok || d.error) throw new Error(d.error || ('HTTP ' + resp.status));
+    return d;
+}
+
+function _showGroupsView(show) {
+    const gv = document.getElementById('db-groups-view');
+    const dl = document.getElementById('db-doc-list');
+    const em = document.getElementById('db-empty');
+    if (!gv) return;
+    gv.style.display = show ? 'block' : 'none';
+    if (dl) dl.style.display = show ? 'none' : '';
+    if (em && show) em.style.display = 'none';
+}
+
+/** 打开分组管理面板 */
+async function openGroupsPanel() {
+    _showGroupsView(true);
+    await refreshGroupsList();
+}
+
+/** 渲染分组列表（缩进显示层级） */
+async function refreshGroupsList() {
+    const box = document.getElementById('db-groups-list');
+    if (!box) return;
+    let folders = [];
+    try {
+        const d = await _groupOp({ action: 'list_groups' });
+        folders = d.folders || [];
+    } catch (e) {
+        box.innerHTML = '<div style="padding:1rem;text-align:center;color:var(--gray);">'
+            + '读取分组失败：' + escHtml(e.message) + '</div>';
+        return;
+    }
+
+    if (!folders.length) {
+        box.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--gray);font-size:.88rem;">'
+            + '还没有分组<br><span style="font-size:.8rem;">点右上「＋ 新建分组」开始，'
+            + '或直接在对话里让智能体帮你建</span></div>';
+        return;
+    }
+
+    box.innerHTML = folders.map(function (f) {
+        const pad = 8 + (f.depth || 0) * 16;
+        const intro = (f.intro || '').trim();
+        return '<div class="db-group-item" data-gid="' + f.id + '" style="padding-left:' + pad + 'px;">'
+            + '<div class="db-group-row">'
+            + '<span class="db-group-name" title="' + escHtml(f.path || f.name) + '">📁 ' + escHtml(f.name) + '</span>'
+            + '<span class="db-group-count" data-count-for="' + f.id + '"></span>'
+            + '<span class="db-group-actions">'
+            + '<button class="db-group-add" data-gid="' + f.id + '" title="在此分组下新建子分组">＋</button>'
+            + '<button class="db-group-edit" data-gid="' + f.id + '" title="编辑名称与简介">✏️</button>'
+            + '<button class="db-group-del" data-gid="' + f.id + '" title="删除分组（不会删条目）">×</button>'
+            + '</span></div>'
+            + (intro
+                ? '<div class="db-group-intro">' + escHtml(intro) + '</div>'
+                : '<div class="db-group-intro db-group-intro-empty">（无简介，点 ✏️ 添加）</div>')
+            + '</div>';
+    }).join('');
+
+    // 事件绑定
+    box.querySelectorAll('.db-group-add').forEach(function (b) {
+        b.addEventListener('click', function () { _editGroup(null, b.dataset.gid, ''); });
+    });
+    box.querySelectorAll('.db-group-edit').forEach(function (b) {
+        const f = folders.find(function (x) { return x.id === b.dataset.gid; });
+        if (f) b.addEventListener('click', function () {
+            _editGroup(f.id, null, '', f.name, f.intro || '');
+        });
+    });
+    box.querySelectorAll('.db-group-del').forEach(function (b) {
+        b.addEventListener('click', function () { _deleteGroupConfirm(b.dataset.gid); });
+    });
+    // 右键分组 → 移动到…
+    box.querySelectorAll('.db-group-item').forEach(function (it) {
+        it.addEventListener('contextmenu', function (ev) {
+            ev.preventDefault();
+            _showMoveGroupMenu(ev.clientX, ev.clientY, it.dataset.gid);
+        });
+    });
+}
+
+/**
+ * 新建 / 编辑分组 —— 统一用「经典浮窗」（window.floatingEditor）：
+ *   标题行 = 分组名（showTitle）
+ *   正文区 = 分组简介（intro）
+ * @param editId  传 id = 编辑现有；传 null = 新建
+ * @param parentId 新建时的父分组
+ */
+function _editGroup(editId, parentId, _unused, name, intro) {
+    if (typeof window.floatingEditor === 'undefined') { showToast('编辑器未就绪', 'error'); return; }
+    const isNew = !editId;
+    window.floatingEditor.open({
+        title: isNew ? (parentId ? '新建子分组' : '新建分组') : '编辑分组',
+        showTitle: true,
+        titleValue: name || '',
+        value: intro || '',
+        onSave: async function (newIntro, newName) {
+            const nm = (newName || '').trim();
+            if (!nm) { showToast('分组名不能为空', 'error'); return; }
+            try {
+                if (isNew) {
+                    await _groupOp({ action: 'create_group', name: nm,
+                                     parent_id: parentId || '', intro: newIntro || '' });
+                    showToast('✅ 已创建分组「' + nm + '」', 'success');
+                } else {
+                    await _groupOp({ action: 'update_group', group_id: editId,
+                                     name: nm, intro: newIntro || '' });
+                    showToast('✅ 已保存', 'success');
+                }
+                await refreshGroupsList();
+                if (typeof refreshDocumentList === 'function') refreshDocumentList();
+            } catch (e) {
+                showToast('保存失败：' + e.message, 'error');
+            }
+        }
+    });
+}
+
+function _deleteGroupConfirm(gid) {
+    if (!window.confirm('删除该分组？\n\n分组里的条目不会被删除，子分组与条目会上移到父级。')) return;
+    _groupOp({ action: 'delete_group', group_id: gid, mode: 'move_up' })
+        .then(function () {
+            showToast('✅ 分组已删除（条目已上移，未丢失）', 'success');
+            return refreshGroupsList();
+        })
+        .then(function () { if (typeof refreshDocumentList === 'function') refreshDocumentList(); })
+        .catch(function (e) { showToast('删除失败：' + e.message, 'error'); });
+}
+
+/** 右键分组 → 「移动到…」菜单（不可移到自己或自己的后代下） */
+var _moveGroupMenuEl = null;
+
+function _closeMoveGroupMenu() {
+    if (_moveGroupMenuEl && _moveGroupMenuEl.parentNode) _moveGroupMenuEl.parentNode.removeChild(_moveGroupMenuEl);
+    _moveGroupMenuEl = null;
+}
+
+async function _showMoveGroupMenu(x, y, gid) {
+    _closeMoveGroupMenu();
+    let folders = [];
+    try {
+        folders = (await _groupOp({ action: 'list_groups' })).folders || [];
+    } catch (e) { showToast('读取分组失败：' + e.message, 'error'); return; }
+
+    // 排除自己与自己的后代（后端也会校验，这里先不显示以免误点）
+    const self = folders.find(function (f) { return f.id === gid; });
+    const selfPath = (self && self.path) || '';
+    const candidates = folders.filter(function (f) {
+        return f.id !== gid && !(selfPath && f.path && f.path.indexOf(selfPath + '/') === 0);
+    });
+
+    const menu = document.createElement('div');
+    menu.className = 'db-move-menu';
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+    const title = document.createElement('div');
+    title.className = 'db-move-menu-title';
+    title.textContent = '移动「' + ((self && self.name) || '') + '」到';
+    menu.appendChild(title);
+
+    const rootItem = document.createElement('div');
+    rootItem.className = 'db-move-menu-item';
+    rootItem.textContent = '（移动到根级）';
+    rootItem.addEventListener('click', function () { _doMoveGroup(gid, ''); });
+    menu.appendChild(rootItem);
+
+    candidates.forEach(function (f) {
+        const it = document.createElement('div');
+        it.className = 'db-move-menu-item';
+        it.style.paddingLeft = (12 + (f.depth || 0) * 14) + 'px';
+        it.textContent = '📁 ' + f.name;
+        it.addEventListener('click', function () { _doMoveGroup(gid, f.id); });
+        menu.appendChild(it);
+    });
+
+    document.body.appendChild(menu);
+    const r = menu.getBoundingClientRect();
+    if (r.right > window.innerWidth - 8) menu.style.left = (window.innerWidth - r.width - 8) + 'px';
+    if (r.bottom > window.innerHeight - 8) menu.style.top = (y - r.height) + 'px';
+    _moveGroupMenuEl = menu;
+    setTimeout(function () {
+        document.addEventListener('click', _closeMoveGroupMenu, { once: true });
+        document.addEventListener('contextmenu', _closeMoveGroupMenu, { once: true });
+    }, 0);
+}
+
+async function _doMoveGroup(gid, newParentId) {
+    _closeMoveGroupMenu();
+    try {
+        await _groupOp({ action: 'move_group', group_id: gid, parent_id: newParentId });
+        showToast('✅ 已移动', 'success');
+        await refreshGroupsList();
+        if (typeof refreshDocumentList === 'function') refreshDocumentList();
+    } catch (e) {
+        showToast('移动失败：' + e.message, 'error');
+    }
+}
+
+window.openGroupsPanel = openGroupsPanel;
+window.refreshGroupsList = refreshGroupsList;

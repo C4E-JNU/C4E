@@ -1161,6 +1161,71 @@
         .notes-panel .notes-panel-actions button {
             margin: 0;
         }
+        /* 分组管理面板（用户 2026-09-25 定：手动控制分组）*/
+        .db-group-item {
+            border-radius: 8px;
+            padding: 4px 8px 6px;
+            margin-bottom: 3px;
+        }
+        .db-group-item:hover {
+            background: var(--hover, #f7f8fa);
+        }
+        .db-group-row {
+            display: flex;
+            align-items: center;
+            gap: .4rem;
+            padding: 5px 0 3px;
+        }
+        .db-group-name {
+            font-weight: 600;
+            font-size: .9rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .db-group-count {
+            font-size: .74rem;
+            color: var(--gray, #999);
+            margin-left: .15rem;
+        }
+        .db-group-actions {
+            margin-left: auto;
+            display: flex;
+            gap: .1rem;
+            opacity: 0;
+            transition: opacity .12s;
+        }
+        .db-group-item:hover .db-group-actions {
+            opacity: 1;
+        }
+        .db-group-actions button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: .92rem;
+            padding: .1rem .32rem;
+            border-radius: 5px;
+            line-height: 1.2;
+        }
+        .db-group-actions button:hover {
+            background: var(--border, #eef0f3);
+        }
+        .db-group-actions .db-group-del {
+            color: var(--danger, #e5484d);
+            font-size: 1rem;
+        }
+        .db-group-intro {
+            font-size: .8rem;
+            color: var(--gray, #6b7280);
+            line-height: 1.45;
+            padding: 0 2px 2px;
+            white-space: pre-wrap;
+        }
+        .db-group-intro-empty {
+            color: var(--border, #b8bcc4);
+            font-style: italic;
+        }
+
         /* 右键「移动到分组」菜单（用户 2026-09-25 定：方案 B）*/
         .db-move-menu {
             position: fixed;
