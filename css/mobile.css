@@ -138,23 +138,35 @@
         min-height: 100vh !important;
         min-height: 100dvh !important;
     }
-    /* 欢迎/功能展示区在手机上隐藏
-       注意实际类名：.hero（欢迎）、.models-section（模型配置） */
-    .hero,
+    /* ========== ② 启动页 / 对话页切换（手机） ==========
+       非全屏 = 启动页（只留 hero）；全屏 = 只有对话界面 */
     .hero-section,
-    .models-section,
     .features-section,
     .feature-grid,
-    .decor-grid,
-    .models-content-wrapper,
-    .provider-layout,
-    .decor-tile {
+    .decor-grid {
         display: none !important;
     }
-    /* 兜底：main.container 的直接子元素里，除了 chat-section 全隐藏 */
-    main.container > section:not(.chat-section),
-    main.container > div:not(.chat-section):not(.popup-panel) {
+    body:not(.full-screen-mode) .chat-section {
         display: none !important;
+    }
+    body.full-screen-mode .hero {
+        display: none !important;
+    }
+    /* 兜底：main.container 直接子元素里，启动页只放行 hero；
+       ⚠️ 必须放行 .modal —— 模态框都在 main 内部，否则手机上任何弹窗都弹不出来 */
+    main.container > section:not(.chat-section):not(.hero),
+    main.container > div:not(.chat-section):not(.popup-panel):not(.modal) {
+        display: none !important;
+    }
+    body:not(.full-screen-mode) main.container {
+        min-height: calc(100vh - 52px);
+    }
+    body:not(.full-screen-mode) .hero-logo {
+        height: clamp(150px, 26vh, 240px);
+    }
+    .modal-content.modal-wide {
+        width: 94vw !important;
+        max-height: 82vh;
     }
     main.container {
         margin: 0 !important;
@@ -412,7 +424,7 @@
     /* 拖拽分隔条在手机上无意义 */
     .sidebar-resizer { display: none !important; }
 
-    /* 抽屉里的「全屏沉浸」按钮在手机上无意义 */
+    /* 抽屉里的「返回主页」按钮在手机上无意义（已有抽屉汉堡按钮） */
     #full-screen-toggle { display: none !important; }
     /* 手机端隐藏「展开/收缩侧栏」箭头按钮（.sidebar-toggle-btn）
        —— 手机改成了 DeepSeek 同款抽屉，汉堡按钮已负责开合，
@@ -483,6 +495,7 @@
         height: 74px !important;
         left: auto !important;
         right: 14px !important;
+        top: auto !important;          /* 桌面默认改成 top 定位了，这里必须放开，否则 bottom 失效 */
         bottom: calc(88px + env(safe-area-inset-bottom, 0px)) !important;
     }
     .xiaoe-bubble {

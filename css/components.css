@@ -1,4 +1,5 @@
         /* 设置面板 */
+        /* 高度/位置/圆角/阴影与「智能体配置」面板完全一致（用户 2026-09-25 定）*/
         .settings-panel {
             display: none;
             background: var(--card-bg, #fff);
@@ -8,6 +9,7 @@
             max-height: 60vh;
             overflow-y: auto;
             width: 100%;
+            margin-bottom: 0.5rem;
         }
 
         .settings-panel.active {
@@ -16,35 +18,8 @@
 
         /* 内联紧凑卡片，无滑动动画、无遮罩 */
 
-        .settings-header {
-            padding: 0.6rem 0.8rem;
-            border-bottom: 1px solid var(--border-color, #e0e0e0);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 0.9rem;
-            font-weight: 600;
-            gap: 0.5rem;
-            position: sticky;
-            top: 0;
-            z-index: 5;
-            background: var(--card-bg, #fff);
-        }
-
-        .settings-title {
-            flex: 1;
-            font-size: 0.9rem;
-            font-weight: 600;
-            color: var(--dark);
-        }
-
-        .close-settings {
-            background: none;
-            border: none;
-            font-size: 1.1rem;
-            cursor: pointer;
-            color: var(--gray);
-        }
+        /* 头部样式：已统一为 .config-panel-header（见 css/agent.css）
+           —— 原 .settings-header/.settings-title/.close-settings 已废弃删除（用户 2026-09-25 定）*/
 
         .settings-content {
             padding: 0.6rem 0.8rem;

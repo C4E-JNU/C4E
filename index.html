@@ -5,12 +5,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>C4EAI · Shared Wiki</title>
-    <!-- 站点图标（标签页 / 书签 / 手机主屏）：C4E 标志，透明背景（跟随浏览器明暗主题）
-         优先 SVG（矢量、任意缩放不虚），不支持 SVG 的浏览器回退 PNG / ICO -->
-    <link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">
-    <link rel="icon" type="image/x-icon" href="assets/icons/favicon.ico">
+    <!-- 站点图标（标签页 / 书签 / 手机主屏）：蓝色圆环 + 墨色 C4E
+         环内用深蓝墨色版而非原浅色版——16/32px 下浅色图形会糊到看不见 -->
     <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/c4e-logo-32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="assets/icons/c4e-logo-16.png">
+    <link rel="icon" type="image/png" href="assets/icons/c4e-logo-48.png">
+    <link rel="icon" type="image/x-icon" href="assets/icons/favicon.ico">
     <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png">
     <!--与代码高亮和Markdown渲染相关的CDN-->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
@@ -30,14 +30,14 @@
     <!-- 本地样式文件 -->
     <link rel="stylesheet" href="css/variables.css?v=5">
     <link rel="stylesheet" href="css/reset.css?v=4">
-    <link rel="stylesheet" href="css/layout.css?v=19">
+    <link rel="stylesheet" href="css/layout.css?v=22">
     <link rel="stylesheet" href="css/sidebar.css?v=6">
     <link rel="stylesheet" href="css/messages.css?v=2">
-    <link rel="stylesheet" href="css/input.css?v=7">
+    <link rel="stylesheet" href="css/input.css?v=8">
     <link rel="stylesheet" href="css/modals.css?v=4">
-    <link rel="stylesheet" href="css/xiaoe.css?v=6">
-    <link rel="stylesheet" href="css/mobile.css?v=13">
-    <link rel="stylesheet" href="css/components.css?v=6">
+    <link rel="stylesheet" href="css/xiaoe.css?v=7">
+    <link rel="stylesheet" href="css/mobile.css?v=17">
+    <link rel="stylesheet" href="css/components.css?v=7">
     <link rel="stylesheet" href="css/agent.css?v=4">
 
 </head>
@@ -49,7 +49,7 @@
             <!-- 手机端汉堡按钮（桌面端 CSS 隐藏） -->
             <button class="mobile-menu-btn" id="mobile-menu-btn" title="对话管理" aria-label="打开对话管理">☰</button>
             <div class="logo-area">
-                <div class="c4e-art-logo">C4E</div>
+                <div class="c4e-art-logo"><img src="assets/icons/c4e-logo.png" alt="C4E"></div>
                 <div class="logo-text-wrapper">
                     <a href="#" class="logo">C4E<span>AI</span></a>
                     <div class="company-tagline">江南大学环境计算组</div>
@@ -138,10 +138,11 @@
 
     <!-- 设置面板和遮罩 -->
     <div class="settings-panel" id="settings-panel">
-        <div class="settings-header">
-            <h2 class="settings-title">模型设置</h2>
+        <!-- 头部结构与「智能体配置」面板完全一致（用户 2026-09-25 定：用智能体配置那套样式） -->
+        <div class="config-panel-header">
+            <span class="config-panel-title">⚙️ 设置</span>
             <button class="config-save-btn" id="save-settings">保存</button>
-            <button class="close-settings" id="close-settings">×</button>
+            <button class="close-panel-btn" id="close-settings">×</button>
         </div>
         <div class="settings-content">
             <div class="settings-group">
@@ -199,28 +200,6 @@
                     <input type="range" min="1" max="50" step="1" value="10" class="slider" id="context-length">
                     <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
                         模型记住的对话轮次数量
-                    </div>
-                </div>
-
-                <!-- 超时保护（三级）：催促 → 警告 → 终止 -->
-                <div class="setting-item">
-                    <label class="setting-label">⏱️ 超时保护（秒，0=关闭该级）</label>
-                    <div style="display:flex;gap:.5rem;align-items:center;margin-top:.3rem;flex-wrap:wrap;">
-                        <label style="font-size:.82rem;">催促
-                            <input type="number" id="timeout-nudge" min="0" max="3600" step="10" value="120"
-                                   style="width:76px;margin-left:4px;padding:2px 6px;">
-                        </label>
-                        <label style="font-size:.82rem;">警告
-                            <input type="number" id="timeout-warn" min="0" max="3600" step="10" value="240"
-                                   style="width:76px;margin-left:4px;padding:2px 6px;">
-                        </label>
-                        <label style="font-size:.82rem;">终止
-                            <input type="number" id="timeout-abort" min="0" max="7200" step="10" value="420"
-                                   style="width:76px;margin-left:4px;padding:2px 6px;">
-                        </label>
-                    </div>
-                    <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
-                        催促=注入「尽快收尾」提示；警告=注入「立即作答」提示；终止=强制结束并返回超时说明
                     </div>
                 </div>
 
@@ -345,6 +324,55 @@
 
                 </div>
 
+                <!-- 模型与服务商配置（原首页 models-section 搬入设置面板；内部 id 未变 → provider.js 零改动） -->
+                <div class="setting-item provider-settings-block">
+                    <label class="setting-label">🔌 模型与服务商配置</label>
+                <div class="models-content-wrapper">
+                    <div class="provider-layout">
+                        <!-- 左侧服务商列表 -->
+                        <div class="provider-sidebar" id="provider-list">
+                            <!-- JS动态生成 -->
+                        </div>
+
+                        <!-- 右侧配置区域 -->
+                        <div class="provider-content" id="provider-config-area">
+                            <div class="provider-header">
+                                <div class="provider-title">
+                                    <span id="current-provider-icon">🚀</span>
+                                    <span id="current-provider-name">DeepSeek</span>
+                                </div>
+                                <button class="action-btn" id="delete-provider-btn"
+                                    style="display: none; background: var(--error); color: white;">删除服务商</button>
+                            </div>
+
+                            <!-- 配置表单 -->
+                            <div class="config-group">
+                                <div class="form-group-item">
+                                    <label class="form-label">API 域名 (Base URL)</label>
+                                    <input type="text" class="form-input" id="provider-endpoint"
+                                        placeholder="例如: https://api.openai.com/v1">
+                                </div>
+                                <div class="form-group-item">
+                                    <label class="form-label">API 密钥 (API Key)</label>
+                                    <input type="password" class="form-input" id="provider-apikey" placeholder="sk-...">
+                                </div>
+                            </div>
+                            <div style="display: flex; justify-content: flex-end;">
+                                <button class="save-config-btn" id="save-provider-config">保存当前配置</button>
+                            </div>
+
+                            <!-- 模型列表 -->
+                            <div>
+                                <h4 style="margin-bottom: 1rem; color: var(--dark);">可用模型</h4>
+                                <div class="models-grid-compact" id="provider-models-list">
+                                    <!-- JS动态生成 -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                </div>
+
         </div>
     </div>
 
@@ -353,109 +381,13 @@
         <!-- 英雄区域 -->
         <section class="hero">
             <div style="text-align:center;">
-                <h1 style="margin:0;font-size:4.8rem;line-height:1.05;">C4EAI</h1>
+                <img src="assets/icons/c4e-logo.png" alt="C4EAI" class="hero-logo">
                 <div style="text-align:center;font-size:1.35rem;letter-spacing:.22em;text-transform:uppercase;opacity:.75;margin-top:.3rem;">Shared Wiki AI Agent</div>
             </div>
-            <div><button id="start-experience" class="cta-button" style="margin-top:2.2rem;">立即开始对话 →</button></div>
+            <div><button id="start-experience" class="cta-button" style="margin-top:2.2rem;">立即开始探索 →</button></div>
         </section>
 
-        <!-- 模型选择区 -->
-        <section class="models-section" id="models-section">
-            <!-- 智慧瓷砖：常驻显示 -->
-            <div class="banner-decoration">
-                <div class="decor-tile open" onclick="this.classList.toggle('open')">
-                    <div class="decor-icon-container">🕸️</div>
-                    <div class="decor-info">
-                        <div class="decor-title">GraphRAG 图谱检索</div>
-                    </div>
-                    <div class="decor-detail">
-                        <span class="dot">●</span>组内协作知识图谱（Neo4j）：跨文献实体与关系检索，结构化汇总任意主题的参数与结论。<br>
-                        <span class="dot">●</span>在智能体配置面板连接图谱后直接提问，如「汇总 A 与 B 相关的研究条件与效果」。
-                    </div>
-                    <div class="decor-aurora"></div>
-                </div>
-                <div class="decor-tile open" onclick="this.classList.toggle('open')">
-                    <div class="decor-icon-container">🤖</div>
-                    <div class="decor-info">
-                        <div class="decor-title">多智能体协作</div>
-                    </div>
-                    <div class="decor-detail">
-                        <span class="dot">●</span>派发专有子智能体（核查/提取/验证）并行处理互相独立的子任务，过程实时流式可见。<br>
-                        <span class="dot">●</span>勾选工具 delegate_task，在配置中调节轮次与并发，如「并行核对这 N 篇文献的数据」。
-                    </div>
-                    <div class="decor-aurora"></div>
-                </div>
-                <div class="decor-tile open" onclick="this.classList.toggle('open')">
-                    <div class="decor-icon-container">📚</div>
-                    <div class="decor-info">
-                        <div class="decor-title">文献解析·翻译·对账</div>
-                    </div>
-                    <div class="decor-detail">
-                        <span class="dot">●</span>对任何 PDF：解析归档为全文与按图注编号的图库，全文中译网格排版写进笔记，图表段落三轨对账出矛盾台账。<br>
-                        <span class="dot">●</span>上传 PDF 后说「解析归档」，再按需说「全文翻译入笔记」「对账找矛盾」。
-                    </div>
-                    <div class="decor-aurora"></div>
-                </div>
-                <div class="decor-tile open" onclick="this.classList.toggle('open')">
-                    <div class="decor-icon-container">☁️</div>
-                    <div class="decor-info">
-                        <div class="decor-title">组内共享知识库</div>
-                    </div>
-                    <div class="decor-detail">
-                        <span class="dot">●</span>面向任何文献的通用组内笔记与共享数据库：上传自动解析入向量索引，全员语义检索，笔记支持富文本与图片。<br>
-                        <span class="dot">●</span>登录后在数据库面板上传，或对话中说「把这份文件共享给组里」「在共享库里搜…」。
-                    </div>
-                    <div class="decor-aurora"></div>
-                </div>
-            </div>
 
-
-
-            <div class="models-content-wrapper">
-                <div class="provider-layout">
-                    <!-- 左侧服务商列表 -->
-                    <div class="provider-sidebar" id="provider-list">
-                        <!-- JS动态生成 -->
-                    </div>
-
-                    <!-- 右侧配置区域 -->
-                    <div class="provider-content" id="provider-config-area">
-                        <div class="provider-header">
-                            <div class="provider-title">
-                                <span id="current-provider-icon">🚀</span>
-                                <span id="current-provider-name">DeepSeek</span>
-                            </div>
-                            <button class="action-btn" id="delete-provider-btn"
-                                style="display: none; background: var(--error); color: white;">删除服务商</button>
-                        </div>
-
-                        <!-- 配置表单 -->
-                        <div class="config-group">
-                            <div class="form-group-item">
-                                <label class="form-label">API 域名 (Base URL)</label>
-                                <input type="text" class="form-input" id="provider-endpoint"
-                                    placeholder="例如: https://api.openai.com/v1">
-                            </div>
-                            <div class="form-group-item">
-                                <label class="form-label">API 密钥 (API Key)</label>
-                                <input type="password" class="form-input" id="provider-apikey" placeholder="sk-...">
-                            </div>
-                        </div>
-                        <div style="display: flex; justify-content: flex-end;">
-                            <button class="save-config-btn" id="save-provider-config">保存当前配置</button>
-                        </div>
-
-                        <!-- 模型列表 -->
-                        <div>
-                            <h4 style="margin-bottom: 1rem; color: var(--dark);">可用模型</h4>
-                            <div class="models-grid-compact" id="provider-models-list">
-                                <!-- JS动态生成 -->
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
 
         <!-- 添加自定义模型/服务商的模态框（统一 .modal/.modal-content） -->
         <div class="modal" id="add-custom-modal">
@@ -512,12 +444,12 @@
                     <!-- 顶部标题行: 点击 C4E 图标可折叠搜索/过滤区 -->
                     <div class="sidebar-top-bar">
                         <div class="sidebar-top-bar-title" onclick="toggleSidebarHeader()" style="display: flex; align-items: center; cursor: pointer; flex:1; user-select:none;">
-                            <div class="c4e-sidebar-art-logo">C4E</div>
+                            <div class="c4e-sidebar-art-logo"><img src="assets/icons/c4e-logo.png" alt="C4E"></div>
                             <h3 class="sidebar-title" style="margin: 0;">对话管理</h3>
                         </div>
                         <div class="sidebar-actions">
-                            <button class="action-icon-btn icon-only" id="full-screen-toggle" title="全屏沉浸模式" style="font-size:1rem;line-height:1;">
-                                ⛶
+                            <button class="action-icon-btn icon-only" id="full-screen-toggle" title="返回主页" style="font-size:1rem;line-height:1;">
+                                ⌂
                             </button>
                             <button class="action-icon-btn primary-circle" id="new-chat-btn" title="新建对话">
                                 <span class="icon" style="font-size: 1.2rem; line-height: 0;">＋</span>
@@ -690,6 +622,27 @@
                                         子智能体三级超时（秒，0=关闭该级，每个子智能体独立计时）：催促→注入「尽快收尾」；警告→注入「立即给结论」；终止→中断并返回已完成部分。
                                     </div>
                                 </div>
+                                <!-- 主智能体超时保护（原在设置面板；id 未变 → branching.js 读写零改动） -->
+                                <div class="config-section">
+                                    <div class="config-section-title">⏱️ 超时保护（主智能体）</div>
+                                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem .6rem;">
+                                        <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">催促(秒)
+                                            <input type="number" id="timeout-nudge" min="0" max="3600" step="10" value="120"
+                                                   class="neo4j-input" style="width:100%;box-sizing:border-box;">
+                                        </label>
+                                        <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">警告(秒)
+                                            <input type="number" id="timeout-warn" min="0" max="3600" step="10" value="240"
+                                                   class="neo4j-input" style="width:100%;box-sizing:border-box;">
+                                        </label>
+                                        <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">终止(秒)
+                                            <input type="number" id="timeout-abort" min="0" max="7200" step="10" value="420"
+                                                   class="neo4j-input" style="width:100%;box-sizing:border-box;">
+                                        </label>
+                                    </div>
+                                    <div style="font-size:.72rem;color:var(--gray);line-height:1.5;margin-top:.4rem;">
+                                        主智能体三级超时（秒，0=关闭该级）：催促→注入「尽快收尾」；警告→注入「立即作答」；终止→强制结束并返回超时说明。
+                                    </div>
+                                </div>
                                 <div class="config-section">
                                     <div class="config-section-title">🔐 权限模式</div>
                                     <div class="permission-mode-row">
@@ -846,6 +799,7 @@
                                     </select>
                                 </div>
 
+
                                 <!-- 发送给 LLM 的上下文 Token 数（含压缩） -->
                                 <div class="context-size-display" id="context-size-display" title="当前发送给LLM的Token数（考虑上下文压缩）">
                                     <span id="context-size-text">0</span>
@@ -879,17 +833,17 @@
 
 
     <!-- 脚本文件 (按依赖顺序) -->
-    <script src="js/state.js?v=7"></script>
+    <script src="js/state.js?v=8"></script>
     <script src="js/dom.js?v=3"></script>
     <script src="js/settings.js?v=7"></script>
     <script src="js/image_tools.js?v=3"></script>
     <script src="js/file_preview.js?v=11"></script>
     <script src="js/auth.js?v=19"></script>
-    <script src="js/api.js?v=5"></script>
+    <script src="js/api.js?v=7"></script>
     <script src="js/database.js?v=18"></script>
     <script src="js/sidebar.js?v=9"></script>
     <script src="js/branching.js?v=9"></script>
-    <script src="js/provider.js?v=4"></script>
+    <script src="js/provider.js?v=6"></script>
     <script src="js/messages.js?v=7"></script>
     <script src="js/editing.js?v=2"></script>
     <script src="js/formatting.js?v=4"></script>
@@ -899,8 +853,8 @@
     <script src="js/subagent_view.js?v=3"></script>
     <!-- 前端工具注册表已删除（工具全部由后端提供） -->
     <script src="js/skill_system.js?v=3"></script>
-    <script src="js/agent_config.js?v=7"></script>
-    <script src="js/ui.js?v=2"></script>
+    <script src="js/agent_config.js?v=8"></script>
+    <script src="js/ui.js?v=4"></script>
     <script src="js/bubbles.js?v=5"></script>
     <script src="js/bubble_actions.js?v=3"></script>
     <script src="js/utils.js?v=2"></script>

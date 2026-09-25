@@ -29,9 +29,8 @@
 
             // 事件监听
             startExperienceBtn.addEventListener('click', () => {
-                document.querySelector('.chat-section').scrollIntoView({
-                    behavior: 'smooth'
-                });
+                // 启动页唯一入口：进入全屏 = 对话界面（退出全屏即回到启动页）
+                if (typeof toggleFullScreen === 'function') toggleFullScreen();
             });
 
 
@@ -59,7 +58,7 @@
             const header = document.querySelector('header');
 
             function updateHeaderState(e) {
-                // 如果是全屏沉浸模式，CSS已处理隐藏，逻辑跳过
+                // 返回主页态（body.full-screen-mode）：头部显隐由 CSS 处理，逻辑跳过
                 if (document.body.classList.contains('full-screen-mode')) return;
 
                 const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
