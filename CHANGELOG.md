@@ -6,6 +6,62 @@
 
 ---
 
+## [2026-09-26] feat(settings): 个人设置改为后端存储（localStorage → 个人账号数据）
+
+> 「密钥当初在的设计就是保存在个人浏览器，在后端的话，那就放在个人账号数据上吧，
+> 反正也就开发者知道密钥。」——用户 2026-09-26
+
+**目标**：设置换设备不再丢；API Key 不再只躺在浏览器里。
+
+**模型**：后端（个人账号数据）为权威，localStorage 作本地缓存（缓存不是兜底 ——
+面板打开要立刻有值不能等网络）。
+
+| | 之前 | 现在 |
+|---|---|---|
+| 存放 | 浏览器 localStorage | `workspace/users/<身份>/settings.json` |
+| 换设备 | ❌ 全丢 | ✅ 自动恢复 |
+
+**改动**
+- 新增 `backend/tools/user_settings.py`：`MANAGED_KEYS` 白名单 8 键 /
+  `load_user_settings` / `save_user_settings`（合并语义、`null`=删除、**回读核对** `verified`、
+  白名单外记 `rejected`）
+- `app.py`：新增 `GET/PUT /api/user/settings`；owner 从 `_cur_user` 推导，
+  **绝不接受请求体传入身份**（防越权）；本地实例沿用 `_notes_proxy` 转发云端
+- 新增 `js/user_settings.js`：`hydrateUserSettings`（后端→缓存）/
+  `setUserSetting`（缓存+节流 800ms 推后端）/ `pushUserSettings`；
+  `visibilitychange(hidden)`+`pagehide` 强制推最后一笔
+- 15 处 `localStorage.setItem(受管键)` → `setUserSetting(...)`
+- `api.js`：`init()` 拆出 `initAfterSettings()`，用 `hydrateUserSettings().finally()` 保证
+  「先灌缓存 → 再初始化依赖设置的模块」
+- `index.html`：引入新模块；相关 js 版本号 +1
+
+**同步白名单 8 键**：ai-settings / ai-current-model / ragagent-provider-settings(★) /
+ragagent-custom-providers(★) / ragagent-provider-overrides / ragagent-enabled-models /
+ragagent-agent-config / ragagent-neo4j-config(★)
+**留本地**：面板位置、侧栏宽度、主题、小e 开关（纯本机偏好）
+
+**迁移**：前端首次遇到「本地有设置 + 后端空」→ 自动推上去（一次性，之后不再触发）
+
+**修了两个自己发现的判据错误**
+1. `save_user_settings` 的落盘核对原先把白名单外被拒的键也算进比对 → `verified` 恒为 False
+   （数据其实是对的）。判据改为「本次打算写入的键是否都真落盘」。
+2. `tools/check_deploy.py` 文件清单漏了 13 个 js + 3 个 css + 2 个后端文件
+   （正是用户此前「漏部署」3 次的隐患根源）→ 补齐到 40 个。
+   ★ 补齐后**立刻抓出 6 个从未部署的文件**已补部署。
+
+**验证（云端真机端到端 23/23，独立测试账号，不碰 admin）**
+| 组 | 结果 |
+|---|---|
+| HTTP API | PUT ok + verified=True · 白名单外被拒 · API Key/温度/Neo4j 密码往返一致 |
+| 磁盘实证 | 云端 settings.json 真落盘且含 API Key |
+| **★ 迁移** | 本地有设置 + 后端空 → 自动推上去 |
+| **★ 跨设备** | 清空 localStorage 模拟新设备 → 重载 → 设置（含 apiKey）从后端恢复 |
+| 清理 | 测试账号/目录无残留；云端无任何 settings.json（不污染真实数据）|
+
+`check_deploy` 40/40 一致 · `check.sh` ALL_PASS
+
+---
+
 ## [2026-09-25] refactor(hub): 共享库改为「文件夹树」模型 —— 笔记/文档是两个真实根文件夹
 
 **用户澄清（推翻"类型标签"的旧模型）**

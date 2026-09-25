@@ -2,7 +2,7 @@
 
 > **给接手的人 / AI agent**：这是**当前状态快照**，读完再动手。
 > 改动的历史原因看 [`CHANGELOG.md`](CHANGELOG.md)；架构细节看 [`项目架构说明.md`](项目架构说明.md)；云端部署看 [`共享库部署指南.md`](共享库部署指南.md)。
-> **最后更新：2026-09-22**
+> **最后更新：2026-09-26**
 
 ---
 
@@ -47,6 +47,48 @@ C4EAI —— 组内科研辅助 / 共享 Wiki 智能体（江南大学）。前�
 导致云端条目里的 `file_id` 是**本机 id**、服务器 `pool/uploads/` 没有文件 → **云端打开 404**（本地能开）。
 存量修复脚本：`tools/backfill_shared_files.py`（`--apply` 执行）。
 同类问题排查口诀：**云端打开失败但本地能开 = 查 `pool/uploads` 里有没有该 file_id**。
+
+### 个人设置存在哪（2026-09-26 改：从浏览器搬到后端）
+
+**用户定**：密钥等设置「放在个人账号数据上，反正也就开发者知道密钥」。
+
+| | 之前 | 现在 |
+|---|---|---|
+| 存放 | 只存浏览器 `localStorage` | **后端** `workspace/users/<身份>/settings.json` |
+| 换设备 | ❌ 全丢 | ✅ 自动恢复 |
+| API Key | 明文躺在浏览器 | 明文存**本人**目录（只有开发者知道，可接受） |
+
+**模型：后端（个人账号数据）为权威，localStorage 作本地缓存**（缓存不是兜底 —— 面板打开要立刻有值，不能等网络）。
+
+```
+启动：hydrateUserSettings()  后端 → 灌回 localStorage
+      → 其它模块照旧 localStorage.getItem 同步读（15 处读取一行没改）
+写入：setUserSetting(k, v)   写本地缓存（同步生效）+ 节流 800ms 推后端
+离开：visibilitychange(hidden) / pagehide 强制推一次，避免丢最后一笔
+```
+
+**同步白名单 8 键**（`js/user_settings.js` 的 `BACKEND_SETTING_KEYS`
+必须与 `backend/tools/user_settings.py` 的 `MANAGED_KEYS` 一致）：
+
+```
+ai-settings / ai-current-model / ragagent-provider-settings(★API Key) /
+ragagent-custom-providers(★API Key) / ragagent-provider-overrides /
+ragagent-enabled-models / ragagent-agent-config / ragagent-neo4j-config(★密码)
+```
+
+**留本地不同步**（纯本机偏好，换机器不该跟着走）：面板位置、侧栏宽度、主题、小e 开关。
+
+**端点**：`GET/PUT /api/user/settings`（本地实例沿用 `_notes_proxy` 转发云端）
+**安全**：owner 一律从登录身份推导（`_cur_user`），**绝不接受请求体传入身份** ——
+与 WeKnora「记忆工具不接受 owner 参数」同款原则，防越权读写他人设置。
+
+**增量**：
+- 后端：只有白名单键落盘；`PUT` 是**合并**语义；值传 `null` = 删除该键
+- 写入后**回读核对**，返回 `verified`；白名单外的键记在 `rejected`
+- 前端**首次**遇到「本地有设置 + 后端空」→ 自动把本地推上去（一次性迁移，之后不再触发）
+
+**排查口诀**：设置没同步 → 先看 `workspace/users/<身份>/settings.json` 的 `_updated`；
+换设备没恢复 → 确认后端文件存在且键名在白名单里。
 
 ### 条目分类 `kind`（2026-09-24 定）
 
