@@ -1,0 +1,290 @@
+        /* 基础重置与变量 */
+        /* 顶栏实际高度（登录/管理遮罩据此避开顶栏，避免吃掉顶栏点击） */
+        :root {
+            --c4e-header-h: 56px;
+        }
+
+        /* 认证遮罩兜底：即使某处仍写了 inset:0，也不吃顶栏的点击 */
+        [data-auth-mask] {
+            pointer-events: none !important;
+        }
+        [data-auth-mask] > * {
+            pointer-events: auto;
+        }
+
+        :root {
+            --primary: #4361ee;
+            --secondary: #3a0ca3;
+            --primary-glow: rgba(67, 97, 238, 0.3);
+            --primary-soft: rgba(67, 97, 238, 0.1);
+            --primary-gradient: linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%);
+            --light: #ffffff;
+            --dark: #212529;
+            --gray: #6c757d;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --info: #3b82f6;
+            --branch: #8b5cf6;
+            --thinking: #6ee7b7;
+            --document: #8b5cf6;
+            --database: #10b981;
+            --database-soft: rgba(16, 185, 129, 0.1);
+            --reasoning: #3b82f6;
+            --bg-gradient: linear-gradient(135deg, #f5f7ff 0%, #f0f2ff 100%);
+            --sidebar-bg: #ffffff;
+            --card-bg: #ffffff;
+            --border-color: rgba(0, 0, 0, 0.05);
+            --header-bg: #ffffff;
+            --user-bubble-bg: linear-gradient(135deg, #6366f1 0%, #4361ee 100%);
+            --user-bubble-color: #ffffff;
+
+            /* 分区字号（可在设置里单独调节） */
+            --font-size-conv: 0.9rem;        /* 对话管理：侧边栏对话名 */
+            --font-size-history: 0.8rem;     /* 历史记录：侧边栏消息预览/气泡 */
+            --font-size-messages: 0.95rem;   /* 对话回复消息：聊天气泡 */
+            --font-size-notes: 0.9rem;       /* 笔记：卡片标题/正文 */
+            --font-size-thinking: 0.8rem;    /* 思考链/推理：聊天区思考与推理内容 */
+
+            /* 弹窗字号（统一管理） */
+            --font-size-modal: 0.9rem;       /* 居中模态框 */
+            --font-size-toast: 0.85rem;      /* 被动轻提示 */
+            --font-size-popup: 0.85rem;      /* 小浮层 */
+            --font-size-edit: 0.9rem;        /* 浮动/内联编辑器 */
+        }
+
+        /* 深夜模式 (Midnight) */
+        body.theme-midnight {
+            --primary: #818cf8;
+            /* Muted Indigo */
+            --secondary: #4f46e5;
+            --primary-glow: rgba(99, 102, 241, 0.15);
+            --primary-soft: rgba(99, 102, 241, 0.08);
+            --primary-gradient: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);
+            --light: #050507;
+            /* Deepest Ink */
+            --dark: #f3f4f6;
+            /* Off-white text */
+            --gray: #9ca3af;
+            /* Neutral Gray */
+            --bg-gradient: linear-gradient(180deg, #0d0f14 0%, #030406 100%);
+            --database: #6366f1;
+            --database-soft: rgba(99, 102, 241, 0.08);
+            --sidebar-bg: #0c0e14;
+            /* Match API Sidebar */
+            --card-bg: #15171e;
+            /* Match API Content Area */
+            --border-color: rgba(255, 255, 255, 0.1);
+            /* Clean, subtle borders */
+            --header-bg: #080a0f;
+            --user-bubble-bg: #1e212b;
+            /* Muted Dark Bubble */
+            --user-bubble-color: #f3f4f6;
+            --assistant-bg: rgba(21, 23, 30, 0.8);
+        }
+
+        /* 翠绿模式 (Emerald) */
+        body.theme-emerald {
+            --primary: #10b981;
+            --secondary: #047857;
+            --primary-glow: rgba(16, 185, 129, 0.3);
+            --primary-soft: rgba(16, 185, 129, 0.1);
+            --primary-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            --light: #ffffff;
+            --dark: #212529;
+            --gray: #6c757d;
+            --bg-gradient: linear-gradient(135deg, #f5fff7 0%, #f0fff4 100%);
+            --database: #10b981;
+            --database-soft: rgba(16, 185, 129, 0.1);
+            --sidebar-bg: #ffffff;
+            --card-bg: #ffffff;
+            --border-color: rgba(0, 0, 0, 0.05);
+            --header-bg: #ffffff;
+            --user-bubble-bg: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            --user-bubble-color: #ffffff;
+        }
+
+        /* 琥珀护眼模式 (Amber Eye-Care) - 原暖阳橙 */
+        body.theme-warm {
+            --primary: #b45309;
+            --secondary: #92400e;
+            --primary-glow: rgba(180, 83, 9, 0.2);
+            --primary-soft: rgba(180, 83, 9, 0.08);
+            --primary-gradient: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+            --light: #fdf6e3;
+            --dark: #433422;
+            --gray: #7a6a53;
+            --bg-gradient: linear-gradient(135deg, #fdf6e3 0%, #eee8d5 100%);
+            --database: #b45309;
+            --database-soft: rgba(180, 83, 9, 0.08);
+            --sidebar-bg: #eee8d5;
+            --card-bg: #fdf6e3;
+            --border-color: rgba(67, 52, 34, 0.1);
+            --header-bg: #eee8d5;
+            --user-bubble-bg: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+            --user-bubble-color: #ffffff;
+            --assistant-bg: rgba(253, 246, 227, 0.9);
+        }
+
+        /* 赛博模式 (Cyberpunk) */
+        body.theme-cyber {
+            --primary: #00f3ff;
+            --secondary: #ff007b;
+            --primary-glow: rgba(0, 243, 255, 0.5);
+            --primary-soft: rgba(0, 243, 255, 0.2);
+            --primary-gradient: linear-gradient(90deg, #00f3ff 0%, #ff007b 100%);
+            --light: #0d0d0d;
+            --dark: #00f3ff;
+            --gray: #71717a;
+            --bg-gradient: linear-gradient(180deg, #000000 0%, #0d0d0d 100%);
+            --database: #ff007b;
+            --database-soft: rgba(255, 0, 123, 0.2);
+            --sidebar-bg: #050505;
+            --card-bg: #111111;
+            --border-color: rgba(0, 243, 255, 0.4);
+            --header-bg: #000000;
+            --user-bubble-bg: linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%);
+            --user-bubble-color: #ffffff;
+        }
+
+        /* 樱花粉模式 (Sakura Pink) */
+        body.theme-pink {
+            --primary: #ff7eb9;
+            --secondary: #ff9a9e;
+            --primary-glow: rgba(255, 126, 185, 0.4);
+            --primary-soft: rgba(255, 126, 185, 0.15);
+            --primary-gradient: linear-gradient(135deg, #ff7eb9 0%, #ff9a9e 100%);
+            --light: #fff0f3;
+            --dark: #212529;
+            --gray: #8b5e61;
+            --bg-gradient: linear-gradient(135deg, #fff5f7 0%, #ffe4e8 100%);
+            --database: #ff7eb9;
+            --database-soft: rgba(255, 126, 185, 0.15);
+            --sidebar-bg: #fffafb;
+            --card-bg: #ffffff;
+            --border-color: #ffdae0;
+            --header-bg: #ffffff;
+            --user-bubble-bg: linear-gradient(135deg, #ff7eb9 0%, #ff9a9e 100%);
+            --user-bubble-color: #ffffff;
+        }
+
+        /* 缤纷模式 (Vibrant Colorful) */
+        /* 梦境粉 (Macaron Pink) - 原炫彩色 */
+        body.theme-macaron-pink {
+            --primary: #818cf8;
+            --secondary: #fb7185;
+            --primary-glow: rgba(129, 140, 248, 0.4);
+            --primary-soft: rgba(129, 140, 248, 0.15);
+            /* Soft Pastel Rainbow Gradient */
+            --primary-gradient: linear-gradient(135deg, #a5b4fc 0%, #d8b4fe 50%, #fda4af 100%);
+            --light: #f8fafc;
+            --dark: #212529;
+            --gray: #64748b;
+            --bg-gradient: radial-gradient(circle at 10% 20%, #eff6ff 0%, #fff1f2 45%, #faf5ff 100%);
+            --database: #fda4af;
+            --database-soft: rgba(253, 164, 175, 0.15);
+            --sidebar-bg: rgba(255, 255, 255, 0.65);
+            --card-bg: rgba(255, 255, 255, 0.85);
+            --border-color: rgba(99, 102, 241, 0.15);
+            --header-bg: rgba(255, 255, 255, 0.8);
+            --assistant-bg: linear-gradient(135deg, rgba(238, 242, 255, 0.8) 0%, rgba(255, 241, 242, 0.8) 100%);
+            --user-bubble-bg: linear-gradient(135deg, #a5b4fc 0%, #d8b4fe 50%, #fda4af 100%);
+            --user-bubble-color: #ffffff;
+        }
+
+        /* 梦境绿 (Macaron Mint) */
+        body.theme-macaron-green {
+            --primary: #059669;
+            --secondary: #84cc16;
+            --primary-glow: rgba(5, 150, 105, 0.3);
+            --primary-soft: rgba(5, 150, 105, 0.1);
+            --primary-gradient: linear-gradient(135deg, #bef264 0%, #10b981 50%, #059669 100%);
+            --light: #f8fafc;
+            --dark: #212529;
+            --gray: #64748b;
+            --bg-gradient: radial-gradient(circle at 10% 20%, #f7fee7 0%, #ecfdf5 45%, #f0fdf4 100%);
+            --database: #10b981;
+            --database-soft: rgba(16, 185, 129, 0.1);
+            --sidebar-bg: rgba(255, 255, 255, 0.65);
+            --card-bg: rgba(255, 255, 255, 0.85);
+            --border-color: rgba(5, 150, 105, 0.15);
+            --header-bg: rgba(255, 255, 255, 0.8);
+            --assistant-bg: linear-gradient(135deg, rgba(247, 254, 231, 0.8) 0%, rgba(236, 253, 245, 0.8) 100%);
+            --user-bubble-bg: var(--primary-gradient);
+            --user-bubble-color: #ffffff;
+        }
+
+        /* 梦境紫 (Macaron Violet) */
+        body.theme-macaron-violet {
+            --primary: #a78bfa;
+            --secondary: #38bdf8;
+            --primary-glow: rgba(167, 139, 250, 0.4);
+            --primary-soft: rgba(167, 139, 250, 0.15);
+            --primary-gradient: linear-gradient(135deg, #c4b5fd 0%, #7dd3fc 50%, #a78bfa 100%);
+            --light: #f8fafc;
+            --dark: #212529;
+            --gray: #64748b;
+            --bg-gradient: radial-gradient(circle at 10% 20%, #f5f3ff 0%, #f0f9ff 45%, #fdf4ff 100%);
+            --database: #a78bfa;
+            --database-soft: rgba(167, 139, 250, 0.15);
+            --sidebar-bg: rgba(255, 255, 255, 0.65);
+            --card-bg: rgba(255, 255, 255, 0.85);
+            --border-color: rgba(167, 139, 250, 0.15);
+            --header-bg: rgba(255, 255, 255, 0.8);
+            --assistant-bg: linear-gradient(135deg, rgba(245, 243, 255, 0.8) 0%, rgba(240, 249, 255, 0.8) 100%);
+            --user-bubble-bg: linear-gradient(135deg, #c4b5fd 0%, #7dd3fc 50%, #a78bfa 100%);
+            --user-bubble-color: #ffffff;
+        }
+
+        /* 梦境蓝 (Macaron Blue) - 云朵晴空版 */
+        body.theme-macaron-blue {
+            --primary: #0ea5e9;
+            /* Vivid Sky Blue */
+            --secondary: #7dd3fc;
+            --primary-glow: rgba(14, 165, 233, 0.4);
+            --primary-soft: rgba(14, 165, 233, 0.1);
+
+            /* 模拟天空色彩：深蓝 -> 浅蓝 -> 极浅云白 */
+            --primary-gradient: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 60%, #a5f3fc 100%);
+
+            --light: #f0f9ff;
+            --dark: #0c4a6e;
+            /* Deep Sky Text */
+            --gray: #64748b;
+
+            /* 背景：白云与蓝天交织的漫射效果 */
+            --bg-gradient: radial-gradient(circle at 25% 10%, #ffffff 0%, #e0f2fe 20%, #bae6fd 50%, #f0f9ff 80%, #ffffff 100%);
+
+            --database: #0ea5e9;
+            --database-soft: rgba(14, 165, 233, 0.1);
+
+            /* 面板：像云层一样半透明 */
+            --sidebar-bg: rgba(255, 255, 255, 0.65);
+            --card-bg: rgba(255, 255, 255, 0.75);
+            --border-color: rgba(255, 255, 255, 0.8);
+            --header-bg: rgba(255, 255, 255, 0.8);
+
+            /* AI气泡：纯净的白云质感 */
+            --assistant-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(224, 242, 254, 0.9) 100%);
+
+            /* 用户气泡：清澈的蓝天 */
+            --user-bubble-bg: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%);
+            --user-bubble-color: #ffffff;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            line-height: 1.6;
+            color: var(--dark);
+            background: var(--bg-gradient);
+            min-height: 100vh;
+            overflow-x: hidden;
+            transition: background 0.5s ease, color 0.5s ease;
+        }
+

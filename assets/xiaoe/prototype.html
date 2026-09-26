@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>小e 外形方案对比</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(160deg, #eef4ff 0%, #f7f2ff 100%);
+    min-height: 100vh; padding: 40px 20px; color: #2d3748;
+  }
+  h1 { text-align: center; font-size: 1.5rem; font-weight: 700; margin-bottom: 8px; }
+  .sub { text-align: center; color: #718096; font-size: .9rem; margin-bottom: 36px; }
+  .grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 28px; max-width: 1080px; margin: 0 auto;
+  }
+  .card {
+    background: #fff; border-radius: 24px; padding: 28px 22px 24px;
+    box-shadow: 0 8px 28px rgba(120,140,200,.13);
+    border: 2px solid #eef2fa; text-align: center; position: relative;
+    transition: transform .25s;
+  }
+  .card:hover { transform: translateY(-4px); }
+  .badge {
+    position: absolute; top: 14px; right: 14px; font-size: .7rem;
+    padding: 3px 10px; border-radius: 999px; font-weight: 600;
+  }
+  .b1 { background: #ffe8f0; color: #e05a8a; }
+  .b2 { background: #e3f6ff; color: #2b8fd6; }
+  .b3 { background: #fff3d9; color: #d99b1f; }
+  .stage {
+    height: 190px; display: flex; align-items: center; justify-content: center;
+    margin-bottom: 14px;
+  }
+  .name { font-size: 1.05rem; font-weight: 700; margin-bottom: 6px; }
+  .desc { font-size: .82rem; color: #718096; line-height: 1.65; }
+  .traits { margin-top: 12px; display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+  .t { font-size: .7rem; padding: 3px 9px; border-radius: 999px; background: #f2f5fb; color: #5a6b8c; }
+
+  /* 呼吸/眨眼动画，让原型有生命感 */
+  @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+  @keyframes blink { 0%,92%,100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
+  @keyframes wobble { 0%,100% { transform: rotate(0deg); } 25% { transform: rotate(-4deg); } 75% { transform: rotate(4deg); } }
+  .float { animation: float 3.2s ease-in-out infinite; }
+  .eye { animation: blink 4s infinite; transform-origin: center; }
+</style>
+</head>
+<body>
+
+<h1>小e · 外形方案</h1>
+<p class="sub">三个方向都是「简约 + 可爱」，全部用 SVG 矢量绘制（任意缩放不模糊）</p>
+
+<div class="grid">
+
+  <!-- ===== 方案 A：软圆豆豆 ===== -->
+  <div class="card">
+    <span class="badge b1">最可爱</span>
+    <div class="stage">
+      <svg class="float" width="150" height="150" viewBox="0 0 150 150">
+        <defs>
+          <radialGradient id="bodyA" cx="38%" cy="32%">
+            <stop offset="0%" stop-color="#fff6fa"/>
+            <stop offset="55%" stop-color="#ffd6e6"/>
+            <stop offset="100%" stop-color="#ffb5d0"/>
+          </radialGradient>
+          <radialGradient id="cheekA" cx="50%" cy="50%">
+            <stop offset="0%" stop-color="#ff9ec2" stop-opacity=".85"/>
+            <stop offset="100%" stop-color="#ff9ec2" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <!-- 影子 -->
+        <ellipse cx="75" cy="137" rx="30" ry="6" fill="#c9b8d8" opacity=".22"/>
+        <!-- 身体（圆豆） -->
+        <ellipse cx="75" cy="82" rx="46" ry="42" fill="url(#bodyA)"/>
+        <!-- 高光 -->
+        <ellipse cx="58" cy="58" rx="15" ry="11" fill="#fff" opacity=".75" transform="rotate(-25 58 58)"/>
+        <!-- 眼睛 -->
+        <g class="eye">
+          <ellipse cx="59" cy="80" rx="6.5" ry="7.5" fill="#3d2b3d"/>
+          <ellipse cx="91" cy="80" rx="6.5" ry="7.5" fill="#3d2b3d"/>
+          <circle cx="61.2" cy="77" r="2.4" fill="#fff"/>
+          <circle cx="93.2" cy="77" r="2.4" fill="#fff"/>
+        </g>
+        <!-- 腮红 -->
+        <ellipse cx="44" cy="94" rx="10" ry="6.5" fill="url(#cheekA)"/>
+        <ellipse cx="106" cy="94" rx="10" ry="6.5" fill="url(#cheekA)"/>
+        <!-- 嘴（小小 w） -->
+        <path d="M70 93 q5 5 10 0" stroke="#c9789a" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        <!-- 头顶小天线 -->
+        <line x1="75" y1="41" x2="75" y2="26" stroke="#ffb5d0" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="75" cy="21" r="6" fill="#ff8fb8"/>
+        <circle cx="73" cy="19" r="2" fill="#fff" opacity=".85"/>
+        <!-- 小手 -->
+        <ellipse cx="30" cy="92" rx="8" ry="10" fill="#ffc4da" transform="rotate(-18 30 92)"/>
+        <ellipse cx="120" cy="92" rx="8" ry="10" fill="#ffc4da" transform="rotate(18 120 92)"/>
+      </svg>
+    </div>
+    <div class="name">A · 粉豆豆</div>
+    <div class="desc">圆滚滚一颗豆，天生腮红+大眼睛<br>像果冻一样软，最"想捏一把"</div>
+    <div class="traits"><span class="t">超软</span><span class="t">腮红</span><span class="t">果冻感</span></div>
+  </div>
+
+  <!-- ===== 方案 B：云朵团子 ===== -->
+  <div class="card">
+    <span class="badge b2">最清爽</span>
+    <div class="stage">
+      <svg class="float" width="160" height="150" viewBox="0 0 160 150" style="animation-delay:.4s">
+        <defs>
+          <radialGradient id="bodyB" cx="40%" cy="30%">
+            <stop offset="0%" stop-color="#ffffff"/>
+            <stop offset="60%" stop-color="#dceeff"/>
+            <stop offset="100%" stop-color="#b8dcff"/>
+          </radialGradient>
+          <radialGradient id="cheekB" cx="50%" cy="50%">
+            <stop offset="0%" stop-color="#8ec8ff" stop-opacity=".8"/>
+            <stop offset="100%" stop-color="#8ec8ff" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <ellipse cx="80" cy="137" rx="34" ry="6" fill="#b8c8dd" opacity=".22"/>
+        <!-- 云朵身体：三个圆叠出蓬松感 -->
+        <circle cx="52" cy="84" r="26" fill="url(#bodyB)"/>
+        <circle cx="108" cy="84" r="26" fill="url(#bodyB)"/>
+        <circle cx="80" cy="70" r="32" fill="url(#bodyB)"/>
+        <ellipse cx="80" cy="92" rx="44" ry="30" fill="url(#bodyB)"/>
+        <!-- 高光 -->
+        <ellipse cx="62" cy="52" rx="14" ry="10" fill="#fff" opacity=".8" transform="rotate(-22 62 52)"/>
+        <!-- 眼睛 -->
+        <g class="eye">
+          <ellipse cx="65" cy="82" rx="6.5" ry="7.5" fill="#2f3e52"/>
+          <ellipse cx="95" cy="82" rx="6.5" ry="7.5" fill="#2f3e52"/>
+          <circle cx="67.2" cy="79" r="2.4" fill="#fff"/>
+          <circle cx="97.2" cy="79" r="2.4" fill="#fff"/>
+        </g>
+        <ellipse cx="49" cy="95" rx="10" ry="6.5" fill="url(#cheekB)"/>
+        <ellipse cx="111" cy="95" rx="10" ry="6.5" fill="url(#cheekB)"/>
+        <path d="M75 95 q5 5 10 0" stroke="#7aa8d6" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        <!-- 小雨滴装饰 -->
+        <circle cx="126" cy="46" r="4" fill="#a8d4ff" opacity=".8"/>
+        <circle cx="136" cy="62" r="2.8" fill="#a8d4ff" opacity=".6"/>
+      </svg>
+    </div>
+    <div class="name">B · 云朵团</div>
+    <div class="desc">蓬松云朵造型，轻盈飘浮<br>和"云端共享库"的气质很搭</div>
+    <div class="traits"><span class="t">蓬松</span><span class="t">轻盈</span><span class="t">清新</span></div>
+  </div>
+
+  <!-- ===== 方案 C：小机器人 e ===== -->
+  <div class="card">
+    <span class="badge b3">最贴合主题</span>
+    <div class="stage">
+      <svg class="float" width="150" height="150" viewBox="0 0 150 150" style="animation-delay:.8s">
+        <defs>
+          <linearGradient id="bodyC" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#fffdf5"/>
+            <stop offset="100%" stop-color="#ffe9b8"/>
+          </linearGradient>
+          <radialGradient id="cheekC" cx="50%" cy="50%">
+            <stop offset="0%" stop-color="#ffb3c6" stop-opacity=".85"/>
+            <stop offset="100%" stop-color="#ffb3c6" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <ellipse cx="75" cy="138" rx="28" ry="5.5" fill="#c8b89a" opacity=".22"/>
+        <!-- 天线 -->
+        <line x1="75" y1="34" x2="75" y2="20" stroke="#e8b84a" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="75" cy="15" r="6.5" fill="#ffcc4d"/>
+        <circle cx="72.6" cy="12.6" r="2.2" fill="#fff" opacity=".9"/>
+        <!-- 头（圆角方，可爱比例） -->
+        <rect x="31" y="34" width="88" height="76" rx="30" fill="url(#bodyC)" stroke="#f0d089" stroke-width="2"/>
+        <!-- 屏幕脸（深一点的小面板） -->
+        <rect x="43" y="50" width="64" height="44" rx="18" fill="#4a4458"/>
+        <!-- 眼睛（发光小圆） -->
+        <g class="eye">
+          <circle cx="62" cy="70" r="7" fill="#8ee8ff"/>
+          <circle cx="88" cy="70" r="7" fill="#8ee8ff"/>
+          <circle cx="64.6" cy="67" r="2.6" fill="#fff"/>
+          <circle cx="90.6" cy="67" r="2.6" fill="#fff"/>
+        </g>
+        <!-- 嘴（小弧） -->
+        <path d="M69 82 q6 6 12 0" stroke="#8ee8ff" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        <!-- 腮红（在面板上） -->
+        <ellipse cx="50" cy="83" rx="9" ry="6" fill="url(#cheekC)"/>
+        <ellipse cx="100" cy="83" rx="9" ry="6" fill="url(#cheekC)"/>
+        <!-- 小耳朵 -->
+        <rect x="24" y="60" width="9" height="20" rx="4.5" fill="#ffd97a"/>
+        <rect x="117" y="60" width="9" height="20" rx="4.5" fill="#ffd97a"/>
+        <!-- 身体 -->
+        <rect x="49" y="110" width="52" height="26" rx="13" fill="url(#bodyC)" stroke="#f0d089" stroke-width="2"/>
+        <circle cx="66" cy="123" r="3.6" fill="#ff8fb8"/>
+        <circle cx="84" cy="123" r="3.6" fill="#8ee8ff"/>
+      </svg>
+    </div>
+    <div class="name">C · 小机器人 e</div>
+    <div class="desc">圆角小机器人，屏幕脸+发光眼<br>名字里的"e"正好呼应 AI 智能体</div>
+    <div class="traits"><span class="t">科技感</span><span class="t">软萌</span><span class="t">呼应主题</span></div>
+  </div>
+
+</div>
+
+<p style="text-align:center;margin-top:36px;font-size:.82rem;color:#a0aec0">
+  ↑ 三个都在轻微呼吸/眨眼，鼠标悬停卡片可看细节
+</p>
+
+</body>
+</html>

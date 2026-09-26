@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>C4EAI · Shared Wiki</title>
+    <!-- 站点图标（标签页 / 书签 / 手机主屏）：蓝色圆环 + 墨色 C4E
+         环内用深蓝墨色版而非原浅色版——16/32px 下浅色图形会糊到看不见 -->
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/c4e-logo-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/icons/c4e-logo-16.png">
+    <link rel="icon" type="image/png" href="assets/icons/c4e-logo-48.png">
+    <link rel="icon" type="image/x-icon" href="assets/icons/favicon.ico">
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png">
+    <!--与代码高亮和Markdown渲染相关的CDN-->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.0/mermaid.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/copy-tex.min.js"></script>
+    <!-- 文档解析库 -->
+     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- Neo4j 驱动（浏览器直连图谱） -->
+    <script src="https://unpkg.com/neo4j-driver@5"></script>
+
+    <!-- 本地样式文件 -->
+    <link rel="stylesheet" href="css/variables.css?v=5">
+    <link rel="stylesheet" href="css/reset.css?v=4">
+    <link rel="stylesheet" href="css/layout.css?v=22">
+    <link rel="stylesheet" href="css/sidebar.css?v=6">
+    <link rel="stylesheet" href="css/messages.css?v=2">
+    <link rel="stylesheet" href="css/input.css?v=8">
+    <link rel="stylesheet" href="css/modals.css?v=4">
+    <link rel="stylesheet" href="css/xiaoe.css?v=7">
+    <link rel="stylesheet" href="css/mobile.css?v=17">
+    <link rel="stylesheet" href="css/components.css?v=7">
+    <link rel="stylesheet" href="css/agent.css?v=4">
+
+</head>
+
+<body>
+    <!-- 导航栏 -->
+    <header>
+        <div class="container nav-container">
+            <!-- 手机端汉堡按钮（桌面端 CSS 隐藏） -->
+            <button class="mobile-menu-btn" id="mobile-menu-btn" title="对话管理" aria-label="打开对话管理">☰</button>
+            <div class="logo-area">
+                <div class="c4e-art-logo"><img src="assets/icons/c4e-logo.png" alt="C4E"></div>
+                <div class="logo-text-wrapper">
+                    <a href="#" class="logo">C4E<span>AI</span></a>
+                    <div class="company-tagline">江南大学环境计算组</div>
+                </div>
+            </div>
+            <div class="nav-controls">
+                <div class="global-theme-switcher header-theme-switcher" style="padding: 0; margin-right: 10px;">
+                    <div class="theme-dot active" data-theme="default" title="经典蓝" onclick="setGlobalTheme('default')">
+                    </div>
+                    <div class="theme-dot" data-theme="midnight" title="深夜黑" onclick="setGlobalTheme('midnight')">
+                    </div>
+                    <div class="theme-dot" data-theme="emerald" title="翡翠绿" onclick="setGlobalTheme('emerald')"></div>
+                    <div class="theme-dot" data-theme="warm" title="琥珀护眼" onclick="setGlobalTheme('warm')"></div>
+                    <div class="theme-dot" data-theme="cyber" title="赛博2077" onclick="setGlobalTheme('cyber')"></div>
+                    <div class="theme-dot" data-theme="pink" title="樱花粉" onclick="setGlobalTheme('pink')"></div>
+                    <div class="theme-dot" data-theme="macaron-green" title="梦境绿"
+                        onclick="setGlobalTheme('macaron-green')"></div>
+                    <div class="theme-dot" data-theme="macaron-violet" title="梦境紫"
+                        onclick="setGlobalTheme('macaron-violet')"></div>
+                    <div class="theme-dot" data-theme="macaron-pink" title="梦境粉"
+                        onclick="setGlobalTheme('macaron-pink')"></div>
+                    <div class="theme-dot" data-theme="macaron-blue" title="梦境蓝"
+                        onclick="setGlobalTheme('macaron-blue')"></div>
+                </div>
+
+                <!-- 数据库按钮（直达数据库面板） -->
+                <button class="db-analysis-btn" id="db-analysis-btn" style="font-size:.78rem;padding:.28rem .7rem;margin-right:8px;">
+                    🗄️ 数据库
+                </button>
+                <!-- 登录/账号芯片插槽（auth.js 渲染） -->
+                <span id="auth-chip-slot" style="display:inline-flex;align-items:center;"></span>
+            </div>
+        </div>
+    </header>
+
+    <!-- 对话重命名小浮层 -->
+    <div class="popup-panel" id="rename-branch-modal">
+        <h3>重命名对话</h3>
+        <input type="text" id="rename-branch-name-input" class="branch-name-input" placeholder="输入新的对话名称">
+        <div class="popup-actions">
+            <button class="chat-btn" id="cancel-rename-btn">取消</button>
+            <button class="key-btn" id="confirm-rename-btn">重命名</button>
+        </div>
+    </div>
+
+    <!-- 数据库面板（浮动窗，与笔记面板同形态；条目按用户分组展示） -->
+    <div class="notes-panel" id="database-panel" style="top:140px;left:auto;right:40px;width:520px;height:600px;">
+        <div class="notes-panel-header" id="db-panel-header">
+            <span class="notes-panel-title">🗄️ 数据库</span>
+            <span id="database-status-badge" style="font-size:0.78rem;color:var(--gray);margin-left:.5rem;">0 个条目</span>
+            <div class="notes-panel-actions">
+                <!-- 上传/添加按钮已下沉到每个文件夹行（用户 2026-09-25 定）—— 见树渲染 -->
+                <!-- 筛选/排序：外置 -->
+                <span class="db-filter-wrap">
+                    <button id="db-f-owner-btn" title="按上传者筛选" aria-haspopup="true">
+                        <span id="db-f-owner-label">👤 全部</span> ▾
+                    </button>
+                    <div class="db-filter-menu" id="db-f-owner-menu" role="menu" hidden></div>
+                </span>
+                <span class="db-filter-wrap">
+                    <button id="db-f-year-btn" title="按上传年份筛选" aria-haspopup="true">
+                        <span id="db-f-year-label">📅 全部</span> ▾
+                    </button>
+                    <div class="db-filter-menu" id="db-f-year-menu" role="menu" hidden></div>
+                </span>
+                <span class="db-filter-wrap">
+                    <button id="db-f-sort-btn" title="排序方式" aria-haspopup="true">
+                        <span id="db-f-sort-label">🕒 最新</span> ▾
+                    </button>
+                    <div class="db-filter-menu" id="db-f-sort-menu" role="menu" hidden>
+                        <button class="db-filter-item active" data-sort="time" role="menuitem">🕒 上传时间（新→旧）</button>
+                        <button class="db-filter-item" data-sort="time_asc" role="menuitem">🕒 上传时间（旧→新）</button>
+                        <button class="db-filter-item" data-sort="title" role="menuitem">🔤 名称</button>
+                    </div>
+                </span>
+                <button id="db-close-btn" class="notes-close-btn" title="关闭">×</button>
+            </div>
+        </div>
+        <input type="file" id="db-file-input" style="display:none;" multiple
+            accept="image/*,.txt,.md,.js,.py,.c,.cpp,.h,.html,.css,.json,.csv,.log,.yaml,.yml,.sql,.sh,.xml,.ts,.java,.go,.rs,.docx,.pdf,.pptx,.odt,.rtf,.toml,.ini,.tex">
+        <div class="notes-empty" id="db-empty" style="display:none;">
+            <span>暂无条目</span>
+        </div>
+        <div class="notes-list" id="db-doc-list" style="flex:1;overflow-y:auto;padding:0.6rem;"></div>
+    </div>
+
+    <!-- 设置面板和遮罩 -->
+    <div class="settings-panel" id="settings-panel">
+        <!-- 头部结构与「智能体配置」面板完全一致（用户 2026-09-25 定：用智能体配置那套样式） -->
+        <div class="config-panel-header">
+            <span class="config-panel-title">⚙️ 设置</span>
+            <button class="config-save-btn" id="save-settings">保存</button>
+            <button class="close-panel-btn" id="close-settings">×</button>
+        </div>
+        <div class="settings-content">
+            <div class="settings-group">
+                <h3>模型参数</h3>
+
+                            <!-- 文件打开方式设置（三选一：后端打开 / 浏览器新标签 / 应用内浮窗） -->
+                            <div class="setting-item">
+                                <label class="setting-label">
+                                    文件打开方式
+                                    <span class="setting-value" id="file-open-mode-value">后端打开</span>
+                                </label>
+                                <div class="mode-seg" id="file-open-mode-group">
+                                    <button type="button" class="mode-seg-btn" data-mode="backend">后端打开</button>
+                                    <button type="button" class="mode-seg-btn" data-mode="browser">浏览器新标签</button>
+                                    <button type="button" class="mode-seg-btn" data-mode="float">应用内浮窗</button>
+                                </div>
+                                <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
+                                    后端打开：用本机默认应用（Word/Excel/看图器）打开；浏览器新标签：新标签页预览/下载；应用内浮窗：在页面内浮窗预览，不跳出应用
+                                </div>
+                            </div>
+
+                            <!-- 桌宠小e 开关 -->
+                            <div class="setting-item">
+                                <label class="setting-label">
+                                    小e 桌宠
+                                    <span class="setting-value" id="xiaoe-enabled-value">已开启</span>
+                                </label>
+                                <div style="margin-top: 0.5rem;">
+                                    <label class="switch">
+                                        <input type="checkbox" id="toggle-xiaoe" checked>
+                                        <span class="slider-round"></span>
+                                    </label>
+                                </div>
+                                <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
+                                    页面上那只云朵团。点它聊天（问功能/用法），双击敲打、连点发飙、拖着玩、右键换天气；60 秒不理它会睡着。小e 不保存任何记录，关掉即忘
+                                </div>
+                            </div>
+
+                           <div class="setting-item">
+                               <label class="setting-label">
+                                   温度 (Temperature)
+                        <span class="setting-value" id="temp-value">0.7</span>
+                    </label>
+                    <input type="range" min="0" max="2" step="0.1" value="0.7" class="slider" id="temperature">
+                    <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
+                        控制随机性：较低值更确定性，较高值更有创造性
+                    </div>
+                </div>
+
+                <div class="setting-item">
+                    <label class="setting-label">
+                        上下文轮次
+                        <span class="setting-value" id="context-value">10</span>
+                    </label>
+                    <input type="range" min="1" max="50" step="1" value="10" class="slider" id="context-length">
+                    <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
+                        模型记住的对话轮次数量
+                    </div>
+                </div>
+
+                <div class="setting-item">
+                     <label class="setting-label">
+                         最大Token数
+                         <span class="setting-value" id="max-tokens-value">2000</span>
+                     </label>
+                     <input type="number" min="100" max="8000" step="100" value="2000" class="number-input"
+                         id="max-tokens">
+                     <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
+                        单次生成的最大令牌数
+                    </div>
+                </div>
+
+                <div class="setting-item">
+                     <label class="setting-label">
+                         预期输入Token数（阈值）
+                         <span class="setting-value" id="expected-context-tokens-value">4000</span>
+                     </label>
+                     <input type="number" min="100" max="32000" step="100" value="4000" class="number-input"
+                         id="expected-context-tokens">
+                     <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
+                        当前发送给LLM的Token数超过此值时，界面红字加粗警告（仅提示，不影响输入）
+                    </div>
+                </div>
+
+                 </div>
+
+                <div class="settings-group">
+                    <h3>界面字号</h3>
+
+                    <div class="setting-item">
+                        <label class="setting-label">
+                            对话管理字号
+                            <span class="setting-value" id="font-conv-value">0.9</span>
+                        </label>
+                        <input type="range" min="0.6" max="1.6" step="0.05" value="0.9" class="slider" id="font-size-conv">
+                        <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">侧边栏的对话名称列表</div>
+                    </div>
+
+                    <div class="setting-item">
+                        <label class="setting-label">
+                            历史记录字号
+                            <span class="setting-value" id="font-history-value">0.8</span>
+                        </label>
+                        <input type="range" min="0.5" max="1.5" step="0.05" value="0.8" class="slider" id="font-size-history">
+                        <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">侧边栏每条历史消息的预览文字</div>
+                    </div>
+
+                    <div class="setting-item">
+                        <label class="setting-label">
+                            对话回复消息字号
+                            <span class="setting-value" id="font-messages-value">0.95</span>
+                        </label>
+                        <input type="range" min="0.6" max="1.8" step="0.05" value="0.95" class="slider" id="font-size-messages">
+                        <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">聊天区 AI/用户回复气泡内的文字</div>
+                    </div>
+
+                    <div class="setting-item">
+                        <label class="setting-label">
+                            笔记字号
+                            <span class="setting-value" id="font-notes-value">0.9</span>
+                        </label>
+                        <input type="range" min="0.6" max="1.8" step="0.05" value="0.9" class="slider" id="font-size-notes">
+                        <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">笔记卡片的标题与正文</div>
+                    </div>
+
+                    <div class="setting-item">
+                        <label class="setting-label">
+                            思考链/推理字号
+                            <span class="setting-value" id="font-thinking-value">0.7</span>
+                        </label>
+                        <input type="range" min="0.5" max="1.8" step="0.05" value="0.7" class="slider" id="font-size-thinking">
+                        <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">聊天区思考链与推理内容的文字</div>
+                    </div>
+
+                    <div class="setting-item">
+                        <label class="setting-label">
+                            微提示/轻提示字号
+                            <span class="setting-value" id="font-toast-value">0.85</span>
+                        </label>
+                        <input type="range" min="0.5" max="1.8" step="0.05" value="0.85" class="slider" id="font-size-toast">
+                        <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">右上角自动消失的轻提示（如"已复制"）</div>
+                    </div>
+
+                    <div class="setting-item">
+                        <label class="setting-label">
+                            弹窗浮层字号
+                            <span class="setting-value" id="font-popup-value">0.85</span>
+                        </label>
+                        <input type="range" min="0.5" max="1.8" step="0.05" value="0.85" class="slider" id="font-size-popup">
+                        <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">简单操作的小浮层（如重命名/编辑气泡）</div>
+                    </div>
+
+                    <div class="setting-item">
+                        <label class="setting-label">
+                            大模态框字号
+                            <span class="setting-value" id="font-modal-value">0.9</span>
+                        </label>
+                        <input type="range" min="0.5" max="1.8" step="0.05" value="0.9" class="slider" id="font-size-modal">
+                        <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">居中大模态框（如添加模型/服务商/数据库）</div>
+                    </div>
+
+                    <div class="setting-item">
+                        <label class="setting-label">
+                            浮动编辑器字号
+                            <span class="setting-value" id="font-edit-value">0.9</span>
+                        </label>
+                        <input type="range" min="0.5" max="1.8" step="0.05" value="0.9" class="slider" id="font-size-edit">
+                        <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">编辑消息/笔记的浮动 Markdown 编辑器</div>
+                    </div>
+
+                    <div class="setting-item">
+                        <div class="font-tier-btns">
+                            <button class="config-secondary-btn" id="reset-font-small-btn" onclick="resetFontTier('small')">重置为小字号</button>
+                            <button class="config-secondary-btn" id="reset-font-medium-btn" onclick="resetFontTier('medium')">重置为中字号</button>
+                            <button class="config-secondary-btn" id="reset-font-large-btn" onclick="resetFontTier('large')">重置为大字号</button>
+                        </div>
+                        <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">小字号为默认：对话管理 0.85 / 历史 0.65 / 回复 0.75 / 笔记 0.75 / 思考链 0.7 / 编辑器 0.9 / 模态框 0.9 / 浮层 0.85 / 提示 0.85，每级递增 0.15</div>
+                    </div>
+
+                </div>
+
+                <!-- 模型与服务商配置（原首页 models-section 搬入设置面板；内部 id 未变 → provider.js 零改动） -->
+                <div class="setting-item provider-settings-block">
+                    <label class="setting-label">🔌 模型与服务商配置</label>
+                <div class="models-content-wrapper">
+                    <div class="provider-layout">
+                        <!-- 左侧服务商列表 -->
+                        <div class="provider-sidebar" id="provider-list">
+                            <!-- JS动态生成 -->
+                        </div>
+
+                        <!-- 右侧配置区域 -->
+                        <div class="provider-content" id="provider-config-area">
+                            <div class="provider-header">
+                                <div class="provider-title">
+                                    <span id="current-provider-icon">🚀</span>
+                                    <span id="current-provider-name">DeepSeek</span>
+                                </div>
+                                <button class="action-btn" id="delete-provider-btn"
+                                    style="display: none; background: var(--error); color: white;">删除服务商</button>
+                            </div>
+
+                            <!-- 配置表单 -->
+                            <div class="config-group">
+                                <div class="form-group-item">
+                                    <label class="form-label">API 域名 (Base URL)</label>
+                                    <input type="text" class="form-input" id="provider-endpoint"
+                                        placeholder="例如: https://api.openai.com/v1">
+                                </div>
+                                <div class="form-group-item">
+                                    <label class="form-label">API 密钥 (API Key)</label>
+                                    <input type="password" class="form-input" id="provider-apikey" placeholder="sk-...">
+                                </div>
+                            </div>
+                            <div style="display: flex; justify-content: flex-end;">
+                                <button class="save-config-btn" id="save-provider-config">保存当前配置</button>
+                            </div>
+
+                            <!-- 模型列表 -->
+                            <div>
+                                <h4 style="margin-bottom: 1rem; color: var(--dark);">可用模型</h4>
+                                <div class="models-grid-compact" id="provider-models-list">
+                                    <!-- JS动态生成 -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                </div>
+
+        </div>
+    </div>
+
+    <!-- 主内容区 -->
+    <main class="container">
+        <!-- 英雄区域 -->
+        <section class="hero">
+            <div style="text-align:center;">
+                <img src="assets/icons/c4e-logo.png" alt="C4EAI" class="hero-logo">
+                <div style="text-align:center;font-size:1.35rem;letter-spacing:.22em;text-transform:uppercase;opacity:.75;margin-top:.3rem;">Shared Wiki AI Agent</div>
+            </div>
+            <div><button id="start-experience" class="cta-button" style="margin-top:2.2rem;">立即开始探索 →</button></div>
+        </section>
+
+
+
+        <!-- 添加自定义模型/服务商的模态框（统一 .modal/.modal-content） -->
+        <div class="modal" id="add-custom-modal">
+            <div class="modal-content" style="max-width:420px;">
+                <h3>添加自定义模型</h3>
+                <div class="form-group-item">
+                    <label class="form-label">模型名称 (Display Name)</label>
+                    <input type="text" class="form-input" id="custom-model-name" placeholder="例如: My Llama 3">
+                </div>
+                <div class="form-group-item">
+                    <label class="form-label">模型ID (Model ID)</label>
+                    <input type="text" class="form-input" id="custom-model-id"
+                        placeholder="例如: meta-llama/Llama-2-7b-chat-hf">
+                </div>
+                <div class="form-group-item">
+                    <label class="form-label">模型描述 (Description)</label>
+                    <input type="text" class="form-input" id="custom-model-desc" placeholder="例如: 高性能创意辅助模型">
+                </div>
+                <div class="modal-actions">
+                    <button class="chat-btn" id="cancel-add-model">取消</button>
+                    <button class="save-config-btn" id="confirm-add-model">添加</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 添加自定义服务商模态框 -->
+        <div class="modal" id="add-provider-modal">
+            <div class="modal-content" style="max-width:420px;">
+                <h3>添加自定义服务商</h3>
+                <div class="form-group-item">
+                    <label class="form-label">服务商名称</label>
+                    <input type="text" class="form-input" id="new-provider-name" placeholder="例如: LocalLLM">
+                </div>
+                <div class="form-group-item">
+                    <label class="form-label">默认Base URL</label>
+                    <input type="text" class="form-input" id="new-provider-url" placeholder="http://localhost:11434/v1">
+                </div>
+                <div class="form-group-item">
+                    <label class="form-label">简介（可选）</label>
+                    <input type="text" class="form-input" id="new-provider-desc" placeholder="一句话说明这个服务商">
+                </div>
+                <div class="modal-actions">
+                    <button class="chat-btn" id="cancel-add-provider">取消</button>
+                    <button class="save-config-btn" id="confirm-add-provider">创建</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 聊天界面 -->
+        <section class="chat-section">
+            <!-- 左侧聊天历史侧滑栏 -->
+            <div class="chat-sidebar" id="chat-sidebar">
+                <div class="sidebar-header">
+                    <!-- 顶部标题行: 点击 C4E 图标可折叠搜索/过滤区 -->
+                    <div class="sidebar-top-bar">
+                        <div class="sidebar-top-bar-title" onclick="toggleSidebarHeader()" style="display: flex; align-items: center; cursor: pointer; flex:1; user-select:none;">
+                            <div class="c4e-sidebar-art-logo"><img src="assets/icons/c4e-logo.png" alt="C4E"></div>
+                            <h3 class="sidebar-title" style="margin: 0;">对话管理</h3>
+                        </div>
+                        <div class="sidebar-actions">
+                            <button class="action-icon-btn icon-only" id="full-screen-toggle" title="返回主页" style="font-size:1rem;line-height:1;">
+                                ⌂
+                            </button>
+                            <button class="action-icon-btn primary-circle" id="new-chat-btn" title="新建对话">
+                                <span class="icon" style="font-size: 1.2rem; line-height: 0;">＋</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 搜索栏 -->
+                    <div class="sidebar-search-area">
+                        <div class="search-input-wrapper">
+                            <span class="search-icon">🔍</span>
+                            <input type="text" class="search-input" id="history-search" placeholder="搜索（点击C4E图标可以收起该区域）">
+                        </div>
+                    </div>
+
+                    <!-- 过滤与操作行 -->
+                    <div class="sidebar-controls-row">
+                        <div class="history-filters">
+                            <button class="filter-btn active" data-filter="all">全部</button>
+                            <button class="filter-btn" data-filter="user">用户</button>
+                            <button class="filter-btn" data-filter="assistant">AI</button>
+                            <button class="filter-btn" id="notes-toggle-btn">笔记</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="history-list" id="history-list">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">💭</div>
+                        <div class="empty-state-text">暂无对话历史</div>
+                        <button class="new-chat-btn" id="new-chat-btn-empty">
+                            + 开始新的对话
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 左右占比分隔拖条（历史侧栏 ↔ 聊天） -->
+            <div class="sidebar-resizer" id="sidebar-resizer" title="拖动调整历史/聊天左右占比"></div>
+
+            <!-- 侧边栏切换按钮 (仅全屏模式显示，提到 chat-main 外面避免被遮挡) -->
+            <button id="sidebar-toggle-btn" class="sidebar-toggle-btn" title="切换侧边栏">
+                 <!-- Icon via CSS -->
+             </button>
+
+             <!-- 笔记面板 -->
+             <div class="notes-panel" id="notes-panel">
+                 <div class="notes-panel-header">
+                     <span class="notes-panel-title">📝 对话笔记</span>
+                     <div class="notes-panel-actions">
+                         <button id="notes-add-btn">＋ 添加笔记</button>
+                         <button id="notes-close-btn" class="notes-close-btn" title="关闭笔记">×</button>
+                     </div>
+                 </div>
+                 <div class="notes-empty" id="notes-empty">
+                     <span>暂无笔记</span>
+                 </div>
+                 <div class="notes-list" id="notes-list"></div>
+             </div>
+
+             <!-- 主聊天区域 -->
+             <div class="chat-main">
+
+                <div class="chat-container">
+                    <div class="messages-container" id="messages-container">
+                        <div class="message assistant" data-id="welcome">
+                            <div class="message-content">
+                                您好！我是 <b>C4EAI · Shared Wiki</b> —— 实验室协作知识与文献智能体。<br>
+                                我能帮您：<b>① GraphRAG 图谱检索</b>（Neo4j 协作知识图谱）｜<b>② 多智能体协作</b>（专有子智能体并行处理）｜<b>③ 数据分析与代码执行</b>｜<b>④ 组内共享数据库</b>（文献/笔记上传与语义检索）｜<b>⑤ RAG 知识检索</b>｜<b>⑥ 高阶文献翻译</b>（MinerU 解析归档→图文并茂中文全译）｜<b>⑦ 文献内容审查</b>（图/表/段落三轨对账·矛盾裁决）｜<b>⑧ 联网搜索与文件处理</b>。<br>
+                                直接提问即可；点输入框左侧 📎 上传文献。模型默认「本地千问」，免费不限量。
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="typing-indicator" id="typing-indicator">
+                        AI正在思考中...
+                    </div>
+
+                    <div class="input-area">
+                        <!-- 文件上传面板 (可展开/收起) -->
+                        <div class="file-upload-panel" id="file-upload-panel">
+                            <div class="upload-panel-header">
+                                <span class="upload-panel-title">📎 添加文件</span>
+                                <button class="close-panel-btn" id="close-upload-panel">×</button>
+                            </div>
+                            <div class="upload-drop-zone" id="upload-drop-zone">
+                                <div class="upload-icon-large">📁</div>
+                                <div class="upload-text">点击或拖拽文件到此处</div>
+                                <div class="upload-hint">支持: 图片(jpg/png/gif/webp/bmp/svg) | 文档(pdf/docx/txt/md/rtf/pptx/odt)<br>数据(json/csv/xml/log/toml/ini) | 代码(js/py/html/css/java/ts/go/rs 等50+格式)<br>⚠️ .xlsx/.xls 需转为 .csv 后上传</div>
+                            </div>
+                            <div class="selected-files-list" id="selected-files-list"></div>
+                            <input type="file" id="file-attachment-input" multiple
+                                 accept="image/*,.pdf,.docx,.pptx,.odt,.txt,.md,.rtf,.json,.csv,.xml,.log,.toml,.ini,.js,.py,.java,.cpp,.c,.h,.ts,.jsx,.tsx,.go,.rs,.php,.rb,.swift,.kt,.sh,.yaml,.yml,.sql,.html,.css,.lua,.r,.pl,.tex,.bat,.ps1" style="display: none;">
+                        </div>
+
+                        <!-- 智能体配置面板 -->
+                        <div class="agent-config-panel" id="agent-config-panel">
+                            <div class="config-panel-header">
+                                <span class="config-panel-title">🧠 智能体配置</span>
+                                <div class="neo4j-status-dot" id="neo4j-status-dot" title="Neo4j 连接状态"></div>
+                                <button class="config-save-btn" id="save-agent-config" onclick="saveAgentConfig()" title="保存并收起">保存</button>
+                                <button class="close-panel-btn" id="close-agent-config">×</button>
+                            </div>
+                            <div class="config-panel-body">
+                                <div class="config-section">
+                                    <div class="config-section-title">⚙️ Agent 引擎</div>
+                                    <div class="permission-mode-row">
+                                        <label class="config-option">
+                                            <input type="radio" name="agent-engine" value="custom" id="engine-custom" checked>
+                                            <span class="config-option-label">⚡ 自定义流式 <span class="config-option-desc">裸API手写循环，显示🧠思考</span></span>
+                                        </label>
+                                        <label class="config-option">
+                                            <input type="radio" name="agent-engine" value="langchain" id="engine-langchain">
+                                            <span class="config-option-label">🧠 LangChain 流式 <span class="config-option-desc">框架循环，无思考链</span></span>
+                                        </label>
+                                    </div>
+                                    <div style="margin-top:0.6rem;">
+                                        <label class="config-option-label" style="margin-bottom:0.3rem;display:block;">🔁 工具循环轮次</label>
+                                        <select id="agent-max-rounds" class="neo4j-input" style="width:100%;">
+                                            <option value="8">8 轮</option>
+                                            <option value="20">20 轮</option>
+                                            <option value="50">50 轮</option>
+                                            <option value="0">无限</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <!-- 子智能体（delegate_task）配置 -->
+                                <div class="config-section">
+                                    <div class="config-section-title">🤖 子智能体</div>
+                                    <label class="config-option" style="margin-bottom:.5rem;">
+                                        <input type="checkbox" id="subagent-enabled" checked>
+                                        <span class="config-option-label">启用子智能体
+                                            <span class="config-option-desc">主智能体可派子智能体并行处理独立子任务（需在下方工具区勾选 delegate_task）</span>
+                                        </span>
+                                    </label>
+                                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem .6rem;">
+                                        <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">轮次/个
+                                            <input type="number" id="subagent-rounds" min="1" max="20" step="1" value="4"
+                                                   class="neo4j-input" style="width:100%;box-sizing:border-box;">
+                                        </label>
+                                        <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">并发上限
+                                            <input type="number" id="subagent-parallel" min="1" max="8" step="1" value="2"
+                                                   class="neo4j-input" style="width:100%;box-sizing:border-box;">
+                                        </label>
+                                        <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">最多子任务
+                                            <input type="number" id="subagent-maxtasks" min="1" max="8" step="1" value="4"
+                                                   class="neo4j-input" style="width:100%;box-sizing:border-box;">
+                                        </label>
+                                    </div>
+                                    <div style="font-size:.72rem;color:var(--gray);line-height:1.5;margin-top:.4rem;">
+                                        <b>轮次/个</b>＝每个子智能体内部最多跑几轮工具循环；<br>
+                                        <b>并发上限</b>＝同时最多并行运行几个子智能体（其余排队等待）；<br>
+                                        <b>最多子任务</b>＝一次 delegate 最多接受几个子任务，超出的会被丢弃。
+                                    </div>
+                                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem .6rem;margin-top:.6rem;">
+                                        <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">催促(秒)
+                                            <input type="number" id="subagent-nudge" min="0" max="3600" step="10" value="60"
+                                                   class="neo4j-input" style="width:100%;box-sizing:border-box;">
+                                        </label>
+                                        <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">警告(秒)
+                                            <input type="number" id="subagent-warn" min="0" max="3600" step="10" value="150"
+                                                   class="neo4j-input" style="width:100%;box-sizing:border-box;">
+                                        </label>
+                                        <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">终止(秒)
+                                            <input type="number" id="subagent-abort" min="30" max="3600" step="10" value="300"
+                                                   class="neo4j-input" style="width:100%;box-sizing:border-box;">
+                                        </label>
+                                    </div>
+                                    <div style="font-size:.72rem;color:var(--gray);line-height:1.5;margin-top:.4rem;">
+                                        子智能体三级超时（秒，0=关闭该级，每个子智能体独立计时）：催促→注入「尽快收尾」；警告→注入「立即给结论」；终止→中断并返回已完成部分。
+                                    </div>
+                                </div>
+                                <!-- 主智能体超时保护（原在设置面板；id 未变 → branching.js 读写零改动） -->
+                                <div class="config-section">
+                                    <div class="config-section-title">⏱️ 超时保护（主智能体）</div>
+                                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem .6rem;">
+                                        <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">催促(秒)
+                                            <input type="number" id="timeout-nudge" min="0" max="3600" step="10" value="120"
+                                                   class="neo4j-input" style="width:100%;box-sizing:border-box;">
+                                        </label>
+                                        <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">警告(秒)
+                                            <input type="number" id="timeout-warn" min="0" max="3600" step="10" value="240"
+                                                   class="neo4j-input" style="width:100%;box-sizing:border-box;">
+                                        </label>
+                                        <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">终止(秒)
+                                            <input type="number" id="timeout-abort" min="0" max="7200" step="10" value="420"
+                                                   class="neo4j-input" style="width:100%;box-sizing:border-box;">
+                                        </label>
+                                    </div>
+                                    <div style="font-size:.72rem;color:var(--gray);line-height:1.5;margin-top:.4rem;">
+                                        主智能体三级超时（秒，0=关闭该级）：催促→注入「尽快收尾」；警告→注入「立即作答」；终止→强制结束并返回超时说明。
+                                    </div>
+                                </div>
+                                <div class="config-section">
+                                    <div class="config-section-title">🔐 权限模式</div>
+                                    <div class="permission-mode-row">
+                                        <label class="config-option">
+                                            <input type="radio" name="permission-mode" value="safe" id="perm-safe" checked>
+                                            <span class="config-option-label">🔒 安全模式 <span class="config-option-desc">仅 workspace</span></span>
+                                        </label>
+                                        <label class="config-option">
+                                            <input type="radio" name="permission-mode" value="ask" id="perm-ask">
+                                            <span class="config-option-label">❓ 询问模式 <span class="config-option-desc">可读项目+写技能</span></span>
+                                        </label>
+                                        <label class="config-option">
+                                            <input type="radio" name="permission-mode" value="full" id="perm-full">
+                                            <span class="config-option-label">⚡ 完全访问 <span class="config-option-desc">任意读写</span></span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="config-section">
+                                    <div class="config-section-title">🔗 Neo4j 连接</div>
+                                    <div class="neo4j-connect-form">
+                                        <input type="text" class="neo4j-input" id="panel-neo4j-uri" placeholder="neo4j+s://..." value="">
+                                        <div class="neo4j-row">
+                                            <input type="text" class="neo4j-input" id="panel-neo4j-user" placeholder="用户名" value="">
+                                            <input type="password" class="neo4j-input" id="panel-neo4j-pass" placeholder="密码">
+                                        </div>
+                                        <button class="neo4j-connect-btn" id="panel-neo4j-connect">🔌 连接</button>
+                                        <span class="neo4j-connect-msg" id="panel-neo4j-msg"></span>
+                                    </div>
+                                </div>
+                                <div class="config-section">
+                                    <div class="config-section-title">📄 MinerU 解析配置 <span style="font-size:0.75rem;color:var(--gray);font-weight:normal">（PDF→Markdown，随保存提交）</span></div>
+                                    <div class="neo4j-connect-form">
+                                        <input type="password" class="neo4j-input" id="panel-mineru-token" placeholder="MinerU API Token / Key" autocomplete="off">
+                                        <div class="neo4j-row" style="margin-top:6px;">
+                                            <button class="neo4j-connect-btn" id="panel-mineru-save" style="background:var(--primary);color:#fff;">💾 保存 Token</button>
+                                            <span class="neo4j-connect-msg" id="panel-mineru-msg"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="config-section">
+                                    <div class="config-section-title">🛠️ 工具 <span style="font-size:0.75rem;color:var(--gray);font-weight:normal">（按分组勾选 = LLM 可用；数据来自后端 tools_registry）</span></div>
+                                    <div id="tools-groups-container" style="min-height:2rem;">
+                                        <!-- 由 agent_config.js 从后端 /api/tools 按分组动态渲染 -->
+                                        <div style="font-size:0.8rem;color:var(--gray);padding:0.25rem 0;">加载中...</div>
+                                    </div>
+                                    <label class="config-option">
+                                        <input type="checkbox" id="tool-graph-schema" checked style="display:none">
+                                        <span class="config-option-label" style="display:none">graph_schema</span>
+                                    </label>
+                                    <label class="config-option">
+                                        <input type="checkbox" id="tool-execute-cypher" checked>
+                                        <span class="config-option-label">execute_cypher <span class="config-option-desc">执行 Cypher 查询</span></span>
+                                    </label>
+                                    <label class="config-option">
+                                        <input type="checkbox" id="tool-skill-list" checked>
+                                        <span class="config-option-label">skill_list <span class="config-option-desc">列出可用技能</span></span>
+                                    </label>
+                                    <label class="config-option">
+                                        <input type="checkbox" id="tool-skill-view" checked>
+                                        <span class="config-option-label">skill_view <span class="config-option-desc">读取技能全文</span></span>
+                                    </label>
+                                    <label class="config-option">
+                                        <input type="checkbox" id="tool-web-search" checked>
+                                        <span class="config-option-label">web_search <span class="config-option-desc">搜索互联网</span></span>
+                                    </label>
+                                    <label class="config-option">
+                                        <input type="checkbox" id="tool-web-extract" checked>
+                                        <span class="config-option-label">web_extract <span class="config-option-desc">抓取网页内容</span></span>
+                                    </label>
+                                    <label class="config-option">
+                                        <input type="checkbox" id="tool-todo" checked>
+                                        <span class="config-option-label">todo <span class="config-option-desc">任务清单</span></span>
+                                    </label>
+                                    <label class="config-option">
+                                        <input type="checkbox" id="tool-notes" checked>
+                                        <span class="config-option-label">conversation_notes <span class="config-option-desc">对话笔记</span></span>
+                                    </label>
+                                    <label class="config-option">
+                                        <input type="checkbox" id="tool-run-code" checked>
+                                        <span class="config-option-label">run_code <span class="config-option-desc">🆕 执行Python代码</span></span>
+                                    </label>
+                                    <label class="config-option">
+                                        <input type="checkbox" id="tool-read-file" checked>
+                                        <span class="config-option-label">read_file <span class="config-option-desc">🆕 读取文件</span></span>
+                                    </label>
+                                    <label class="config-option">
+                                        <input type="checkbox" id="tool-write-file" checked>
+                                        <span class="config-option-label">write_file <span class="config-option-desc">🆕 写入文件</span></span>
+                                    </label>
+                                    <label class="config-option">
+                                        <input type="checkbox" id="tool-list-files" checked>
+                                        <span class="config-option-label">list_files <span class="config-option-desc">🆕 列出文件</span></span>
+                                    </label>
+                                    <label class="config-option">
+                                        <input type="checkbox" id="tool-skill-write" checked>
+                                        <span class="config-option-label">skill_write <span class="config-option-desc">🆕 自我生成/修改技能</span></span>
+                                    </label>
+                                    <label class="config-option">
+                                        <input type="checkbox" id="tool-search-history" checked>
+                                        <span class="config-option-label">search_history <span class="config-option-desc">🆕 搜索历史对话</span></span>
+                                    </label>
+                                    <label class="config-option">
+                                        <input type="checkbox" id="tool-shared-search" checked>
+                                        <span class="config-option-label">shared_search <span class="config-option-desc">🔍 检索共享数据库（云端 RAG）</span></span>
+                                    </label>
+                                    <label class="config-option">
+                                        <input type="checkbox" id="tool-shared-upload" checked>
+                                        <span class="config-option-label">shared_upload <span class="config-option-desc">⬆️ 上传文件到共享数据库</span></span>
+                                    </label>
+                                    <label class="config-option">
+                                        <input type="checkbox" id="tool-mineru" checked>
+                                        <span class="config-option-label">mineru_parse <span class="config-option-desc">🆕 PDF→Markdown（需配置 MinerU Token）</span></span>
+                                    </label>
+                                 </div>
+                                <div class="config-section">
+                                <div class="config-section-title">📖 Skill</div>
+                                <div id="skills-config-container">
+                                    <!-- 由 JS 从 skills/index.json 动态生成 -->
+                                    <div style="font-size:0.8rem;color:var(--gray);padding:0.25rem 0;">加载中...</div>
+                                </div>
+                                </div>
+                                </div>
+                        </div>
+
+                        <!-- 展开的消息输入区域 -->
+                        <div class="expanded-message-area" id="expanded-message-area">
+                            <textarea id="expanded-textarea" class="expanded-textarea" placeholder="在此输入消息，支持多行输入..."></textarea>
+                        </div>
+
+                        <!-- 输入行 -->
+                        <!-- 现代化输入条 -->
+                        <div class="modern-input-bar">
+                            <!-- 附件 -->
+                            <button class="tool-icon-btn" id="attachment-btn" title="上传文件">
+                                📎
+                            </button>
+                            <!-- 展开消息 -->
+                            <button class="expand-btn" id="expand-btn" title="展开消息输入">
+                                ↕
+                            </button>
+
+                            <!-- 输入框 -->
+                            <div class="input-field-container">
+                                <textarea id="message-input" class="modern-input" placeholder="发消息..."
+                                    rows="1"></textarea>
+                            </div>
+
+                            <!-- 右侧操作区 -->
+                            <div class="input-actions-right">
+                                <!-- 模型选择 (紧凑) -->
+                                <div class="compact-model-select" title="选择模型">
+                                    <select id="chat-model-selector">
+                                        <option value="" disabled selected>API</option>
+                                    </select>
+                                </div>
+
+
+                                <!-- 发送给 LLM 的上下文 Token 数（含压缩） -->
+                                <div class="context-size-display" id="context-size-display" title="当前发送给LLM的Token数（考虑上下文压缩）">
+                                    <span id="context-size-text">0</span>
+                                </div>
+
+                                <!-- 智能体配置按钮 -->
+                                <button class="tool-icon-btn agent-config-btn" id="agent-config-toggle" title="智能体配置">
+                                    <span>🧠</span>
+                                </button>
+
+                                <!-- 设置按钮 -->
+                                <button class="tool-icon-btn" id="settings-btn" title="设置">
+                                    <span>⚙️</span>
+                                </button>
+
+                                <!-- 全屏开关 (图标) -->
+                                <!-- 已移至侧边栏 -->
+
+                                <!-- 发送按钮 (圆形) -->
+                                <button id="send-btn" class="send-circle-btn btn-disabled" title="发送">
+                                    ➤
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+
+
+    <!-- 脚本文件 (按依赖顺序) -->
+    <script src="js/state.js?v=10"></script>
+    <!-- 个人设置后端存储（必须在其它模块之前：hydrate 要把后端设置灌回缓存） -->
+    <script src="js/user_settings.js?v=1"></script>
+    <script src="js/user_chats.js?v=2"></script>
+    <script src="js/events.js?v=1"></script>
+    <script src="js/dom.js?v=3"></script>
+    <script src="js/settings.js?v=10"></script>
+    <script src="js/image_tools.js?v=3"></script>
+    <script src="js/file_preview.js?v=11"></script>
+    <script src="js/auth.js?v=19"></script>
+    <script src="js/api.js?v=11"></script>
+    <script src="js/database.js?v=21"></script>
+    <script src="js/sidebar.js?v=10"></script>
+    <script src="js/branching.js?v=11"></script>
+    <script src="js/provider.js?v=9"></script>
+    <script src="js/messages.js?v=8"></script>
+    <script src="js/editing.js?v=3"></script>
+    <script src="js/formatting.js?v=5"></script>
+    <script src="js/tools.js?v=3"></script>
+    <script src="js/graph_rag.js?v=12"></script>
+    <script src="js/note_refs.js?v=2"></script>
+    <script src="js/subagent_view.js?v=3"></script>
+    <!-- 前端工具注册表已删除（工具全部由后端提供） -->
+    <script src="js/skill_system.js?v=3"></script>
+    <script src="js/agent_config.js?v=9"></script>
+    <script src="js/ui.js?v=4"></script>
+    <script src="js/bubbles.js?v=5"></script>
+    <script src="js/bubble_actions.js?v=3"></script>
+    <script src="js/utils.js?v=2"></script>
+    <script src="js/main.js?v=6"></script>
+    <script src="js/xiaoe.js?v=8"></script>
+    <script src="js/mobile.js?v=1"></script>
+
+    <div class="popup-panel bubble-context-menu" id="bubble-context-menu">
+        <button class="menu-item" data-action="open-file">📂 打开文件</button>
+        <button class="menu-item" data-action="send-llm">🤖 发送给 LLM</button>
+        <button class="menu-item" data-action="open-location">📁 打开文件地址</button>
+        <button class="menu-item" data-action="edit-text">✏️ 编辑文字</button>
+        <button class="menu-item danger" data-action="delete">🗑️ 删除</button>
+    </div>
+
+    <!-- 添加气泡面板 -->
+    <div class="popup-panel bubble-add-panel" id="bubble-add-panel">
+        <input type="text" id="bubble-add-input" placeholder="输入气泡文字...">
+        <div class="panel-btns">
+            <button class="btn-add-text" id="bubble-add-text-btn">添加文字</button>
+            <button class="btn-add-file" id="bubble-add-file-btn">链接文件</button>
+            <button class="btn-cancel" id="bubble-add-cancel">取消</button>
+        </div>
+    </div>
+
+    <!-- 隐藏的文件选择器用于气泡链接文件（支持多选） -->
+    <input type="file" id="bubble-file-input" style="display:none" multiple>
+
+    <!-- 气泡编辑小浮层 -->
+    <div class="popup-panel" id="bubble-edit-modal">
+        <h3>编辑气泡文字</h3>
+        <input type="text" id="bubble-edit-input" placeholder="输入新的气泡文字">
+        <div class="popup-actions">
+            <button class="chat-btn" onclick="document.getElementById('bubble-edit-modal').classList.remove('show')">取消</button>
+            <button class="key-btn" id="bubble-edit-confirm">确定</button>
+        </div>
+    </div>
+
+    <!-- 统一浮动 Markdown 编辑器（可拖动、可调整大小） -->
+    <div class="floating-editor" id="floating-editor">
+        <div class="fe-header" id="fe-header">
+            <span class="fe-title" id="fe-title">编辑内容</span>
+            <button class="fe-close" title="关闭" onclick="window.__feCancel && window.__feCancel()">×</button>
+        </div>
+        <div class="fe-title-row" id="fe-title-row" style="display:none;">
+            <input type="text" id="fe-title-input" placeholder="标题">
+        </div>
+        <div class="fe-toolbar">
+            <button class="fe-btn" id="fe-undo" title="撤销" onclick="window.__feUndo && window.__feUndo()">↶</button>
+            <button class="fe-btn" id="fe-redo" title="重做" onclick="window.__feRedo && window.__feRedo()">↷</button>
+            <span class="fe-sep"></span>
+            <button class="fe-btn" title="加粗" onclick="window.__feWrap('**','**')"><b>B</b></button>
+            <button class="fe-btn" title="斜体" onclick="window.__feWrap('*','*')"><i>I</i></button>
+            <button class="fe-btn" title="删除线" onclick="window.__feWrap('~~','~~')"><s>S</s></button>
+            <span class="fe-sep"></span>
+            <button class="fe-btn" title="标题1" onclick="window.__feLine('# ')">H1</button>
+            <button class="fe-btn" title="标题2" onclick="window.__feLine('## ')">H2</button>
+            <button class="fe-btn" title="标题3" onclick="window.__feLine('### ')">H3</button>
+            <button class="fe-btn" title="无序列表" onclick="window.__feLine('- ')">• 列表</button>
+            <button class="fe-btn" title="有序列表" onclick="window.__feLine('1. ')">1. 列表</button>
+            <button class="fe-btn" title="引用" onclick="window.__feLine('> ')">❝ 引用</button>
+            <span class="fe-sep"></span>
+            <button class="fe-btn" title="行内代码" onclick="window.__feWrap('`','`')">&lt;代码&gt;</button>
+            <button class="fe-btn" title="代码块" onclick="window.__feWrap('```\n','\n```')">代码块</button>
+            <button class="fe-btn" title="插入图片" onclick="window.__feInsertImage && window.__feInsertImage()">图片</button>
+            <button class="fe-btn" title="插入文档附件（pdf/docx/xlsx 等任意文件）" onclick="window.__feInsertFile && window.__feInsertFile()">📎 附件</button>
+            <button class="fe-btn" title="插入表格" onclick="window.__feInsertTable && window.__feInsertTable()">▦ 表格</button>
+            <button class="fe-btn" title="编辑选中的图片" onclick="window.__feEditImage && window.__feEditImage()">✂️编辑图片</button>
+            <button class="fe-btn" title="链接" onclick="window.__feLink()">链接</button>
+            <span class="fe-sep"></span>
+            <!-- 字号复合按钮：左=应用(显示当前档位)，右=展开下拉 -->
+            <div class="fe-combo" data-combo="font">
+                <button class="fe-btn fe-combo-apply" id="fe-font-apply" title="应用字号" onclick="window.__feSize()">
+                    <span>字</span><span id="fe-font-value" style="font-size:0.7em;color:var(--gray);">正常</span>
+                </button>
+                <button class="fe-btn fe-combo-arrow" title="选择字号" onclick="window.__feDropdown('font', this)">▾</button>
+            </div>
+            <!-- 着色复合按钮：左=应用(显示当前色标)，右=展开下拉 -->
+            <div class="fe-combo" data-combo="color">
+                <button class="fe-btn fe-combo-apply" id="fe-color-apply" title="应用着色" onclick="window.__feColor()">
+                    <span style="font-weight:600;">A</span><span class="fe-color-bar" id="fe-color-bar"></span>
+                </button>
+                <button class="fe-btn fe-combo-arrow" title="选择颜色" onclick="window.__feDropdown('color', this)">▾</button>
+            </div>
+            <!-- 隐藏的原生控件：作为当前选择存储 + 供 applySize/applyColor 读取 -->
+            <select class="fe-size" id="fe-fontsize" style="display:none;">
+                <option value="0.8em">小</option>
+                <option value="1em" selected>正常</option>
+                <option value="1.2em">大</option>
+                <option value="1.5em">特大</option>
+            </select>
+            <input type="color" id="fe-color" style="display:none;" value="#e02020">
+        </div>
+        <div class="fe-body" id="fe-body">
+            <textarea class="fe-textarea" id="fe-textarea" placeholder="输入 Markdown 内容…"></textarea>
+        </div>
+        <div class="fe-footer">
+            <button class="fe-cancel" onclick="window.__feCancel && window.__feCancel()">取消</button>
+            <button class="fe-save" onclick="window.__feSave && window.__feSave()">保存</button>
+        </div>
+    </div>
+
+    <!-- 文件浮窗预览（应用内打开，可拖动/缩放/记忆位置，仿笔记浮窗） -->
+    <div class="file-preview-panel" id="file-preview-panel">
+        <div class="file-preview-header" id="file-preview-header">
+            <span class="file-preview-title" id="file-preview-title">文件预览</span>
+            <div class="file-preview-actions">
+                <button id="file-preview-open-native" title="用本机默认应用打开">🖥️</button>
+                <button id="file-preview-download" title="下载">⬇️</button>
+                <button id="file-preview-close-btn" class="file-preview-close-btn" title="关闭">×</button>
+            </div>
+        </div>
+        <div class="file-preview-body" id="file-preview-body"></div>
+    </div>
+</body>
+
+</html>

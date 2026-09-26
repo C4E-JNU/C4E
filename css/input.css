@@ -1,0 +1,921 @@
+        /* 输入区域 - 更新布局 */
+        .input-area {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            padding: 0.75rem 1rem;
+            border-top: 1px solid var(--border-color);
+            flex-shrink: 0;
+            position: relative;
+            background: var(--card-bg);
+            transition: all 0.3s;
+        }
+
+        /* 全屏模式样式 */
+        body.full-screen-mode {
+            overflow: hidden;
+        }
+
+        /* 防止退出全屏时的闪烁 */
+        body.no-scroll-transition {
+            visibility: hidden;
+            /* 暂时隐藏页面内容 */
+            opacity: 0;
+            transition: none !important;
+        }
+
+        body.full-screen-mode .chat-section {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            padding: 0;
+            margin: 0;
+            z-index: 2000;
+            background: var(--light);
+            gap: 0;
+        }
+
+             body.full-screen-mode header {
+                     display: block;
+                     position: fixed;
+                     top: 0; left: 0; right: 0;
+                     z-index: 2100;               /* 高于 chat-section(2000) */
+                     transform: translateY(-100%);  /* 完全收起，靠下方热区触发 */
+                     transition: transform 0.25s ease;
+                     box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+                 }
+             /* 20px 隐形悬停热区：鼠标移到顶部一带即滑出状态栏 */
+             body.full-screen-mode header::after {
+                     content: '';
+                     position: absolute;
+                     left: 0; right: 0;
+                     top: 100%;
+                     height: 20px;
+                 }
+             body.full-screen-mode header:hover,
+             body.full-screen-mode header:focus-within {
+                     transform: translateY(0);
+                 }
+
+                 /* 全屏模式下弹窗层级提升 */
+                      /* 全屏模式下弹窗层级提升 */
+                         body.full-screen-mode .modal {
+                             z-index: 3000;
+                         }
+
+                         body.full-screen-mode .modal-content {
+                             max-width: 500px;
+                             padding: 1.5rem;
+                         }
+
+        body.full-screen-mode .hero {
+            display: none;
+        }
+
+        body.full-screen-mode .models-section {
+            display: none;
+        }
+
+        body.full-screen-mode .chat-container {
+            border-radius: 0;
+            box-shadow: none;
+            height: 100%;
+            width: 100%;
+        }
+
+           body.full-screen-mode .chat-sidebar {
+                  display: flex;
+                  /*全屏模式下显示侧边栏 */
+                  height: 100vh;
+                  border-radius: 0;
+                  border-right: 1px solid var(--border-color);
+                  background: var(--sidebar-bg);
+                  width: 260px;
+                  /* 固定宽度 */
+                  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                  position: relative;
+                  z-index: 10;
+              }
+
+        /* 侧边栏收起 - 全屏/非全屏均生效 */
+        .chat-sidebar.collapsed {
+            width: 0;
+            padding: 0;
+            opacity: 0;
+            overflow: hidden;
+            border-right: none;
+            margin: 0;
+            flex: 0 0 0;
+            min-width: 0;
+        }
+
+        /* 全屏模式下笔记面板 */
+        body.full-screen-mode .notes-panel.active {
+            height: 100vh;
+            border-radius: 0;
+            border-right: 1px solid var(--border-color);
+        }
+        /* 全屏下分屏状态：笔记占满剩余，对话框和侧边栏等宽 */
+        body.full-screen-mode .notes-panel.phase-1 {
+            flex: 1;
+            width: auto;
+            min-width: 200px;
+        }
+        body.full-screen-mode .notes-panel.phase-1 ~ .chat-main {
+            width: 320px;
+            flex: none;
+        }
+        /* 全屏下最大化状态：隐藏对话框 */
+        body.full-screen-mode .notes-panel.phase-2 ~ .chat-main {
+            display: none;
+        }
+
+        body.full-screen-mode .chat-main {
+            width: 100%;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* 侧边栏切换按钮样式 - 极简设计 */
+        .sidebar-toggle-btn {
+            display: flex;
+            /* 全屏/非全屏均显示 */
+            position: absolute;
+            top: 50%;
+            left: 0;
+            z-index: 100;
+            width: 24px;
+            height: 48px;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            color: #999;
+            transform: translateY(-50%);
+            border-radius: 0 8px 8px 0;
+        }
+
+        .sidebar-toggle-btn:hover {
+            background: rgba(0, 0, 0, 0.03);
+            color: var(--primary);
+        }
+
+        /* 侧边栏全屏态：sidebar 50% + notes 50%，隐藏对话框 */
+        .chat-section.sidebar-full .chat-sidebar {
+            width: 50%;
+            flex: none;
+            min-width: 300px;
+        }
+        .chat-section.sidebar-full .notes-panel.active {
+            width: 50%;
+            flex: none;
+            min-width: 200px;
+        }
+        .chat-section.sidebar-full .chat-main {
+            display: none;
+        }
+        /* 全屏态下的全屏态适配 */
+        body.full-screen-mode .chat-section.sidebar-full .chat-sidebar {
+            height: 100vh;
+            border-radius: 0;
+            border-right: none;
+        }
+        body.full-screen-mode .chat-section.sidebar-full .notes-panel.active {
+            height: 100vh;
+            border-radius: 0;
+            border-right: 1px solid var(--border-color);
+        }
+
+        /* 切换按钮箭头 - 与 sidebar-full 态适配 */
+        .sidebar-toggle-btn::before {
+            content: "";
+            display: block;
+            width: 8px;
+            height: 8px;
+            border-left: 2px solid currentColor;
+            border-bottom: 2px solid currentColor;
+            transition: transform 0.3s;
+        }
+        /* 收起：右箭头（展开） */
+        .chat-sidebar.collapsed ~ .sidebar-toggle-btn::before {
+            transform: rotate(-135deg);
+            margin-left: -4px;
+        }
+        /* 普通展开：左箭头（收起） */
+        .chat-sidebar:not(.collapsed) ~ .sidebar-toggle-btn::before {
+            transform: rotate(45deg);
+            margin-left: 4px;
+        }
+        /* 全屏态：双箭头（表示收起至折叠） */
+        .chat-section.sidebar-full .sidebar-toggle-btn::before {
+            transform: rotate(45deg);
+            margin-left: 4px;
+        }
+
+                                   body.full-screen-mode .chat-main {
+            width: 100%;
+            flex: 1;
+        }
+
+        /* 全屏模式下的消息宽度调整（字号跟随用户设置，不再锁死） */
+        body.full-screen-mode .message-content {
+            max-width: 90%;
+            font-size: var(--font-size-messages);
+            line-height: 1.7;
+        }
+
+        /* 退出全屏按钮样式 (覆盖在右上角，或集成到输入栏) */
+        /* 我们使用输入栏上的按钮来退出 */
+
+        .input-row {
+            display: flex;
+            gap: 0.5rem;
+            align-items: flex-end;
+        }
+
+        /* 文件附件按钮 */
+        .attachment-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: transparent;
+            border: 2px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--primary);
+            font-size: 1.1rem;
+            transition: all 0.3s;
+            flex-shrink: 0;
+            margin-bottom: 2px;
+        }
+
+        .attachment-btn:hover {
+            background: var(--light);
+            transform: scale(1.05);
+        }
+
+
+        /* 展开消息按钮 */
+        .expand-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: transparent;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--gray);
+            font-size: 1.1rem;
+            transition: all 0.3s;
+            flex-shrink: 0;
+        }
+
+        .expand-btn:hover {
+            background: rgba(0, 0, 0, 0.05);
+            color: var(--primary);
+        }
+
+        .expand-btn.active {
+            color: var(--primary);
+            background: rgba(16, 185, 129, 0.1);
+        }
+
+        /* 展开消息区域 - 与文件上传面板风格一致 */
+        .expanded-message-area {
+            display: none;
+            background: var(--card-bg);
+            border: 2px dashed var(--border-color);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 0.5rem;
+            transition: all 0.3s;
+            animation: slideDown 0.3s ease-out;
+        }
+
+        .expanded-message-area.active {
+            display: block;
+        }
+
+        .expanded-textarea {
+            width: 100%;
+            min-height: 120px;
+            max-height: 300px;
+            border: none;
+            background: transparent;
+            font-size: 0.95rem;
+            font-family: inherit;
+            resize: vertical;
+            outline: none;
+            line-height: 1.6;
+            color: var(--text, #333);
+            padding: 4px 0;
+        }
+
+        .expanded-textarea::placeholder {
+            color: var(--gray);
+            opacity: 0.5;
+        }
+
+
+        /* 文件上传面板 */
+        .file-upload-panel {
+            display: none;
+            background: var(--card-bg);
+            border: 2px dashed var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 0.5rem;
+            transition: all 0.3s;
+        }
+
+        .file-upload-panel.active {
+            display: block;
+            animation: slideDown 0.3s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .file-upload-panel.drag-over {
+            border-color: var(--primary);
+            background: #f8f9ff;
+        }
+
+        .upload-panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .upload-panel-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--dark);
+        }
+
+        .close-panel-btn {
+            background: transparent;
+            border: none;
+            color: var(--gray);
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 0.25rem;
+            transition: all 0.2s;
+        }
+
+        .close-panel-btn:hover {
+            color: var(--error);
+            transform: rotate(90deg);
+        }
+
+        .upload-drop-zone {
+            text-align: center;
+            padding: 2rem 1rem;
+            border: 2px dashed #d1d9ff;
+            border-radius: 8px;
+            background: #f8f9ff;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .upload-drop-zone:hover {
+            border-color: var(--primary);
+            background: #f1f3ff;
+        }
+
+        .upload-drop-zone.drag-over {
+            border-color: var(--primary);
+            background: #e0e7ff;
+            transform: scale(1.02);
+        }
+
+        .upload-icon-large {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .upload-text {
+            color: var(--dark);
+            font-weight: 500;
+            margin-bottom: 0.25rem;
+        }
+
+        .upload-hint {
+            color: var(--gray);
+            font-size: 0.85rem;
+        }
+
+        /* 已选择文件列表 */
+        .selected-files-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .file-chip {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: #f1f3ff;
+            border: 1px solid #e0e7ff;
+            border-radius: 20px;
+            padding: 0.4rem 0.75rem;
+            font-size: 0.85rem;
+            color: var(--dark);
+            transition: all 0.2s;
+        }
+
+        .file-chip:hover {
+            background: #e0e7ff;
+        }
+        .file-chip-clickable {
+            cursor: pointer;
+        }
+        .file-chip-clickable:hover {
+            background: #dbeafe;
+            box-shadow: 0 2px 8px var(--primary-glow);
+        }
+
+        .file-chip-icon {
+            font-size: 1rem;
+        }
+
+        .file-chip-name {
+            max-width: 150px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .file-chip-size {
+            color: var(--gray);
+            font-size: 0.75rem;
+        }
+
+        .file-chip-remove {
+            background: transparent;
+            border: none;
+            color: var(--gray);
+            cursor: pointer;
+            font-size: 1rem;
+            padding: 0;
+            margin-left: 0.25rem;
+            transition: all 0.2s;
+        }
+
+        .file-chip-remove:hover {
+            color: var(--error);
+            transform: scale(1.2);
+        }
+
+        .file-chip-error {
+            border: 1px solid var(--error) !important;
+            background: rgba(220, 38, 38, 0.06) !important;
+        }
+        .file-chip-error-reason {
+            color: var(--error) !important;
+            font-weight: 500;
+        }
+        .file-chip-error .file-chip-name {
+            color: var(--error) !important;
+        }
+
+        /* 消息中的附件显示 */
+        .message-attachments {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+            padding: 0.5rem;
+            background: rgba(67, 97, 238, 0.05);
+            border-radius: 8px;
+        }
+
+        .attachment-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: white;
+            border: 1px solid #e0e7ff;
+            border-radius: 8px;
+            padding: 0.5rem 0.75rem;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+
+        .attachment-item:hover {
+            box-shadow: 0 4px 12px var(--primary-glow);
+            transform: translateY(-2px);
+        }
+        .attachment-clickable {
+            cursor: pointer;
+        }
+        .attachment-clickable:hover {
+            box-shadow: 0 4px 12px var(--primary-glow);
+            transform: translateY(-2px);
+            background: var(--accent-bg, #e8f4fd);
+        }
+
+        .attachment-remove {
+            margin-left: 0.25rem;
+            border: none;
+            background: transparent;
+            color: #999;
+            font-size: 0.9rem;
+            cursor: pointer;
+            line-height: 1;
+            padding: 0 0.15rem;
+            border-radius: 4px;
+        }
+        .attachment-remove:hover {
+            color: #e03131;
+            background: #ffe3e3;
+        }
+
+        .attachment-icon {
+            font-size: 1.2rem;
+        }
+
+        .attachment-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .attachment-name {
+            font-weight: 500;
+            color: var(--dark);
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .attachment-meta {
+            font-size: 0.75rem;
+            color: var(--gray);
+        }
+
+
+        /* 现代化输入条样式 */
+        .modern-input-bar {
+            background: var(--light);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            padding: 4px 6px 4px 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+
+        .modern-input-bar:focus-within {
+            background: var(--card-bg);
+            border-color: var(--primary);
+            box-shadow: 0 4px 20px var(--primary-glow);
+        }
+
+        .theme-colorful .modern-input-bar,
+        .theme-colorful .search-input-wrapper {
+            background: rgba(255, 255, 255, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(10px);
+            transition: all 0.3s;
+        }
+
+        .theme-colorful .modern-input-bar:focus-within,
+        .theme-colorful .search-input-wrapper:focus-within {
+            background: rgba(255, 255, 255, 0.95);
+            border-color: transparent;
+            box-shadow: 0 0 0 2px var(--primary), 0 8px 25px var(--primary-glow);
+            background-clip: padding-box;
+        }
+
+        .tool-icon-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: none;
+            background: transparent;
+            color: var(--gray);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            font-size: 1.1rem;
+            flex-shrink: 0;
+        }
+
+        .tool-icon-btn:hover {
+            background: rgba(0, 0, 0, 0.05);
+            color: var(--primary);
+        }
+
+        .tool-icon-btn.active {
+            color: var(--success);
+            background: rgba(16, 185, 129, 0.1);
+        }
+
+        .input-field-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+        }
+
+        .modern-input {
+            width: 100%;
+            border: none;
+            background: transparent;
+            padding: 8px 4px;
+            font-size: 0.95rem;
+            font-family: inherit;
+            resize: none;
+            outline: none;
+            max-height: 120px;
+            line-height: 1.5;
+            min-height: 24px;
+            height: 24px;
+            color: var(--text, #333);
+            /* Init height */
+        }
+
+        .modern-input::placeholder {
+            color: var(--gray);
+            opacity: 0.5;
+        }
+
+        .input-actions-right {
+               display: flex;
+               align-items: center;
+               gap: 6px;
+           }
+
+           /* 上下文大小显示 — 极简紧凑 */
+            .context-size-display {
+                font-size: 0.85rem;
+                color: var(--gray);
+                font-weight: 600;
+                font-family: 'SF Mono', 'Fira Code', monospace;
+                letter-spacing: -0.3px;
+                cursor: help;
+                white-space: nowrap;
+            }
+
+            .context-size-display:hover {
+                color: var(--primary);
+            }
+
+            /* 上下文 token 数超出预期阈值 → 变红警告（仅提示，不影响输入；字号/字重与模型选择器一致） */
+            #context-size-text.over-threshold {
+                color: #e02020;
+            }
+
+            .compact-model-select {
+            position: relative;
+            background: var(--light);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            transition: all 0.2s;
+            border: 1px solid var(--border-color);
+        }
+
+        .compact-model-select:hover {
+            background: rgba(0, 0, 0, 0.08);
+        }
+
+        .compact-model-select select {
+            appearance: none;
+            background: transparent;
+            border: none;
+            padding: 4px 24px 4px 12px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--primary);
+            cursor: pointer;
+            width: 100%;
+            outline: none;
+        }
+
+        .compact-model-select select option {
+            background: var(--card-bg);
+            color: var(--dark);
+        }
+
+        .compact-model-select::after {
+            content: "";
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 0;
+            height: 0;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 4px solid var(--gray);
+            pointer-events: none;
+        }
+
+        .compact-model-select:hover::after {
+            border-top-color: var(--dark);
+        }
+
+        .send-circle-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: white;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+            flex-shrink: 0;
+            font-size: 1rem;
+        }
+
+        .send-circle-btn:hover:not(:disabled) {
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px var(--primary-glow);
+            filter: brightness(1.1);
+        }
+
+        .send-circle-btn:disabled {
+            background: var(--border-color);
+            color: var(--gray);
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        /* 自定义禁用状态（解决 disabled 属性阻止点击事件的问题） */
+        .send-circle-btn.btn-disabled {
+            background: var(--border-color);
+            color: var(--gray);
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        .send-circle-btn.stop {
+            background: var(--dark);
+        }
+
+        .theme-colorful .send-circle-btn:not(:disabled),
+        .theme-colorful .key-btn,
+        .theme-colorful #save-settings,
+        .theme-colorful .db-analysis-btn,
+        .theme-colorful .new-chat-btn,
+        /* 新建对话按钮 */
+        .theme-colorful .cta-button {
+            /* 开启AI之旅按钮 */
+            background: var(--primary-gradient);
+            border: none;
+            box-shadow: 0 4px 12px var(--primary-glow);
+            color: white;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .theme-colorful .send-circle-btn:hover:not(:disabled),
+        .theme-colorful .key-btn:hover,
+        .theme-colorful #save-settings:hover,
+        .theme-colorful .db-analysis-btn:hover,
+        .theme-colorful .new-chat-btn:hover,
+        .theme-colorful .cta-button:hover {
+            transform: translateY(-2px) scale(1.02);
+            box-shadow: 0 6px 15px var(--primary-glow);
+            filter: brightness(1.05);
+        }
+
+        /* 数据库开关样式微调 */
+        .database-indicator {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 8px;
+            height: 8px;
+            background: var(--success);
+            border-radius: 50%;
+            border: 1px solid white;
+            display: none;
+        }
+
+        .tool-icon-btn.active .database-indicator {
+            display: block;
+        }
+
+        .graph-indicator {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 8px;
+            height: 8px;
+            background: #8b5cf6;
+            border-radius: 50%;
+            border: 1px solid white;
+            display: none;
+        }
+
+        .tool-icon-btn.active .graph-indicator {
+            display: block;
+        }
+
+        .typing-indicator {
+            display: none;
+            padding: 0.5rem;
+            color: var(--gray);
+            font-size: 0.85rem;
+            font-style: italic;
+            text-align: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .typing-indicator.show {
+            display: block;
+        }
+
+
+        /* ==================== 启动页（非全屏态）====================
+           非全屏 = 只有大 logo 与「立即开始探索」；点按钮进全屏即对话界面，退出全屏回启动页 */
+        body:not(.full-screen-mode) {
+            overflow: hidden;
+        }
+
+        body:not(.full-screen-mode) .chat-section {
+            display: none !important;
+        }
+
+        body:not(.full-screen-mode) main.container {
+            min-height: calc(100vh - 58px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        body:not(.full-screen-mode) .hero {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 0 0 2rem;
+        }
+
+        /* 启动页里 logo 铺满大屏 */
+        body:not(.full-screen-mode) .hero-logo {
+            height: clamp(180px, 34vh, 320px);
+        }
+
+        /* ==================== 宽版模态框（模型与服务商配置）==================== */
+        .modal-content.modal-wide {
+            max-width: 1000px;
+            width: 92vw;
+            max-height: 86vh;
+            overflow-y: auto;
+        }
+
+        /* 全屏模式下模态框默认被限到 500px，宽版要解除 */
+        body.full-screen-mode .modal-content.modal-wide {
+            max-width: 1000px;
+        }
+
+        .modal-head-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        .modal-close-x {
+            border: none;
+            background: transparent;
+            font-size: 1.05rem;
+            cursor: pointer;
+            color: var(--gray);
+            line-height: 1;
+            padding: 4px 10px;
+            border-radius: 8px;
+        }
+
+        .modal-close-x:hover {
+            background: var(--primary-soft);
+            color: var(--primary);
+        }

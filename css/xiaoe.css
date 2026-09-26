@@ -1,0 +1,256 @@
+/* ==================== 小e · 桌宠（云朵团 + Q弹互动） ====================
+ * 设计要点：
+ *  - 外形：云朵团（三圆叠出蓬松感），SVG 矢量，任意缩放不糊
+ *  - Q弹：所有形变走 squash&stretch（横向放大必纵向压扁），低阻尼回弹
+ *  - 互动：戳/敲打/连击/拖拽/起飞/睡眠 + 天气（晴/雨/风/雷阵雨/红温/变色）
+ *  - 数据：不落盘（内存变量），关闭即丢
+ *  - 开关：设置面板「显示小e」
+ */
+/* 默认停右上角：top 78px 让开顶部状态栏（桌面端 header 约 64px 高）；用户可拖走 */
+#xiaoe-root {
+    position: fixed; z-index: 3500; right: 22px; top: 78px; width: 104px; height: 104px;
+    cursor: grab; user-select: none; -webkit-user-drag: none;
+    /* ⚠️ 手机端拖拽必需：不写 touch-action:none 的话，手指一滑会被浏览器
+       当成页面滚动 → 触发 pointercancel，pointermove 收不到 → 小e 拖不动。 */
+    touch-action: none;
+    -webkit-touch-callout: none;
+    /* 拖拽时提权，避免被其他浮层盖住 */
+    will-change: transform;
+}
+/* 小e 本体与内部元素都不参与浏览器手势（拖动/长按菜单） */
+#xiaoe-root .xiaoe-stage,
+#xiaoe-root svg,
+#xiaoe-root .xiaoe-body {
+    touch-action: none;
+    -webkit-touch-callout: none;
+    user-select: none;
+}
+#xiaoe-root.xiaoe-dragging { cursor: grabbing; z-index: 3600; }
+#xiaoe-root.xiaoe-hidden { display: none; }
+
+.xiaoe-stage { position: relative; width: 100%; height: 100%; }
+
+/* 云朵本体：形变容器（所有 Q弹都作用在这里） */
+.xiaoe-body {
+    width: 100%; height: 100%; position: relative; z-index: 2;
+    transform-origin: center 82%;
+    transition: filter .35s ease;
+}
+.xiaoe-body svg { display: block; width: 100%; height: 100%; overflow: visible; }
+
+/* ---------- 环境层（天气）：云朵周围的特效 ---------- */
+.xiaoe-fx { position: absolute; inset: -46px -34px -16px -34px; pointer-events: none; z-index: 1; }
+
+/* 雨滴 */
+@keyframes xiaoe-rain {
+    0%   { transform: translateY(-18px); opacity: 0; }
+    18%  { opacity: .9; }
+    100% { transform: translateY(58px); opacity: 0; }
+}
+.xiaoe-fx .drop { position: absolute; width: 2.5px; height: 9px; border-radius: 2px;
+    background: linear-gradient(#7ec8f0, #4aa8e0); animation: xiaoe-rain 1s linear infinite; }
+
+/* 太阳（贴在小e 左上，避开右上方的对话气泡） */
+@keyframes xiaoe-sunspin { 100% { transform: rotate(360deg); } }
+.xiaoe-sun { position: absolute; left: 0; top: 2px; width: 44px; height: 44px; }
+.xiaoe-sun .rays { animation: xiaoe-sunspin 14s linear infinite; transform-origin: center; }
+@keyframes xiaoe-sunpulse { 0%,100% { opacity: .55; } 50% { opacity: .95; } }
+.xiaoe-sun .glow { animation: xiaoe-sunpulse 2.4s ease-in-out infinite; }
+
+/* 闪电 */
+@keyframes xiaoe-flash {
+    0%, 92%, 100% { opacity: 0; }
+    93% { opacity: 1; } 94% { opacity: .1; } 95% { opacity: 1; }
+    96% { opacity: .15; } 97% { opacity: .9; } 98% { opacity: 0; }
+}
+.xiaoe-bolt { position: absolute; left: -14px; top: -30px; width: 30px; height: 44px; animation: xiaoe-flash 3.2s linear infinite; }
+
+/* 风（斜线） */
+@keyframes xiaoe-wind {
+    0%   { transform: translateX(-26px); opacity: 0; }
+    30%  { opacity: .75; }
+    100% { transform: translateX(46px); opacity: 0; }
+}
+.xiaoe-wind i.wind { position: absolute; height: 2px; border-radius: 2px;
+    background: linear-gradient(90deg, transparent, #b8c9dd, transparent); animation: xiaoe-wind 1.5s linear infinite; }
+
+/* 地面阴影（跟着 Q弹一起缩放，落地更有实感） */
+.xiaoe-shadow { position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%);
+    width: 62%; height: 9px; border-radius: 50%; background: #b8c8dd; opacity: .28; z-index: 0; }
+
+/* ==================== Q弹动画库 ==================== */
+/* 待机：轻微呼吸（含极轻形变） */
+@keyframes xiaoe-idle {
+    0%, 100% { transform: scale(1, 1) translateY(0); }
+    50%      { transform: scale(1.035, .972) translateY(-2px); }
+}
+.xiaoe-body.anim-idle { animation: xiaoe-idle 2.6s ease-in-out infinite; }
+
+/* 悬浮（被拎起来/思考中轻轻浮动） */
+@keyframes xiaoe-float {
+    0%, 100% { transform: translateY(-10px) scale(1.02, .985); }
+    50%      { transform: translateY(-20px) scale(.985, 1.025); }
+}
+.xiaoe-body.anim-float { animation: xiaoe-float 2.1s ease-in-out infinite; }
+
+/* 被戳：短促挤压 → 回弹（Q弹核心） */
+@keyframes xiaoe-poke {
+    0%   { transform: scale(1, 1); }
+    14%  { transform: scale(1.2, .8); }
+    30%  { transform: scale(.9, 1.13); }
+    46%  { transform: scale(1.09, .94); }
+    62%  { transform: scale(.965, 1.03); }
+    78%  { transform: scale(1.02, .99); }
+    100% { transform: scale(1, 1); }
+}
+.xiaoe-body.anim-poke { animation: xiaoe-poke .62s cubic-bezier(.34,1.56,.64,1); }
+
+/* 被敲打：压得更扁、抖得更多 */
+@keyframes xiaoe-hit {
+    0%   { transform: scale(1, 1) rotate(0deg); }
+    10%  { transform: scale(1.32, .68) rotate(-2deg); }
+    24%  { transform: scale(.86, 1.2) rotate(2.5deg); }
+    38%  { transform: scale(1.16, .87) rotate(-2deg); }
+    52%  { transform: scale(.93, 1.09) rotate(1.6deg); }
+    66%  { transform: scale(1.07, .95) rotate(-1deg); }
+    80%  { transform: scale(.97, 1.02) rotate(.5deg); }
+    100% { transform: scale(1, 1) rotate(0deg); }
+}
+.xiaoe-body.anim-hit { animation: xiaoe-hit .84s cubic-bezier(.34,1.56,.64,1); }
+
+/* 连击发飙：剧烈乱弹 */
+@keyframes xiaoe-rage {
+    0%, 100% { transform: scale(1, 1) rotate(0deg); }
+    12% { transform: scale(1.3, .72) rotate(-6deg); }
+    26% { transform: scale(.82, 1.26) rotate(6deg); }
+    40% { transform: scale(1.22, .8) rotate(-5deg); }
+    54% { transform: scale(.88, 1.16) rotate(4deg); }
+    68% { transform: scale(1.12, .9) rotate(-3deg); }
+    82% { transform: scale(.95, 1.06) rotate(2deg); }
+}
+.xiaoe-body.anim-rage { animation: xiaoe-rage 1.05s cubic-bezier(.4,1.5,.6,1); }
+
+/* 起飞：蓄力压扁 → 弹射 → 落地回弹 */
+@keyframes xiaoe-takeoff {
+    0%   { transform: scale(1, 1) translateY(0); }
+    16%  { transform: scale(1.26, .74) translateY(4px); }   /* 蓄力下压 */
+    40%  { transform: scale(.8, 1.28) translateY(-58px); }  /* 弹射拉长 */
+    62%  { transform: scale(1.06, .94) translateY(-72px); }
+    80%  { transform: scale(.92, 1.1) translateY(-8px); }   /* 落地 */
+    90%  { transform: scale(1.14, .87) translateY(2px); }
+    100% { transform: scale(1, 1) translateY(0); }
+}
+.xiaoe-body.anim-takeoff { animation: xiaoe-takeoff 1.35s cubic-bezier(.34,1.4,.5,1); }
+
+/* 落地回弹（拖拽释放后） */
+@keyframes xiaoe-land {
+    0%   { transform: scale(.78, 1.3) translateY(0); }
+    30%  { transform: scale(1.28, .74) translateY(3px); }
+    55%  { transform: scale(.9, 1.12); }
+    75%  { transform: scale(1.08, .94); }
+    100% { transform: scale(1, 1); }
+}
+.xiaoe-body.anim-land { animation: xiaoe-land .68s cubic-bezier(.34,1.56,.64,1); }
+
+/* 睡眠：只缓慢起伏呼吸 + 头顶 zZz，**不压扁**（旧版 scale(1.1,.85) 会让小e 常态变扁） */
+@keyframes xiaoe-sleep {
+    0%, 100% { transform: translateY(2px) scale(1, 1); }
+    50%      { transform: translateY(5px) scale(1.008, .996); }
+}
+.xiaoe-body.anim-sleep { animation: xiaoe-sleep 3.4s ease-in-out infinite; }
+
+/* 惊醒：原地猛地弹起（起始帧不再从扁态开始） */
+@keyframes xiaoe-wake {
+    0%   { transform: translateY(3px) scale(1, 1); }
+    22%  { transform: translateY(-16px) scale(.9, 1.14); }
+    46%  { transform: translateY(0) scale(1.08, .93); }
+    68%  { transform: translateY(-3px) scale(.97, 1.04); }
+    100% { transform: translateY(0) scale(1, 1); }
+}
+.xiaoe-body.anim-wake { animation: xiaoe-wake .78s cubic-bezier(.34,1.56,.64,1); }
+
+/* 红温发抖（生气/过热） */
+@keyframes xiaoe-shiver {
+    0%, 100% { transform: translate(0, 0) scale(1.02, .99); }
+    20% { transform: translate(-1.6px, .6px) scale(1.03, .98); }
+    40% { transform: translate(1.6px, -.6px) scale(1.01, 1); }
+    60% { transform: translate(-1.2px, -.4px) scale(1.03, .98); }
+    80% { transform: translate(1.2px, .4px) scale(1.02, .99); }
+}
+.xiaoe-body.anim-shiver { animation: xiaoe-shiver .34s linear infinite; }
+
+/* 睡觉时头顶 zZz */
+@keyframes xiaoe-zzz {
+    0%   { opacity: 0; transform: translate(0, 0) scale(.7); }
+    25%  { opacity: .95; }
+    100% { opacity: 0; transform: translate(14px, -26px) scale(1.25); }
+}
+.xiaoe-zzz { position: absolute; right: -6px; top: -8px; font-size: 15px; font-weight: 800;
+    color: #8fa8c8; pointer-events: none; z-index: 3; }
+.xiaoe-zzz span { position: absolute; animation: xiaoe-zzz 2.4s ease-out infinite; }
+.xiaoe-zzz span:nth-child(2) { animation-delay: .8s; }
+.xiaoe-zzz span:nth-child(3) { animation-delay: 1.6s; }
+
+/* 情绪粒子（生气/开心时头顶冒） */
+@keyframes xiaoe-emote {
+    0%   { opacity: 0; transform: translateY(0) scale(.6); }
+    20%  { opacity: 1; }
+    100% { opacity: 0; transform: translateY(-30px) scale(1.3); }
+}
+.xiaoe-emote { position: absolute; right: -4px; top: -14px; font-size: 17px; pointer-events: none; z-index: 3;
+    animation: xiaoe-emote 1.5s ease-out infinite; }
+
+/* ==================== 状态色（变色 / 红温 / 天气氛围） ==================== */
+/* 用 filter 叠加色调，不改 SVG 内部颜色，保证形状清晰 */
+.xiaoe-body.tone-rain   { filter: hue-rotate(8deg) saturate(.75) brightness(.9); }
+.xiaoe-body.tone-wind   { filter: hue-rotate(-12deg) saturate(.85); }
+.xiaoe-body.tone-storm  { filter: hue-rotate(215deg) saturate(.7) brightness(.82) contrast(1.06); }
+.xiaoe-body.tone-hot    { filter: hue-rotate(-42deg) saturate(1.9) brightness(1.02) contrast(1.06); }
+.xiaoe-body.tone-sunny  { filter: saturate(1.22) brightness(1.07); }
+.xiaoe-body.tone-cold   { filter: hue-rotate(186deg) saturate(1.1) brightness(1.03); }
+.xiaoe-body.tone-pink   { filter: hue-rotate(-96deg) saturate(1.35); }
+.xiaoe-body.tone-green  { filter: hue-rotate(58deg) saturate(1.25); }
+.xiaoe-body.tone-purple { filter: hue-rotate(212deg) saturate(1.3); }
+
+/* 红温：额外加红色光晕 + 头顶小火焰 */
+.xiaoe-body.tone-hot { text-shadow: none; }
+#xiaoe-root.steam .xiaoe-fx::after {
+    content: ''; position: absolute; left: 50%; top: -6px; width: 54px; height: 30px;
+    transform: translateX(-50%); border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,120,90,.55), rgba(255,120,90,0) 70%);
+    animation: xiaoe-sunpulse 1.1s ease-in-out infinite;
+}
+
+/* ==================== 交互反馈 ==================== */
+/* 对话气泡（点小e 后弹出输入框；也用于显示小e 的即时吐槽） */
+.xiaoe-bubble {
+    position: fixed; z-index: 3600; max-width: 260px; min-width: 150px;
+    background: #fff; border-radius: 16px; padding: 10px 13px;
+    box-shadow: 0 8px 26px rgba(120,140,200,.26); border: 1.5px solid #eaf1fb;
+    font-size: .82rem; color: #3d4a60; line-height: 1.6;
+}
+.xiaoe-bubble::after { content: none; }   /* 尖角改由 .xiaoe-tip-arrow 元素承担（可动态换方向） */
+.xiaoe-tip-arrow { position: absolute; width: 0; height: 0; }
+.xiaoe-bubble .xiaoe-say { max-height: 140px; overflow-y: auto; white-space: pre-wrap; }
+.xiaoe-bubble .xiaoe-input-row { display: flex; gap: 6px; margin-top: 8px; }
+.xiaoe-bubble input {
+    flex: 1; min-width: 0; padding: 6px 9px; border: 1.5px solid #e2ebf7; border-radius: 10px;
+    font-size: .8rem; outline: none; font-family: inherit;
+}
+.xiaoe-bubble input:focus { border-color: #a8cdf5; }
+.xiaoe-bubble button {
+    padding: 6px 12px; border: none; border-radius: 10px; background: #6fb4f0; color: #fff;
+    font-size: .78rem; cursor: pointer; font-family: inherit; white-space: nowrap;
+}
+.xiaoe-bubble button:hover { background: #5aa4e6; }
+.xiaoe-bubble button:disabled { background: #c8d8ea; cursor: default; }
+.xiaoe-bubble .xiaoe-tip { font-size: .7rem; color: #9aa9be; margin-top: 6px; }
+
+/* 拖拽把手热区（整只都可拖，这里只是视觉提示） */
+#xiaoe-root:hover .xiaoe-shadow { opacity: .34; }
+/* 注：无 ✕ 关闭键（用户要求），显隐由设置面板开关控制 */
+
+/* 偏好动画的用户减少动效 */
+@media (prefers-reduced-motion: reduce) {
+    .xiaoe-body, .xiaoe-body * { animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+}

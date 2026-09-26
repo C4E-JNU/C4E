@@ -1,0 +1,34 @@
+{
+  "skills": [
+    {
+      "name": "graph-guide",
+      "description": "催化降解图谱查询指引 — 图谱结构、别名映射、查询策略、回答格式",
+      "version": "1.0.0"
+    },
+    {
+      "name": "self-modify",
+      "description": "自我修改指南 — 如何用 skill_write 创建/更新技能（含子文件），以及在完全访问模式下如何修改项目代码。加速定位与修改。",
+      "version": "1.0.0"
+    },
+    {
+      "name": "demo-skill",
+      "description": "演示技能 — 用于展示如何自我生成技能，包含一个示例参考文件",
+      "version": "1.0.0"
+    },
+    {
+      "name": "mineru-agent-parse",
+      "description": "把 PDF 解析并归档成'全文+按图注编号的图表文件夹'，产出 00_full_cleaned.md 与 00_images_map.json 清单，供翻译/图文挖掘使用。需配 MinerU Token。",
+      "version": "4.2.0"
+    },
+    {
+      "name": "literature-translate",
+      "description": "文献全文中译写入笔记，多子图按 layout_html 网格排版并配中文图注。需先用 mineru-agent-parse 归档。",
+      "version": "1.2.0"
+    },
+    {
+      "name": "literature-contradiction",
+      "description": "单篇文献内部对账：图账/表账/段落账三轨道交叉核对，E类裁决+A-E分级，输出矛盾台账表。图账表账用 delegate_task(role=contradiction) 并行，示意图跳过。",
+      "version": "1.0.0"
+    }
+  ]
+}
