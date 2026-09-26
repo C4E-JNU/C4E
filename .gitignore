@@ -56,3 +56,6 @@ Thumbs.db
 
 # ── 代码图谱产物（graphify 生成，可随时重建）──
 graphify-out/
+
+# 本地专用：发布生成器与脱敏素材，不进仓库
+_private/
