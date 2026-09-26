@@ -25,7 +25,7 @@ from tools.file_tools import (
     delete_upload as _delete_upload,
     get_upload_text,
     list_notes, add_note, update_note, delete_note, move_note,
-    get_note_owner,
+    get_note, get_note_owner,
 )
 import auth as _auth
 from tools.vector_search import search_history, search_knowledge
@@ -38,6 +38,12 @@ from agent.agent import run_agent, stream_agent, stream_agent_lc
 
 app = FastAPI(title="C4EAI Backend")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+# gzip（用户 2026-09-26 定，性能）：共享库列表 435KB 原样传输 → 压到约 1/3。
+# 加在 FastAPI 而不是 nginx：nginx 那个 location 特意 gzip off 了（为了不干扰 SSE 流式）。
+# Starlette 的 GZipMiddleware 对 text/event-stream 自动跳过压缩，不会破坏流式 ——
+# 见 test: 流式响应带 Accept-Encoding: gzip 时仍无 Content-Encoding。
+from fastapi.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 # ── 禁止缓存 JS/CSS/HTML ─────────────────────────
 _AUTH_PUBLIC = {"/api/auth/login", "/api/auth/register", "/api/health", "/api/platform"}
@@ -1031,15 +1037,22 @@ async def api_notes_publish(req: NotePublishReq, request: Request):
 
 @app.get("/api/notes")
 async def api_notes_list(branch_id: Optional[str] = None, kind: Optional[str] = None,
-                         folder_id: Optional[str] = None, request: Request = None):
+                         folder_id: Optional[str] = None, with_content: Optional[int] = None,
+                         request: Request = None):
     """列条目。kind=note（默认前端取）/document；不传则全部。
 
     用户 2026-09-22 定：共享库按钮切换「笔记 / 文档」，两者数据结构一致。
     folder_id（用户 2026-09-25 定）：按分组过滤；"__root__" = 未分组。
+
+    with_content（用户 2026-09-26 定，性能）：**传 0 = 只返回目录，不含正文**。
+    共享库 65 条正文合计 413KB，全塞进列表 → 每次打开面板下载 435KB（用户反馈"卡顿"）。
+    正文改用 GET /api/notes/<id> 按需取。不传该参数 = 旧行为（带正文），
+    以免动到笔记面板等其它调用方。
     """
     if branch_id == DB_BRANCH_ID:
         _q = f"/api/notes?branch_id={DB_BRANCH_ID}" + (f"&kind={kind}" if kind else "") \
-             + (f"&folder_id={folder_id}" if folder_id else "")
+             + (f"&folder_id={folder_id}" if folder_id else "") \
+             + ("&with_content=0" if with_content == 0 else "")
         p = await _notes_proxy("GET", _q)
         if p is not None:
             return p
@@ -1057,11 +1070,49 @@ async def api_notes_list(branch_id: Optional[str] = None, kind: Optional[str] = 
                 notes = [n for n in notes if not (n.get("folder_id") or "")]
             else:
                 notes = [n for n in notes if (n.get("folder_id") or "") == folder_id]
-        return {"status": "ok", "total": len(notes), "notes": notes}
-    return json.loads(await list_notes(branch_id or "", user["username"], _kn, folder_id or ""))
+        return {"status": "ok", "total": len(notes), "notes": _strip_content(notes, with_content)}
+    out = json.loads(await list_notes(branch_id or "", user["username"], _kn, folder_id or ""))
+    out["notes"] = _strip_content(out.get("notes", []), with_content)
+    return out
+
+
+def _strip_content(notes: list, with_content: Optional[int]) -> list:
+    """with_content==0 → 去掉正文（连 content 字段都不出现，省 payload）；
+    并补一个 chars 字段，让前端列表能显示字数而无需正文。"""
+    if with_content != 0:
+        return notes
+    lean = []
+    for n in notes:
+        d = {k: v for k, v in n.items() if k != "content"}
+        d["chars"] = len(n.get("content") or "")
+        lean.append(d)
+    return lean
+
+
+@app.get("/api/notes/{note_id}")
+async def api_notes_get(note_id: str, request: Request, source: Optional[str] = None):
+    """取**单条**条目（含正文）。配合列表的 with_content=0 —— 展开/编辑时才取这一条。"""
+    if (source == "cloud" or source == DB_BRANCH_ID) and not _AUTH_ENABLED:
+        p = await _notes_proxy("GET", f"/api/notes/{note_id}")
+        return p if p is not None else JSONResponse({"error": "共享库不可达"}, status_code=502)
+    user = _cur_user(request)
+    n = get_note(note_id, user["username"])
+    if not n:
+        return JSONResponse({"error": "条目不存在"}, status_code=404)
+    return {"status": "ok", "note": n}
+def _notify_notes(branch_id: Optional[str], username: str):
+    """条目变了 → 推事件。共享库（branch=__db__）是所有人在看的 → 通知所有人；
+    个人笔记只有本人看 → 只通知本人。"""
+    if (branch_id or "") == DB_BRANCH_ID:
+        _notify_all("notes")
+    else:
+        _notify(username, "notes")
+
+
 @app.post("/api/notes")
 async def api_notes_add(req: NoteAddReq, request: Request):
     _kd = req.kind or "note"
+    user = _cur_user(request)
     if (req.branch_id or "") == DB_BRANCH_ID:
         p = await _notes_proxy("POST", "/api/notes",
                                {"title": req.title, "content": req.content,
@@ -1069,9 +1120,12 @@ async def api_notes_add(req: NoteAddReq, request: Request):
                                 "folder_id": req.folder_id})
         if p is not None:
             return p
-    return json.loads(await add_note(req.title, req.content, req.branch_id or "",
-                                     _cur_user(request)["username"], kind=_kd,
-                                     folder_id=req.folder_id or ""))
+    out = json.loads(await add_note(req.title, req.content, req.branch_id or "",
+                                    user["username"], kind=_kd,
+                                    folder_id=req.folder_id or ""))
+    if out.get("status") == "ok":
+        _notify_notes(req.branch_id, user["username"])
+    return out
 @app.post("/api/notes/move")
 async def api_notes_move(req: NoteMoveReq, request: Request):
     user = _cur_user(request)
@@ -1080,7 +1134,10 @@ async def api_notes_move(req: NoteMoveReq, request: Request):
         return p if p is not None else JSONResponse({"error": "共享库不可达"}, status_code=502)
     if not _owns_or_root(user, get_note_owner(req.note_id, user["username"])):
         return JSONResponse({"error": "只能调整自己的笔记"}, status_code=403)
-    return json.loads(await move_note(req.note_id, req.direction, user["username"]))
+    out = json.loads(await move_note(req.note_id, req.direction, user["username"]))
+    if out.get("status") == "ok":
+        _notify_notes(req.branch_id, user["username"])
+    return out
 @app.put("/api/notes")
 async def api_notes_update(req: NoteUpdateReq, request: Request):
     user = _cur_user(request)
@@ -1094,9 +1151,12 @@ async def api_notes_update(req: NoteUpdateReq, request: Request):
         return p if p is not None else JSONResponse({"error": "共享库不可达"}, status_code=502)
     if not _owns_or_root(user, get_note_owner(req.note_id, user["username"])):
         return JSONResponse({"error": "只能修改自己的笔记"}, status_code=403)
-    return json.loads(await update_note(req.note_id, req.title, req.content,
-                                        user["username"], kind=_kd,
-                                        folder_id=req.folder_id))
+    out = json.loads(await update_note(req.note_id, req.title, req.content,
+                                       user["username"], kind=_kd,
+                                       folder_id=req.folder_id))
+    if out.get("status") == "ok":
+        _notify_notes(req.branch_id, user["username"])
+    return out
 @app.delete("/api/notes/{note_id}")
 async def api_notes_delete(note_id: str, request: Request, source: Optional[str] = None):
     user = _cur_user(request)
@@ -1106,7 +1166,11 @@ async def api_notes_delete(note_id: str, request: Request, source: Optional[str]
         return p if p is not None else JSONResponse({"error": "共享库不可达"}, status_code=502)
     if not _owns_or_root(user, get_note_owner(note_id, user["username"])):
         return JSONResponse({"error": "只能删除自己的笔记"}, status_code=403)
-    return json.loads(await delete_note(note_id, user["username"]))
+    out = json.loads(await delete_note(note_id, user["username"]))
+    # 删除只知道 note_id、拿不到 branch_id → 走广播（删除是低频操作，多刷一次无害）
+    if out.get("status") == "ok":
+        _notify_all("notes")
+    return out
 
 # ── 向量搜索 ─────────────────────────────────────
 
@@ -1309,6 +1373,80 @@ class UserChatsReq(BaseModel):
     chats: Dict[str, Any] = {}
 
 
+# ── 事件推送（SSE）────────────────────────────────
+# 用户 2026-09-26 定：两边允许同时登录，A 的对话要出现在 B 的前端。
+# 轮询要每 N 秒问一次；SSE 由后端**在变更时**推送 → 空闲时零请求。
+# 复用现成机制：app.py 本来就有 StreamingResponse 流式，nginx 也早就配了 proxy_buffering off。
+#
+# 前端用 fetch + body.getReader() 消费（与 /api/agent/stream 同一套写法），
+# 因为它要带 Authorization 头 —— EventSource 不能设请求头，这是必须知道的。
+#
+# 断开期间的事件必然漏掉 → 客户端重连后先拉一次全量对齐（见 js/events.js）。
+
+_subscribers: Dict[str, set] = {}      # username → {asyncio.Queue}
+
+
+def _notify(username: str, kind: str):
+    """通知某个用户的在线页面：他的某类数据变了。没有订阅者时零开销。"""
+    for q in list(_subscribers.get(username) or ()):
+        try:
+            q.put_nowait({"type": kind})
+        except Exception:
+            pass
+
+
+def _notify_all(kind: str):
+    """共享库变了 → 所有在线的人都要刷新（不限本人）。"""
+    for _u in list(_subscribers.keys()):
+        _notify(_u, kind)
+
+
+@app.get("/api/events")
+async def api_events(request: Request):
+    """事件流（SSE）。前端收到 {type:"chats"|"notes"} 就去拉对应数据并合并。"""
+    user = _cur_user(request)
+    uname = user["username"]
+    q: asyncio.Queue = asyncio.Queue()
+    _subscribers.setdefault(uname, set()).add(q)
+
+    async def gen():
+        try:
+            yield ": connected\n\n"          # 立刻建连（否则某些代理会等首字节超时）
+            yield f"data: {json.dumps({'type': 'hello', 'rev': _chats_rev_of(uname)})}\n\n"
+            while True:
+                try:
+                    ev = await asyncio.wait_for(q.get(), timeout=25)
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"   # 心跳，防中间设备掐掉空闲连接
+                    continue
+                yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+        finally:
+            _subscribers.get(uname, set()).discard(q)
+            if not _subscribers.get(uname):
+                _subscribers.pop(uname, None)
+
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache",
+                                      "X-Accel-Buffering": "no"})
+
+
+def _chats_rev_of(username: str) -> str:
+    try:
+        return json.loads(UC.chats_rev(username)).get("rev", "")
+    except Exception:
+        return ""
+
+
+@app.get("/api/user/chats/version")
+async def api_user_chats_version(request: Request):
+    """几十字节的版本号。SSE 断线重连后用它判断「我们漏掉了变化」→ 才拉全量。"""
+    p = await _notes_proxy("GET", "/api/user/chats/version")
+    if p is not None:
+        return p
+    user = _cur_user(request)
+    return json.loads(UC.chats_rev(user["username"]))
+
+
 @app.get("/api/user/chats")
 async def api_user_chats_get(request: Request):
     """读本人的全部对话。本地实例 → 转发云端（与笔记/设置同一套分流）。"""
@@ -1321,12 +1459,16 @@ async def api_user_chats_get(request: Request):
 
 @app.put("/api/user/chats")
 async def api_user_chats_put(req: UserChatsReq, request: Request):
-    """整份写入本人的对话（覆盖语义）。owner 从 token 推导，不接受请求体传身份。"""
+    """**按对话 id 合并**写入本人的对话（不是覆盖 —— 两边同时在线会互相抹）。
+    owner 从 token 推导，不接受请求体传身份。"""
     p = await _notes_proxy("PUT", "/api/user/chats", {"chats": req.chats})
     if p is not None:
         return p
     user = _cur_user(request)
-    return json.loads(UC.save_user_chats(user["username"], req.chats))
+    out = json.loads(UC.save_user_chats(user["username"], req.chats))
+    if out.get("status") == "ok":
+        _notify(user["username"], "chats")   # 推给该账号的**其它**页面（本页收到也无害）
+    return out
 
 
 # ── LangChain Agent ──────────────────────────────

@@ -664,6 +664,26 @@ def list_all_users_notes() -> list:
     return out
 
 
+def get_note(note_id: str, owner: str = "guest") -> dict | None:
+    """取**单条**条目（含正文）。
+
+    为什么需要它（用户 2026-09-26 实测反馈「共享库比较卡顿，每次都要加载」）：
+    共享库 65 条条目的正文合计 413KB，而列表只需要标题（中位数 17 字）。
+    正文原来是跟着列表一起下发的 → 每次打开面板都要下载 435KB。
+    现在列表只给「目录」（title/kind/folder_id/owner/时间），正文由这里按需取
+    —— 只有你**展开某一条**或**点编辑**时才取那一条。
+
+    查找顺序与 get_note_owner 一致：先自己，再全库（共享库条目属于别人但可读）。
+    """
+    for n in _read_notes(owner):
+        if n.get("id") == note_id:
+            return n
+    for n in list_all_users_notes():
+        if n.get("id") == note_id:
+            return n
+    return None
+
+
 def get_note_owner(note_id: str, owner: str = "guest") -> str:
     """笔记归属用户；先查自己，再全库兜底（app.py 越权校验用）"""
     for n in _read_notes(owner):

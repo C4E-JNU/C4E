@@ -124,12 +124,6 @@ def login(username: str, password: str) -> str | None:
         return None
     token = secrets.token_urlsafe(24)
     with _lock:
-        # ★ 单账号单会话（用户 2026-09-26 定）：登录即踢掉该账号的旧 token。
-        # 这样同一时刻只有一个设备在写个人数据（对话/设置），
-        # 「整份覆盖」才是安全的 —— 否则两台设备会把对方的对话抹掉。
-        for _old, _rec in list(_sessions.items()):
-            if _rec.get("username") == username:
-                _sessions.pop(_old, None)
         _sessions[token] = {"username": username, "ts": datetime.now().timestamp()}
         _save_sessions()
     return token

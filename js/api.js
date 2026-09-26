@@ -33,6 +33,10 @@
                 const models = Object.keys(modelConfig);
                 if (models.length > 0) selectModel(models[0]);
             }
+
+            // 事件推送（SSE）：另一台设备改了对话/条目时通知本页。
+            // 放在这里是因为它要先有登录身份（未登录=游客，没有账号数据要同步）。
+            if (typeof startEvents === 'function') startEvents();
         }
 
         function init() {

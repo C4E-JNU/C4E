@@ -86,15 +86,37 @@ chk js/api.js 'updateNeo4jStatusUI(state.neo4j.connected)' 'Neo4j 状态在 hydr
 chk js/state.js 'enabledModels: []' 'state.js 不在解析时读设置（那时 hydrate 未跑）'
 # 对话历史后端存储（用户 2026-09-26 定：对话才是最该后端化的，换设备不能丢）
 chk backend/tools/user_chats.py 'def load_user_chats' '读个人对话'
-chk backend/tools/user_chats.py 'def save_user_chats' '写个人对话（覆盖语义）'
+chk backend/tools/user_chats.py 'def save_user_chats' '写个人对话（按 id 合并）'
 chk backend/tools/user_chats.py '_user_dir(username)' '对话按身份隔离（本人目录）'
 chk backend/app.py '/api/user/chats' '对话读写端点'
 chk backend/app.py 'UC.load_user_chats(user' '对话 owner 从登录身份推导（非请求体）'
 chk js/user_chats.js 'function hydrateUserChats' '对话启动时从后端灌回缓存'
 chk js/user_chats.js 'function setUserChats' '对话写入后节流推后端'
+chk js/user_chats.js 'function syncChatsFromServer' '收到推送后拉全量并合并'
+chk js/user_chats.js "ai-branches-deleted" '★删除留墓碑（否则别处的旧副本会把删掉的复活）'
+chk js/user_chats.js 'function _mergeBranchSets' '按对话 id 合并（多设备同时在线的基础）'
 chk js/branching.js "if (typeof setUserChats === 'function') setUserChats();" 'saveBranches 挂钩推后端'
 chk js/branching.js "identityKey('ai-branches')" '对话仍按身份隔离存缓存'
-chk backend/auth.py 'for _old, _rec in list(_sessions.items())' '单账号单会话（登录踢旧 token）'
+# 并发模型：允许两边同时登录（用户 2026-09-26 收回单点登录）
+_chk_kick="$(grep -c 'for _old, _rec in list(_sessions.items())' backend/auth.py 2>/dev/null | head -1)"
+_chk_kick="${_chk_kick:-0}"
+if [ "$_chk_kick" -eq 0 ]; then ok '未启用单点登录（两边可同时在线）'; else bad '仍存在登录踢旧 token 逻辑（用户已收回该做法）'; fi
+# 多设备同步：SSE 推送（用户不要轮询）
+chk backend/app.py '/api/events' 'SSE 事件推送端点'
+chk backend/app.py '_notify(user["username"], "chats")' '对话变更推送给该账号其它页面'
+chk backend/tools/user_chats.py 'def chats_rev' '对话版本号（断线重连后对齐用）'
+chk js/events.js 'function startEvents' 'SSE 客户端'
+chk js/events.js 'resp.body.getReader()' 'SSE 用 fetch+getReader（EventSource 带不了 Authorization 头）'
+chk js/events.js 'resp.status === 401' '未登录不空转重连'
+chk js/api.js 'startEvents()' 'init 后启动事件流'
+# 共享库性能（用户反馈"卡顿、每次都要加载"）：列表不带正文 + 按需取 + gzip
+chk backend/app.py 'with_content' '列表可只返回目录（不含正文）'
+chk backend/app.py 'def _strip_content' '去正文实现'
+chk backend/app.py 'GZipMiddleware' 'gzip 压缩（435KB → 约 1/3）'
+chk backend/tools/file_tools.py 'def get_note(' '取单条条目（正文按需）'
+chk js/database.js 'with_content=0' '数据库面板列表不带正文'
+chk js/database.js 'function _dbEnsureContent' '正文按需取（展开/编辑时才取那一条）'
+chk js/database.js 'function _dbFillEntryBody' '展开时才填充正文'
 # Neo4j 失败必须降级而非终止对话（三处：两流式 + 一非流式）
 _n4="$(grep -c '连不上只降级摘掉图谱工具' backend/agent/agent.py 2>/dev/null || echo 0)"
 if [ "$_n4" -ge 3 ]; then ok "Neo4j 失败降级 ($_n4 处)"; else bad "Neo4j 降级仅 $_n4 处（应≥3）"; fi

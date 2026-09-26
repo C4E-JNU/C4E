@@ -474,9 +474,45 @@ function _dbEntryCardHtml(n, myName, isAdmin) {
         + '<span class="note-card-title">' + escHtml(n.title || '未命名条目') + '</span>'
         + '<div class="note-card-header-actions" style="display:flex;gap:.15rem;" onclick="event.stopPropagation();">' + actions + '</div>'
         + '</div>'
+        // 正文按需渲染：列表只给目录（不带正文），展开时才取这一条的正文。
+        // 原来这里把全文渲染进 DOM（哪怕折叠着）→ 65 条正文 413KB 全要下载并解析。
+        // 故这里留空，由 _dbFillEntryBody() 在展开时填。
         + '<div class="note-card-body" id="db-entry-body-' + n.id + '"' + (collapsed ? ' style="display:none;"' : '') + '>'
-        + '<div class="message-content">' + _dbEntryBodyHtml(n) + '</div>'
+        + '<div class="message-content" id="db-entry-content-' + n.id + '"></div>'
         + '</div></div>';
+}
+
+// ── 正文按需取（用户 2026-09-26 定）─────────────────
+// 共享库 65 条正文合计 413KB，占列表 payload 的 95%，而列表只需要标题（中位数 17 字）。
+// 目录缓存 _dbEntries 只存元数据；展开某条 / 点编辑时才向 /api/notes/<id> 取那一条正文，
+// 取到后写回缓存（同一条只取一次）。
+async function _dbEnsureContent(id) {
+    var n = _dbEntries.find(function (x) { return x.id === id; });
+    if (!n) return null;
+    if (n.content !== undefined) return n;          // 已取过
+    try {
+        var d = await fetch('/api/notes/' + encodeURIComponent(id) + '?source=cloud')
+            .then(function (r) { return r.json(); });
+        n.content = (d && d.note) ? (d.note.content || '') : '';
+        if (d && d.note && d.note.title) n.title = d.note.title;
+    } catch (e) {
+        n.content = '';                              // 取不到当空条目显示，不阻塞展开
+    }
+    return n;
+}
+
+/** 把某条条目的正文填进它的卡片（按需取 + 渲染 + 补附件删除按钮）。 */
+async function _dbFillEntryBody(id) {
+    var el = document.getElementById('db-entry-content-' + id);
+    if (!el || el.dataset.filled === '1') return;
+    var n = await _dbEnsureContent(id);
+    if (!n) return;
+    el.innerHTML = _dbEntryBodyHtml(n);
+    el.dataset.filled = '1';
+    // 正文里的附件卡片要补 × 删除按钮（原先是渲染时同步做的，现在挪到这里）
+    _enhanceFileCardDelete(el, function (noteId) {
+        return _dbEntries.find(function (x) { return x.id === noteId; });
+    }, function () { refreshDocumentList(); });
 }
 
 // ═══════════════════════════════════════════════
@@ -496,9 +532,11 @@ async function refreshDocumentList() {
     container.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--gray);">加载中…</div>';
 
     try {
-        // 拉全部条目（含 kind/folder_id/owner/时间，不含正文）+ 分组树
+        // 拉全部条目（含 kind/folder_id/owner/时间，**不含正文** —— 正文按需取）
+        // with_content=0：共享库 65 条正文 413KB，不带它列表就是 435KB（用户反馈的"卡顿"来源）
+        // + 分组树
         const [notes, folders] = await Promise.all([
-            fetch('/api/notes?branch_id=' + encodeURIComponent(DB_BRANCH))
+            fetch('/api/notes?branch_id=' + encodeURIComponent(DB_BRANCH) + '&with_content=0')
                 .then(function (r) { return r.json(); })
                 .then(function (d) { return d.notes || []; }),
             _fetchGroups()
@@ -568,7 +606,7 @@ async function refreshDocumentList() {
             return _dbEntries.find(function (x) { return x.id === noteId; });
         }, function () { refreshDocumentList(); });
 
-        // 条目展开/折叠
+        // 条目展开/折叠（正文按需取：展开时才去后端取这一条的正文）
         container.querySelectorAll('.db-entry-toggle').forEach(function (el) {
             el.addEventListener('click', function () {
                 var id = el.dataset.id;
@@ -577,8 +615,13 @@ async function refreshDocumentList() {
                     var hide = bodyEl.style.display !== 'none';
                     bodyEl.style.display = hide ? 'none' : '';
                     _dbEntryCollapsed[id] = hide;
+                    if (!hide) _dbFillEntryBody(id);
                 }
             });
+        });
+        // 上次展开着的条目：本次渲染后恢复展开并补上正文
+        Object.keys(_dbEntryCollapsed).forEach(function (id) {
+            if (_dbEntryCollapsed[id] === false) _dbFillEntryBody(id);
         });
         container.querySelectorAll('.db-entry-edit').forEach(function (btn) {
             btn.addEventListener('click', function () { dbEditEntry(btn.dataset.id); });
@@ -682,13 +725,11 @@ async function _fetchAllYears() {
     var ym = document.getElementById('db-f-year-menu');
     if (!ym) return;
     var years = {};
-    try {
-        var d = await fetch('/api/notes?branch_id=' + encodeURIComponent(DB_BRANCH)).then(function (r) { return r.json(); });
-        (d.notes || []).forEach(function (n) {
-            var y = String(n.createdAt || n.updatedAt || '').slice(0, 4);
-            if (y.length === 4) years[y] = (years[y] || 0) + 1;
-        });
-    } catch (e) { /* 取不到就只给「全部」 */ }
+    // 复用列表已经拉到的 _dbEntries（原来这里又整份拉了一次 → 白下 435KB）
+    (_dbEntries || []).forEach(function (n) {
+        var y = String(n.createdAt || n.updatedAt || '').slice(0, 4);
+        if (y.length === 4) years[y] = (years[y] || 0) + 1;
+    });
     var items = ['<button class="db-filter-item' + (_dbTree.year === '' ? ' active' : '')
                  + '" data-year="" role="menuitem">📅 全部年份</button>'];
     Object.keys(years).sort().reverse().forEach(function (y) {
@@ -711,8 +752,9 @@ async function _fetchAllYears() {
 
 function dbToggleCollapse(id) { /* 由 header 点击委托处理 */ }
 
-function dbEditEntry(id) {
-    var n = _dbEntries.find(function (x) { return x.id === id; });
+async function dbEditEntry(id) {
+    // 目录不带正文 → 编辑前先把这一条的正文取回来（列表缓存里已有就不重复取）
+    var n = await _dbEnsureContent(id);
     if (!n) return;
     if (typeof window.floatingEditor === 'undefined') { showToast('编辑器未就绪', 'error'); return; }
     window.floatingEditor.open({

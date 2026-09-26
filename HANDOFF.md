@@ -55,32 +55,55 @@ C4EAI —— 组内科研辅助 / 共享 Wiki 智能体（江南大学）。前�
 | | 之前 | 现在 |
 |---|---|---|
 | 存放 | 只存浏览器 `localStorage['ai-branches::<身份>']` | **后端** `workspace/users/<身份>/chats.json` |
-| 换设备 | ❌ 聊天记录全丢 | ✅ 自动恢复 |
+| 换设备 | ❌ 聊天记录全丢 | ✅ 自动恢复 + 两台设备实时互见 |
 
-**同步内容**：分支（含全部消息/分支笔记）+ 对话排序 + 上次打开的对话。
+**同步内容**：分支（含全部消息/分支笔记）+ 对话排序。
+**不同步**：`currentBranchId`（"上次打开哪个"是每台设备各自的视图状态，同步过去只会让另一台乱跳）。
 
-**模型**：与个人设置完全同套 —— 后端权威 + localStorage 作本地缓存。
+**并发 = 允许多写者**（用户 2026-09-26 **收回**了「单账号单会话」的做法）：
+「两边应该允许同时登录，a 进行的对话会同步到 b 设备的前端」。
+→ 既然多写者，写入就**不能整份覆盖**（否则 A、B 互相抹）⇒ **按对话 id 合并**：
+- 每个对话带 `updatedAt`（客户端**指纹比对**后才打戳；不能"调了 saveBranches 就算变"）
+- 同 id → `updatedAt` 新的赢；不同 id → 并集；`branchOrder` 并集去重
+- ★**删除留墓碑**（`chats.json` 的 `deleted` 表）：A 删掉的对话会被 B 的旧副本推回来
+  —— 两台同时在线时**必然发生**。墓碑按时间戳仲裁（只影响被删的那个 id），上限 500。
+
+**触发方式 = SSE 推送**（用户明确不要轮询：「不对话的时候也不会持续轮询」）：
 ```
-启动：Promise.allSettled([hydrateUserSettings(), hydrateUserChats()]).finally(initAfterSettings)
-      ⚠️ 必须在 loadBranches() 之前（它在 initAfterSettings 里），否则新设备读到空缓存
-写入：saveBranches() / persistCurrentBranch() → setUserChats()  节流 1.5s
-离开：visibilitychange(hidden) / pagehide 强制推一次
+后端变更 → GET /api/events 推 {type:"chats"|"notes"}
+         → 前端 syncChatsFromServer() 拉全量并合并 → 重渲染侧栏/消息区
 ```
+- ⚠️ **不能用 `EventSource`**（它不能设请求头，而本项目鉴权是 `Authorization: Bearer`）
+  → 必须用 `fetch` + `body.getReader()` 手工解析（同 `/api/agent/stream` 的写法）
+- ⚠️ **断开期间的事件必然漏掉** → 每次(重)连成功后先对齐一次（`/api/user/chats/version`）
+- ⚠️ **SSE 不能被 gzip 压**（会憋住流式）；Starlette 的 GZipMiddleware 自动跳过 `text/event-stream`
+- 后端单进程 → 订阅表可直接放进程内存（`_subscribers`）；若将来多 worker 必须换 Redis 之类
 
-**端点**：`GET/PUT /api/user/chats`（本地实例沿用 `_notes_proxy` 转发云端）
+**端点**：`GET/PUT /api/user/chats`、`GET /api/user/chats/version`、`GET /api/events`
+（本地实例沿用 `_notes_proxy` 转发云端）
 **安全**：owner 一律从登录身份推导（`_cur_user`），绝不接受请求体传身份。
 
-**并发 = 单账号单会话**（用户定）：`auth.login` 登录即踢掉该账号旧 token。
-**同一账号同时只有一个设备在线**，所以整份覆盖是安全的 —— 不做合并、不做冲突提示。
-> 代价：在第二台设备登录，第一台会被踢下线（需重新登录）。这是刻意的。
-
-**语义 = 覆盖**：payload 里出现的字段整体替换。branches 是整棵树，
-所以删掉一个对话也能同步过去（合并语义做不到，会把删掉的复活）。
-
-**不做**：逐条消息增量协议、冲突弹窗、版本历史/回滚、按 id 并集合并。
+**不做**：逐条消息增量协议、冲突弹窗、版本历史/回滚、CRDT。
 
 **排查口诀**：换设备没恢复 → 看 `workspace/users/<身份>/chats.json` 是否存在、`_updated` 是否最新；
-对话没同步 → 先确认已登录（未登录=游客走本地缓存，PUT 会被静默吞掉）。
+对话没同步 → 先确认已登录（未登录=游客走本地缓存，PUT 会被静默吞掉）；
+两台没互见 → 看 `/api/events` 是否连上（浏览器 devtools 里应有一条 pending 的 events 请求）。
+
+### 共享库面板性能（2026-09-26 用户反馈「比较卡顿，每次都要加载」）
+
+**真因（实测）**：`GET /api/notes?branch_id=__db__` 一次 **435.6 KB**，其中 **95% 是条目正文**，
+而列表只需要标题。且服务器没开 gzip，面板+侧栏树两处各拉一份，年份菜单还重复拉一次。
+
+| 改法 | 效果（实测） |
+|---|---|
+| 列表 `with_content=0` 只返回目录 + `GET /api/notes/<id>` 按需取正文 | 435.6 → **15.0 KB（29×）** |
+| FastAPI `GZipMiddleware`（**不用 nginx** —— 那边 `gzip off` 是为了 SSE） | → 148.4 KB（2.94×） |
+| **两者一起（真实打开场景）** | **2.2 KB（195×）** |
+| 前端只缓存目录；**展开某条/点编辑**时才取那一条 | 单条 2.4 KB，折叠再展开命中缓存 |
+
+**关键**：正文原先在**渲染时给每条都渲染进 DOM**（哪怕折叠着），所以列表被迫带正文；
+正文其实只在**展开/编辑某一条**时才需要 —— 这就是"瘦身 + 按需取"的落点。
+**面板是树**，根节点默认折叠 → 条目卡片不在 DOM 里（写测试要先展开树，踩过坑）。
 
 ### 个人设置存在哪（2026-09-26 改：从浏览器搬到后端）
 

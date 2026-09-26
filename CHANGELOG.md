@@ -6,6 +6,85 @@
 
 ---
 
+## [2026-09-26] perf(hub) + feat(sync): 共享库面板瘦身 195× + 多设备对话实时互见（SSE）
+
+> 用户两条反馈：
+> ①「我用你做的共享库的时候感觉比较卡顿，就是每次都要加载信息」
+> ②「我收回限制登录的做法，两边应该允许同时登录，a 进行的对话会同步到 b 设备的前端」
+
+### 一、共享库卡顿 —— 实测找到真因（不是缓存，也不是缺推送）
+
+`GET /api/notes?branch_id=__db__` 一次 **435.6 KB**，其中 **413 KB（95%）是条目正文**，
+而列表只需要标题（65 条，标题中位数 17 字）。另外服务器**没开 gzip**，
+面板 + 侧栏树至少两处各拉一份（≈871 KB/次），年份菜单还重复整份拉了一次。
+
+**改法（用户定：①列表瘦身 + ②gzip + ④只缓存目录 → 再上 ③SSE）**
+
+| | 做法 | 实测 |
+|---|---|---|
+| ① | `with_content=0` 只返回目录（+`chars`）；新增 `GET /api/notes/<id>` 按需取正文 | 435.6 → **15.0 KB（29×）** |
+| ② | FastAPI `GZipMiddleware`（**不用 nginx** —— 那边特意 `gzip off` 是为了 SSE） | 435.6 → 148.4 KB（2.94×） |
+| **①+②** | **真实打开场景** | 435.6 KB → **2.2 KB（195×）** |
+| ④ | 前端只缓存目录 `_dbEntries`；**展开某条/点编辑时**才取那一条（取到写回缓存，只取一次） | 单条 2.4 KB；折叠再展开命中缓存 |
+
+**关键发现**：条目正文原来是在**渲染时给每条都渲染进 DOM**（哪怕折叠着），
+所以列表才被迫带正文；而正文其实只在**展开/编辑某一条**时才需要 —— 这正是"瘦身+按需取"的落点。
+另：面板是**树**，根节点默认折叠 → 条目卡片根本不在 DOM 里（测试时必须先展开树，我在这踩过坑）。
+
+### 二、多设备互见 —— 并发模型反转（几经反复后的最终版）
+
+用户先提「限制单账号单会话」，随后**收回**：「两边应该允许同时登录，A 的对话要同步到 B」。
+→ 允许**多写者** ⇒ 写入不能是整份覆盖（否则 A、B 互相抹）⇒ **改成按对话 id 合并**。
+
+- 撤销 `auth.login` 里踢旧 token 的代码
+- 每个对话带 `updatedAt`（客户端在内容**真的变化**时打戳 —— 用指纹比对，
+  不能"调了 saveBranches 就算变"，否则切换对话/重渲染也会让没变的那条"赢过"别的设备）
+- 合并：同 id → `updatedAt` 新的赢；不同 id → 并集；`branchOrder` 并集去重
+- **`currentBranchId` 不再同步** —— "上次打开哪个"是每台设备各自的视图状态
+- ★**删除必须留墓碑**（`chats.json` 的 `deleted` 表）：A 删掉的对话，B 那份旧副本
+  一推就复活 —— 两台同时在线时**必然发生**。墓碑按时间戳仲裁，只影响被删的那个 id。
+  墓碑上限 500，超了丢最旧的。
+
+### 三、SSE 推送（用户不要轮询：「不对话的时候也不会持续轮询」）
+
+- 新增 `GET /api/events`（`_subscribers`: username → {asyncio.Queue}，25s 心跳）
+- 变更时推送：对话 → 只推该账号；条目 → 共享库推所有人 / 个人笔记推本人
+- 新增 `GET /api/user/chats/version` —— ⚠️ **断开期间的事件必然漏掉**，
+  所以每次(重)连成功后先对齐一次，靠它判断要不要拉全量
+- ⚠️ **前端不能用 `EventSource`**：它**不能设置请求头**，而本项目鉴权是
+  `Authorization: Bearer`。改用 `fetch` + `body.getReader()` 手工解析 SSE
+  （与 `js/graph_rag.js` 读 `/api/agent/stream` 同一套写法）
+- ⚠️ **SSE 不能被 gzip 压**（否则流式被憋住）。Starlette 的 GZipMiddleware 对
+  `text/event-stream` 自动跳过 —— 已实测确认（带 gzip 请求 SSE 时 `content-encoding` 仍为空）
+
+**影响文件**
+- `backend/tools/user_chats.py`（改为按 id 合并 + 墓碑 + `chats_rev`）
+- `backend/app.py`（`/api/events`、`/api/user/chats/version`、`_notify`/`_notify_all`、
+  `with_content`/`_strip_content`、`GET /api/notes/{id}`、`GZipMiddleware`、条目变更推送）
+- `backend/auth.py`（撤销单点登录）
+- `backend/tools/file_tools.py`（新增 `get_note`）
+- 新增 `js/events.js`（SSE 客户端）；`js/user_chats.js`（合并/墓碑/同步）；
+  `js/database.js`（列表瘦身 + 展开才取正文 + 去掉重复的年份拉取）；
+  `js/api.js`（init 后 `startEvents()`）；`index.html`（引入 events.js + 版本号）
+- `scripts/check.sh`（新增 gzip/SSE/墓碑/按需取不变量；**删除**已作废的单点登录断言；
+  另修 `grep -c … || echo 0` 会输出两行的老坑 → 改用 `| head -1` + `${x:-0}`）
+- `tools/check_deploy.py`（纳入 events.js、file_tools.py）
+
+**验证（云端真机，一次性账号跑完即删）**
+- 合并语义单元 **7/7**：并集互不覆盖 / 同 id 新者赢 / ★**删除不被旧副本复活** / 墓碑不误伤 / 上限生效
+- API **12/16 → 失败项全是测试用 L1 账号看不到共享库池**（历史行为），改 admin 后 **14/14**
+- ★浏览器两台设备（同账号两个 token）：A 真实按钮建对话 → **B 不刷新就看到**；
+  A 发消息 → **B 实时看到正文**；A 删除 → **B 同步掉且不复活**（10/10）
+- ★共享库面板：列表 **14.6 KB**（原 435.6 KB）、无 `content` 字段、只请求 1 次；
+  展开才取那一条（2.4 KB）并渲染；**折叠再展开命中缓存**
+- gzip 原始字节判定：`\x1f\x8b` + 解压后与不压缩版**逐字节一致**，2.94×
+- `check.sh ALL_PASS`；`check_deploy 45/45 一致`
+
+> 教训（测试侧，产品无问题）：判断响应头要用**小写键**（FastAPI 返回 `content-encoding`）；
+> `subprocess` 里调 bash 必须写全路径（`C:\Windows\system32\bash.exe` 是 WSL 桩）。
+
+---
+
 ## [2026-09-26] feat(chats): 对话历史后端化（换浏览器不再丢聊天记录）
 
 > 用户原话：「我换个浏览器数据就没了，这影响使用啊」「对话是最应该后端的」。
