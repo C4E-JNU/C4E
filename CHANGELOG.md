@@ -6,6 +6,51 @@
 
 ---
 
+---
+
+## [2026-09-26] chore(cleanup): 删掉 24 个确认无引用的死函数 + 4 个测试脚本
+
+用 **graphify**（代码→知识图谱 skill，`uv tool install graphifyy` + `graphify install --platform hermes`）
+对项目做了一次结构体检：66 个代码文件 → 1243 节点 / 2660 边 / 65 社区。
+
+### 判据（重要：不能用图上的"入度 0"直接当死代码）
+图是 **无向导出**（`directed: false`），且**没有建模 HTTP 层** —— 关系只有
+`calls/contains/references/imports/inherits/rationale_for/indirect_call/uses`，
+**没有** `fetches`/`routes_to` 之类。所以：
+- 图上"入度 0"的候选有 **263 个**，其中 **59 个是 FastAPI 路由**（靠 `@app.get` 装饰器注册）、
+  **18 个是 Pydantic 参数模型**、其余 162 个在别处（HTML `onclick`、`window.*` 导出、跨文件调用）被引用。
+- 最终判据 = **全仓 .py/.js/.html/.sh/.bat 文本检索 + 「带括号的真实调用」双重确认，该名字只有定义本身**。
+  这个判据与边方向无关，因此可复核。
+
+### 删掉的（24 个函数）
+| 分组 | 位置与函数 |
+|---|---|
+| 旧前端流式通道 | `messages.js`: `createStreamingMessage` `updateStreamingContent` `completeStreamingMessage` `updateMessageElement`；`graph_rag.js`: `parseToolCall` `extractFinalAnswer` |
+| 旧前端向量化 | `database.js`: `_computeEmbedding` `_cosineSimilarity` `_chunkText`；`settings.js`: `_dbStoreFile` |
+| 后端权限辅助 | `role_policy.py`: `level_name` `level_color` `can_use_database` `can_modify_all` |
+| 后端文件辅助 | `file_tools.py`: `_pool_index_path` `_get_upload_meta` `get_upload_file` |
+| 历史截断 | `agent.py`: `_truncate_history`（与「内容不截断、控长只保留最近 N 轮」的设计一致） |
+| 空壳/遗留 | `provider.js`: `saveApiKeys` `loadApiKeys`（源码自述 *Legacy … ignored*）；`database.js`: `dbToggleCollapse`（空函数体）；`editing.js`: `extractReasoningFromContent`；`tools.js`: `showTyping`；`state.js`: `loadHistoryMode` `toggleHistoryMode` |
+
+**删掉的测试脚本**：`backend/_test_astream.py`、`backend/_test_stream.py`、`backend/test_agent.py`、`test_sse.py`
+**复核后保留**：`provider.js:updateModelStatus` —— `js/ui.js` 里有真实调用。
+
+`index.html` 相应 bump 8 个 js 的缓存版本号。
+
+### 验证
+py_compile 33 个 ✅ / pyflakes `undefined name` **0 条** ✅ / node --check 31 个 ✅ /
+`check.sh` ALL_PASS ✅ / 被删名字**全仓零残留** ✅ /
+逐文件比对「删除前后函数定义清单」确认**无连带误删** ✅ / `check_deploy` 45 文件一致 ✅
+
+### ⚠️ 过程中的一次失误（如实记录）
+第一版 JS 删除脚本用「括号配对」定界，在 `graph_rag.js` 上状态机跑飞
+（文件里有撇号/正则字面量，导致引号状态误入），**一次误删 514 行**（含核心的 `reactAgentLoop`）。
+→ 已从基线提交 `8d291a0` 恢复，改用「**行首 `}` 定界**」重做。
+**教训：删除脚本必须 (a) 动手前先存档打 tag，(b) 删完逐文件比对函数定义清单，
+(c) 不要用自己写的括号状态机去解析 JS —— 短函数用行首 `}` 定界更稳。**
+
+存档：tag `pre-deadcode-cleanup` 可回退到删除前状态。
+
 ## [2026-09-26] perf(hub) + feat(sync): 共享库面板瘦身 195× + 多设备对话实时互见（SSE）
 
 > 用户两条反馈：
