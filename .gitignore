@@ -54,3 +54,5 @@ Thumbs.db
 # ── Office 临时锁文件（打开 pptx/docx 时自动生成，不属于项目）──
 ~$*
 
+# ── 代码图谱产物（graphify 生成，可随时重建）──
+graphify-out/
