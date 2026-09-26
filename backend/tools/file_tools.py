@@ -349,10 +349,6 @@ def _pool_uploads_dir() -> str:
     return d
 
 
-def _pool_index_path() -> str:
-    return os.path.join(_pool_dir(), "_vector_knowledge.json")
-
-
 def _upload_roots() -> list:
     """全部可能的上传根目录（解析 file_id 用）：pool → 各用户 → 旧版单一目录"""
     roots = [_pool_uploads_dir()]
@@ -387,11 +383,6 @@ def _resolve_upload(file_id: str):
         orig = os.path.join(d, meta.get("name", "file"))
         return d, meta, orig
     return None, None, None
-
-
-def _get_upload_meta(file_id: str) -> dict | None:
-    _, meta, _ = _resolve_upload(file_id)
-    return meta
 
 
 def _save_upload_meta(file_id: str, meta: dict):
@@ -822,11 +813,3 @@ async def image_to_base64(file_id: str) -> str:
             "gif": "image/gif", "webp": "image/webp", "bmp": "image/bmp"}.get(ext, "application/octet-stream")
     return f"data:{mime};base64,{b64}"
 
-
-async def get_upload_file(file_id: str):
-    """返回原始上传文件字节（后端统一读文件，前端不再解析）。"""
-    _, meta, orig = _resolve_upload(file_id)
-    if not orig or not os.path.isfile(orig):
-        return None
-    with open(orig, "rb") as f:
-        return f.read(), meta.get("name", "file"), (meta.get("name", "").split(".")[-1] or "")

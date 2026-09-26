@@ -102,15 +102,6 @@
         }
 
 
-        function showTyping(show) {
-            if (show) {
-                typingIndicator.classList.add('show');
-            } else {
-                typingIndicator.classList.remove('show');
-            }
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        }
-
         function showKeyStatus(message, type) {
             if (keyStatus) {
                 keyStatus.textContent = message;

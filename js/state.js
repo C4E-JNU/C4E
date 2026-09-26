@@ -112,22 +112,6 @@
             enabledModels: []
         };
 
-        // ── 全局辅助函数 ────────────────────────────────
-        function loadHistoryMode() {
-            // 已废弃：globalHistoryMode 已移除
-            const savedExpandedGroups = localStorage.getItem('ai-expanded-groups');
-            if (savedExpandedGroups) {
-                try {
-                    const groups = JSON.parse(savedExpandedGroups);
-                    state.sidebar.expandedGroups = new Set(groups);
-                } catch (e) {}
-            }
-        }
-
-        function toggleHistoryMode() {
-            // 已废弃
-        }
-
         var FILE_OPEN_MODE_LABEL = {
             backend: '后端打开',
             browser: '浏览器新标签',

@@ -382,8 +382,6 @@
         }
 
         /* 移除旧的API密钥加载函数，使用 initProviderSystem 替代 */
-        function loadApiKeys() { console.log("Legacy loadApiKeys called - ignored"); }
-        function saveApiKeys() { console.log("Legacy saveApiKeys called - ignored"); }
 
         function updateModelStatus() {
             // 主要是用于更新旧版卡片状态，新版UI在 renderProviderUI 中处理状态

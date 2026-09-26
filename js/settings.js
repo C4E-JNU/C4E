@@ -76,10 +76,6 @@
         let providerSettings = {}; // { providerId: { apiKey: '', endpoint: '' } }
         let modelConfig = {}; // 兼容旧代码的扁平化配置
 
-        // ==================== 气泡文件数据存储（IndexedDB，无大小限制） ====================
-        async function _dbStoreFile(key, data) {
-            try { await localforage.setItem('_bub_' + key, data); } catch (e) { console.error('文件存储失败', e); }
-        }
         async function _dbGetFile(key) {
             try { return await localforage.getItem('_bub_' + key); } catch { return null; }
         }

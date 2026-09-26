@@ -246,17 +246,6 @@ async def _build_system_prompt(enabled_tools: list[str], loaded_skills: list[str
 
 # ── 上下文截断 ────────────────────────────────────
 
-def _truncate_history(history: list[dict], max_context_length: int) -> list[dict]:
-    """按 contextLength 截取最近 N 轮消息"""
-    if not history or max_context_length <= 0:
-        return []
-    # 过滤有效消息
-    valid = [m for m in history if m.get("role") in ("user", "assistant") and m.get("content")]
-    if len(valid) <= max_context_length:
-        return valid
-    return valid[-max_context_length:]
-
-
 # ── 上下文管理（LangChain 原生）───────────────────
 
 def _build_context(history: list[dict], user_input: str, context_length: int):

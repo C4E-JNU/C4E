@@ -37,19 +37,6 @@ async function ensureNeo4jConnected() {
     return r;
 }
 
-function parseToolCall(text) {
-    const am = text.match(/Action:\s*(\w+)/);
-    const im = text.match(/Action Input:\s*(\{[\s\S]*?\})/);
-    if (!am) return null;
-    let p = {};
-    if (im) try { p = JSON.parse(im[1]); } catch(e) { try { p = JSON.parse(im[1].replace(/'/g,'"').replace(/,\s*}/g,'}').replace(/,\s*\]/g,']')); } catch(e2) {} }
-    return { name: am[1], params: p };
-}
-function extractFinalAnswer(text) {
-    const m = text.match(/Final Answer:\s*([\s\S]*)/);
-    return m ? m[1].trim() : null;
-}
-
 // ── 后端 API 地址（如需改端口，改这里） ────────
 const BACKEND_API_URL = '';  // 空 = 同源（前后端都在 8080 端口）
 

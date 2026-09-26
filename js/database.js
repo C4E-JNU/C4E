@@ -7,52 +7,6 @@ function _tokenize(text) {
     return text.toLowerCase().split(/[^a-zA-Z\u4e00-\u9fff0-9]+/).filter(t => t.length > 0);
 }
 
-function _computeEmbedding(text) {
-    const tokens = _tokenize(text);
-    const freq = {};
-    for (const t of tokens) {
-        freq[t] = (freq[t] || 0) + 1;
-    }
-    // TF 归一化：除以总词数
-    const total = tokens.length || 1;
-    const vec = {};
-    for (const [word, count] of Object.entries(freq)) {
-        vec[word] = count / total;
-    }
-    return vec;
-}
-
-function _cosineSimilarity(vecA, vecB) {
-    let dot = 0, normA = 0, normB = 0;
-    const allKeys = new Set([...Object.keys(vecA), ...Object.keys(vecB)]);
-    for (const k of allKeys) {
-        const a = vecA[k] || 0;
-        const b = vecB[k] || 0;
-        dot += a * b;
-        normA += a * a;
-        normB += b * b;
-    }
-    return dot / (Math.sqrt(normA) * Math.sqrt(normB) || 1);
-}
-
-function _chunkText(text, maxChars = 500, overlap = 50) {
-    const paras = text.split('\n');
-    const chunks = [];
-    let current = '';
-    for (const p of paras) {
-        const trimmed = p.trim();
-        if (!trimmed) continue;
-        if (current.length + trimmed.length + 1 > maxChars && current) {
-            chunks.push(current.trim());
-            current = current.length > overlap ? current.slice(-overlap) + '\n' + trimmed : trimmed;
-        } else {
-            current = (current + '\n' + trimmed).trim();
-        }
-    }
-    if (current) chunks.push(current.trim());
-    return chunks.length ? chunks : [text.slice(0, maxChars)];
-}
-
 // ── 初始化 ──────────────────────────────────
 
 function initDatabase() {
@@ -749,8 +703,6 @@ async function _fetchAllYears() {
         });
     });
 }
-
-function dbToggleCollapse(id) { /* 由 header 点击委托处理 */ }
 
 async function dbEditEntry(id) {
     // 目录不带正文 → 编辑前先把这一条的正文取回来（列表缓存里已有就不重复取）

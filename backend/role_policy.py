@@ -104,29 +104,11 @@ def classify(user: dict) -> str:
     return "unapproved"
 
 
-def level_name(user: dict) -> str:
-    return LEVEL_NAMES.get(level_of(user), "游客")
-
-
-def level_color(user: dict) -> str:
-    return LEVEL_COLORS.get(level_of(user), LEVEL_COLORS[0])
-
-
 # ── 能力查询 ──
-
-def can_use_database(user: dict) -> bool:
-    """能否使用云端数据库（上传/查询）。游客不可用。"""
-    return (not HUB) or level_of(user) >= L_BLUE
-
 
 def can_query_all(user: dict) -> bool:
     """能否查询所有人的数据库条目。L3(橙) 起。"""
     return (not HUB) or level_of(user) >= L_ORANGE
-
-
-def can_modify_all(user: dict) -> bool:
-    """能否修改/删除**他人**的数据库条目。仅主管理员。"""
-    return (not HUB) or is_super(user)
 
 
 def can_manage_levels(user: dict) -> bool:
