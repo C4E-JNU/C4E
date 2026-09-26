@@ -6,6 +6,54 @@
 
 ---
 
+## [2026-09-26] feat(outputs): 产出区 —— agent/技能生成的文件与笔记附件同款
+
+> 用户原话：「和我笔记里的一样，就一个占位符，链接后端真实文件位置，后端打开就自动打开文件，
+> 前端打开就从后端进行下载和临时打开在浏览器（pdf等浏览器支持的文件）」
+
+### 原来的毛病
+agent 生成文件后报告「已生成 xxx.pptx」并给一个后端链接，**点开没反应**。
+根因：三种打开方式全部以 `fileId` 为唯一钥匙（`openFileById(fileId, name)` → 后端打开 /
+浏览器新标签 / 应用内浮窗），而 agent 产出的文件**没走上传流程** → 没有 `meta.json`/`file_id`
+→ `_resolve_upload()` 解析不到 → 三条路全断。**不是打开方式的问题，是那个文件没有身份。**
+另：`run_python` 跑在 `TemporaryDirectory()` 里，脚本写的文件**函数一返回就蒸发**
+（所以 agent 过去只能把结果「贴在回答里」）；`terminal` 的 cwd 是**项目根**（云端还是所有用户共享的）。
+
+### 设计（用户拍板）
+- **一个占位符** `{{file:<file_id>:<文件名>}}` —— 与笔记附件完全同款，**前端打开逻辑零改动**
+- **后端只有一份文件**：登记只写一条**相对指针**（`meta.rel`），**不复制**
+  （附件的 `meta.json` 里存 `rel`，文件留在产出区原地不动）
+- **产出源无关**：不挂钩子、只认目录 —— 以后装的 PPT 等技能写进产出区就会被收录
+
+### 改动
+| 文件 | 改动 |
+|---|---|
+| `backend/tools/file_tools.py` | `set_current_user()`；`_user_outputs_dir()`；`register_output()`（只写指针）；`list_outputs()`（未登记自动补登记）；**`_resolve_upload()` 支持 `rel` 指针** —— 它是 download/raw/text/open/open-location 五个端点的**唯一咽喉**，一处改动全部自动支持；`write_file('outputs/xxx')` 自动登记并返回 `file_id` |
+| `backend/tools/code_sandbox.py` | `run_python` 的 cwd 从临时目录 → **产出区**（产出不再蒸发）；修正「禁止写文件到外部」那句假注释（`PYTHONSAFEPATH` 只管 `sys.path`，管不住 `open()`） |
+| `backend/tools/terminal_tool.py` | 默认 cwd 从**项目根** → 产出区（要操作项目请显式传 `workdir`） |
+| `backend/agent/tools.py` | 新增 `list_outputs` 工具（无参：owner 由登录身份推导，**不接受模型传身份**） |
+| `backend/agent/agent.py` | 提示词加产出规则（产出写 `outputs/`、写完必须调 `list_outputs` 拿 file_id、**必须给占位符**）；`set_current_user` 转发给 file_tools（复用其原有函数，不加重复调用） |
+| `backend/app.py` | `/api/outputs/list` 端点；`_tool_gate` 里设置当前身份 |
+| `js/formatting.js` | `formatMessage(content, isFinal, ctx='chat')`：**聊天回答里的卡片按「设置」派发**（`openFileById`）；笔记/数据库（`ctx='note'`，3 处调用点）仍走 `openDbFile` |
+| 前端其余 | **零改动**（占位符渲染 `formatting.js:114`、`openFileById` 三种打开方式全部复用） |
+
+### 验证
+**单元 20/20**：★登记目录里只有 `meta.json`（不复制→后端一份）/ `_resolve_upload` 解析到产出区原文件 /
+★既有上传附件（无 `rel`）行为不变（回归）/ 越界（`../`、绝对路径、不存在）一律拒绝 /
+直接写进产出区的文件（技能/脚本产出）自动补登记 / `list_outputs` 幂等不产生重复 id。
+**云端真机 9/9**：产出 → 拿 file_id → 产出清单可见 → `/api/file/<id>/raw` 下到正确内容（前端打开链路）→
+后端只有一份（登记目录仅 `meta.json`、`meta.rel` 指向产出区）。`check_deploy` 全部一致。
+
+### ⚠️ 两个只有实测才会暴露的 bug（都已修，见下一提交）
+1. **`file_id` 格式错 → 占位符根本不渲染**：前端正则是 `\{\{file:([0-9a-fA-F]+):`，**只认纯十六进制**
+   （`upload_file` 用的就是 `uuid4().hex`）；我最初写成 `"file-" + hex[:16]` → 正则不匹配 →
+   用户看到的是**字面文本**、根本点不动。→ 改为 `uuid.uuid4().hex`，并加不变量防回归。
+2. **打开方式没区分上下文**：同一个 `formatMessage` 服务聊天与笔记两条路径，卡片都调 `openDbFile`
+   （与设置无关）→ 聊天里也忽略了「设置」。→ 增加渲染上下文参数，聊天走 `openFileById`（按设置），
+   笔记/数据库保持原样。（云端 `backend` 模式会优雅降级提示「当前部署不支持本机打开」，不会静默失败）
+
+> **需知**：指针 = **活链接** —— 重跑覆盖同名文件后，旧占位符也指向新内容。这是「后端只有一份」的代价。
+
 ---
 
 ## [2026-09-26] chore(cleanup): 删掉 24 个确认无引用的死函数 + 4 个测试脚本
