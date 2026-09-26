@@ -128,6 +128,8 @@ chk backend/agent/tools.py 'tools_registry["list_outputs"]' 'agent 侧产出工�
 chk backend/agent/agent.py '产出文件一律写到' '提示词：产出规则 + 必须给占位符'
 chk backend/tools/code_sandbox.py 'cwd=outdir' 'run_python 产出落产出区（不再随临时目录蒸发）'
 chk backend/tools/terminal_tool.py '_user_outputs_dir()' 'terminal 默认 cwd = 产出区（原为项目根）'
+chk backend/tools/file_tools.py 'fid = uuid.uuid4().hex' '★file_id 必须纯十六进制（前端 {{file:}} 正则只认 [0-9a-fA-F]+）'
+chk js/formatting.js "ctx === 'note'" '聊天里的附件卡按设置派发；笔记/数据库仍走 openDbFile'
 # Neo4j 失败必须降级而非终止对话（三处：两流式 + 一非流式）
 _n4="$(grep -c '连不上只降级摘掉图谱工具' backend/agent/agent.py 2>/dev/null || echo 0)"
 if [ "$_n4" -ge 3 ]; then ok "Neo4j 失败降级 ($_n4 处)"; else bad "Neo4j 降级仅 $_n4 处（应≥3）"; fi

@@ -288,7 +288,7 @@ var _dbEntries = [];   // 最近一次条目缓存（供编辑回显）
 
 function _dbEntryBodyHtml(n) {
     return n.content
-        ? formatMessage(n.content, true)
+        ? formatMessage(n.content, true, 'note')
         : '<span style="color:var(--gray);font-style:italic;">空条目</span>';
 }
 

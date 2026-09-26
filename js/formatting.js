@@ -84,7 +84,7 @@
             });
         }
 
-        function formatMessage(content, isFinal = false) {
+        function formatMessage(content, isFinal = false, ctx = 'chat') {
             if (!content) return '';
 
             let processedContent = content;
@@ -114,9 +114,13 @@
                     processedContent = processedContent.replace(/\{\{file:([0-9a-fA-F]+):([^}]*)\}\}/g, function (m, fid, name) {
                         var n = (name || '附件').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
                         var f = String(fid);
+                        // 打开方式按**渲染上下文**决定（用户 2026-09-26 定）：
+                        //   · 聊天回答里的占位符 → openFileById：按「设置」派发（后端打开 / 浏览器新标签 / 应用内浮窗）
+                        //   · 笔记 / 数据库条目 → 仍走 openDbFile：浮窗能预览就浮窗、不能就下载（与设置无关，原设计）
+                        var _openFn = (ctx === 'note') ? 'window.openDbFile' : 'window.openFileById';
                         return '<span style="display:inline-block;vertical-align:middle;margin:2px 4px;max-width:280px;">'
                             + '<div class="attachment-item attachment-clickable" data-file-id="' + f + '" data-file-name="' + n + '" '
-                            + 'onclick="window.openDbFile &amp;&amp; window.openDbFile(this.dataset.fileId, this.dataset.fileName)" '
+                            + 'onclick="' + _openFn + ' &amp;&amp; ' + _openFn + '(this.dataset.fileId, this.dataset.fileName)" '
                             + 'title="点击打开（浮窗预览，不支持则下载）">'
                             + '<span class="attachment-icon">📄</span>'
                             + '<div class="attachment-info"><div class="attachment-name">' + n + '</div></div>'

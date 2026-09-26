@@ -498,7 +498,10 @@ def register_output(rel_path: str, owner: str = "", name: str = "") -> str:
     if existed:
         fid = existed
     else:
-        fid = "file-" + uuid.uuid4().hex[:16]
+        # ★ 必须是纯十六进制（与 upload_file 的 uuid4().hex 一致）——
+        # 前端把 {{file:...}} 渲染成附件卡片的正则是 /\{\{file:([0-9a-fA-F]+):(.*)\}\}/，
+        # 带 "file-" 前缀或连字符会匹配不上、显示成字面文本。
+        fid = uuid.uuid4().hex
     meta = {
         "name": name or os.path.basename(rel_path),
         "rel": rel_path,                       # ★ 指针：文件在产出区原地不动

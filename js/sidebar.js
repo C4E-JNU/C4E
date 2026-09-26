@@ -348,7 +348,7 @@
 
         function renderNoteCard(note) {
             var contentHtml = note.content
-                ? formatMessage(note.content, true)
+                ? formatMessage(note.content, true, 'note')
                 : '<span style="color:var(--gray);font-style:italic;">空笔记</span>';
             var escapedTitle = escHtml(note.title || '未命名笔记');
             // 默认闭合，用 _noteCollapsedMap 记录手动展开/收起状态
@@ -490,7 +490,7 @@
                 // 取消回退：恢复笔记原始内容
                 liveRestore: function () {
                     var bodyEl = document.getElementById('note-body-' + noteId);
-                    if (bodyEl) { bodyEl.innerHTML = formatMessage(originalContent, true); }
+                    if (bodyEl) { bodyEl.innerHTML = formatMessage(originalContent, true, 'note'); }
                 },
                 onSave: function (newContent, newTitle) {
                     var t = (newTitle !== null && newTitle !== undefined && newTitle !== '') ? newTitle : '未命名笔记';
