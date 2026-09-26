@@ -116,12 +116,15 @@ def _resolve_timeouts(t: dict = None) -> dict:
 
 
 def set_current_user(user: str = ""):
+    """记录当前登录身份：agent 内部用（历史/路径），同时**转发**给 file_tools ——
+    产出区与附件登记也要知道"文件属于谁"（用户 2026-09-26 定）。"""
     global _current_user
     u = (user or "").strip()
     if not u or u == "guest":
         _current_user = "guest"
     else:
         _current_user = u
+    _set_ft_user(_current_user)
 
 # ── 全局生成取消令牌（用户点停止 / 前端断连时置位，两引擎每轮检查）──
 _GENERATION_CANCELLED = False
@@ -142,7 +145,7 @@ def generation_cancelled() -> bool:
 from agent.tools import tools_registry, get_tools
 from tools.neo4j_tools import Neo4jClient
 from tools.skill_tools import skill_list as _skill_list
-from tools.file_tools import set_permission_mode
+from tools.file_tools import set_permission_mode, set_current_user as _set_ft_user
 
 _WORKSPACE = Path(__file__).parent.parent / "workspace"
 
@@ -216,6 +219,11 @@ async def _build_system_prompt(enabled_tools: list[str], loaded_skills: list[str
         "- **最终回答简洁明了**，不要包含中间步骤的描述。用户能看到你调用了哪些工具。",
         "- **调用工具后必须收敛**：每次工具执行完，先根据返回内容判断是否已足够回答用户问题。若已获得所需信息，立即生成最终回答并结束，**不要无意义地重复调用工具**。只有确实缺少关键信息时才继续调用**不同的、有必要的**工具。同一工具返回失败时，最多按需换用别的工具一次，不要反复重试同一工具。",
         "- 若某写操作工具返回包含 `__NEED_FULL__` 的错误，说明当前为询问模式、该操作超出权限范围。请明确告知用户：需要切换到完全访问模式后才能执行，并简要说明要做什么。",
+        "- **产出文件一律写到 `outputs/` 目录**（相对路径，例如 `outputs/报告.pptx`）：用 write_file 写文本时路径就用 `outputs/xxx`；"
+        "用 run_code 或技能脚本生成文件时**直接写文件名即可**（它执行时的工作目录就是产出区）。"
+        "写完后**必须调 `list_outputs` 拿到 file_id**，并在回答里用 `{{file:<file_id>:<文件名>}}` 引用它 —— "
+        "前端会渲染成附件卡片，用户点它可选『后端打开』（服务器上用默认程序打开）或『前端打开』（下载 / 浏览器内预览 PDF 等）。"
+        "**绝不要只写「已生成 xxx.pptx」而不给占位符**，那样用户拿不到文件。",
         "",
     ]
     # 技能：Hermes 式 <available_skills> 简列（只列勾选技能；详情用 skill_view，不注入全文）

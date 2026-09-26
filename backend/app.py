@@ -527,15 +527,32 @@ async def mineru_config_set(req: MinerUConfigRequest, request: Request):
 
 def _tool_gate(request, tool):
     """云端直连工具端点角色闸。放行则返回 user，否则返回 403 JSONResponse。"""
+    from tools.file_tools import set_permission_mode as _spm, set_current_user as _scu
     if not _RP.HUB:
-        return _cur_user(request)
+        u = _cur_user(request)
+        _scu(u["username"])            # 产出区/附件登记按身份（本地实例也要）
+        return u
     u = _cur_user(request)
     if _RP.tool_denied(u, tool):
         return JSONResponse({"error": "该功能需注册并由管理员开通权限后使用（未授权账号仅可使用聊天）。"}, status_code=403)
-    from tools.file_tools import set_permission_mode as _spm
     _spm(_RP.enforce_mode(u, "safe"))
     _set_user_scope(_RP.user_sandbox(u))   # 文件类端点也按身份沙盒
+    _scu(u["username"])
     return u
+
+
+@app.get("/api/outputs/list")
+async def api_outputs_list(request: Request):
+    """我的产出：agent / 技能生成的文件（未登记的顺手补登记），返回 file_id。
+
+    用户 2026-09-26 定：「和我笔记里的一样，就一个占位符，链接后端真实文件位置」——
+    所以这里只发 file_id，前端用现成的 openFileById()，三种打开方式零改动；
+    后端也只有一份文件（登记只记指针，不复制）。
+    """
+    from tools.file_tools import list_outputs, set_current_user as _scu
+    user = _cur_user(request)
+    _scu(user["username"])
+    return json.loads(list_outputs(user["username"]))
 
 @app.post("/api/tool/schema")
 async def tool_schema(request: Request):

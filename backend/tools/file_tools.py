@@ -39,6 +39,14 @@ def set_user_scope(scope):
     global _USER_SCOPE
     _USER_SCOPE = scope if isinstance(scope, dict) else None
 
+# 当前请求的登录身份（产出区/附件登记要判断"这个文件属于谁"）。
+# 与 _PERMISSION_MODE 同机制：每个请求入口设置一次。
+_CURRENT_USER = ""
+
+def set_current_user(username: str):
+    global _CURRENT_USER
+    _CURRENT_USER = (username or "").strip()
+
 def _get_project_root():
     return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -245,6 +253,31 @@ async def write_file(path: str, content: str):
     if not path:
         return json.dumps({"error": "文件路径不能为空"})
 
+    norm = path.replace("\\", "/")
+    # `outputs/xxx` = 写入**本人的产出区**，并自动登记成正式附件（只记指针、不复制文件）。
+    # 拿到 file_id 后就能用 {{file:<file_id>:<文件名>}} 占位符引用 —— 与笔记附件完全同款：
+    # 后端只有一份文件，「后端打开」直接打开它，「前端打开」从后端下载/浏览器临时预览。
+    if norm == "outputs" or norm.startswith("outputs/"):
+        name = os.path.basename(norm.rstrip("/")) or "output.txt"
+        try:
+            d = _user_outputs_dir(_CURRENT_USER)
+            full_path = os.path.join(d, name)
+            with open(full_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            reg = json.loads(register_output("outputs/" + name, _CURRENT_USER))
+            if reg.get("status") != "ok":
+                return json.dumps(reg, ensure_ascii=False)
+            return json.dumps({
+                "status": "ok",
+                "path": "outputs/" + name,
+                "bytes_written": len(content.encode("utf-8")),
+                "file_id": reg["file_id"],
+                "name": name,
+                "note": "产出已登记为附件；在回答里用 {{file:<file_id>:<name>}} 引用它",
+            }, ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({"error": f"写产出失败: {e}"}, ensure_ascii=False)
+
     try:
         full_path = _resolve_safe_path(path, write=True)
 
@@ -333,6 +366,17 @@ def _user_uploads_dir(username: str) -> str:
     return d
 
 
+def _user_outputs_dir(username: str = "") -> str:
+    """本人的**产出区**：agent / 技能生成的文件的唯一落点。
+
+    用户 2026-09-26 定：「和我笔记里的一样，就一个占位符，链接后端真实文件位置」——
+    所以产出文件**留在产出区不复制**，附件登记只记一条相对指针（见 register_output）。
+    """
+    d = os.path.join(_user_dir(username or _CURRENT_USER), "outputs")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
 def _user_notes_path(username: str) -> str:
     return os.path.join(_user_dir(username), "notes.json")
 
@@ -380,6 +424,19 @@ def _resolve_upload(file_id: str):
                 meta = json.load(f)
         except Exception:
             continue
+        rel = (meta.get("rel") or "").strip().replace("\\", "/")
+        if rel:
+            # 产出指针：文件**留在产出区、不复制**（用户 2026-09-26 定：
+            # 「链接后端真实文件位置」→ 后端只有一份，点前端打开才下载到本地）。
+            # 只接受相对路径，且解析后必须仍在该基座（users/<u>/ 或 pool/）之内 ——
+            # 这一处就是唯一的边界校验，不需要在每个调用端点重复。
+            if os.path.isabs(rel) or ".." in rel.split("/"):
+                continue
+            base = os.path.dirname(os.path.abspath(root))
+            orig = os.path.abspath(os.path.join(base, rel))
+            if not _within(base, orig) or not os.path.isfile(orig):
+                continue
+            return d, meta, orig
         orig = os.path.join(d, meta.get("name", "file"))
         return d, meta, orig
     return None, None, None
@@ -395,6 +452,95 @@ def _save_upload_meta(file_id: str, meta: dict):
     os.makedirs(d, exist_ok=True)
     with open(os.path.join(d, "meta.json"), "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)
+
+
+def _find_output_file_id(rel_path: str, owner: str) -> str:
+    """该产出文件是否已登记过（避免每次列举都造一个新 file_id）。"""
+    upd = _user_uploads_dir(owner)
+    try:
+        fids = sorted(os.listdir(upd))
+    except Exception:
+        return ""
+    for fid in fids:
+        mp = os.path.join(upd, fid, "meta.json")
+        if not os.path.isfile(mp):
+            continue
+        try:
+            with open(mp, "r", encoding="utf-8") as f:
+                m = json.load(f)
+        except Exception:
+            continue
+        if m.get("source") == "output" and (m.get("rel") or "").replace("\\", "/") == rel_path:
+            return fid
+    return ""
+
+
+def register_output(rel_path: str, owner: str = "", name: str = "") -> str:
+    """把一个**已存在**的产出文件登记成正式附件 —— **不复制文件**，只记一条相对指针。
+
+    用户 2026-09-26 定：「和我笔记里的一样，就一个占位符，链接后端真实文件位置，
+    后端打开就自动打开文件，前端打开就从后端下载/在浏览器里临时打开」。
+    所以后端只有一份文件；`_resolve_upload` 认得 `rel` 指针后，
+    /api/file/{id}、/raw、/text、/open 这些端点全部自动支持它（无需各自改动）。
+
+    rel_path 相对 users/<owner>/（如 outputs/report.pptx）。
+    """
+    owner = owner or _CURRENT_USER
+    rel_path = (rel_path or "").strip().replace("\\", "/")
+    if os.path.isabs(rel_path) or ".." in rel_path.split("/"):
+        return json.dumps({"error": f"产出路径非法: {rel_path}"}, ensure_ascii=False)
+    udir = _user_dir(owner)
+    full = os.path.abspath(os.path.join(udir, rel_path))
+    if not _within(udir, full) or not os.path.isfile(full):
+        return json.dumps({"error": f"产出文件不存在或越界: {rel_path}"}, ensure_ascii=False)
+
+    existed = _find_output_file_id(rel_path, owner)
+    if existed:
+        fid = existed
+    else:
+        fid = "file-" + uuid.uuid4().hex[:16]
+    meta = {
+        "name": name or os.path.basename(rel_path),
+        "rel": rel_path,                       # ★ 指针：文件在产出区原地不动
+        "owner": owner,
+        "source": "output",
+        "size": os.path.getsize(full),
+        "created": datetime.now().isoformat(timespec="seconds"),
+    }
+    _save_upload_meta(fid, meta)
+    return json.dumps({"status": "ok", "file_id": fid, "name": meta["name"],
+                       "size": meta["size"], "rel": rel_path}, ensure_ascii=False)
+
+
+def list_outputs(owner: str = "") -> str:
+    """列出本人产出区的文件，**未登记的自动补登记** → 返回 file_id。
+
+    产出源不固定（write_file / run_python / terminal / 以后装的 PPT 等各种技能），
+    所以这里只认"目录"，不认"哪个工具写的" —— 谁写进来都会被登记。
+    """
+    owner = owner or _CURRENT_USER
+    d = _user_outputs_dir(owner)
+    files = []
+    try:
+        names = sorted(os.listdir(d))
+    except Exception:
+        names = []
+    for fn in names:
+        p = os.path.join(d, fn)
+        if not os.path.isfile(p):
+            continue
+        rel = "outputs/" + fn
+        fid = _find_output_file_id(rel, owner)
+        if not fid:
+            fid = (json.loads(register_output(rel, owner)) or {}).get("file_id", "")
+        files.append({
+            "file_id": fid,
+            "name": fn,
+            "size": os.path.getsize(p),
+            "mtime": datetime.fromtimestamp(os.path.getmtime(p)).strftime("%Y-%m-%d %H:%M"),
+        })
+    return json.dumps({"status": "ok", "dir": "outputs", "count": len(files), "files": files},
+                      ensure_ascii=False)
 
 
 async def upload_file(filename: str, content_bytes: bytes, owner: str = "",

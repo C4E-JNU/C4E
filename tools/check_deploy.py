@@ -43,6 +43,8 @@ DEFAULT_FILES = [
     "js/utils.js",
     "backend/app.py", "backend/tools/user_settings.py", "backend/tools/user_chats.py",
     "backend/auth.py", "backend/tools/file_tools.py",
+    "backend/agent/agent.py", "backend/agent/tools.py",
+    "backend/tools/code_sandbox.py", "backend/tools/terminal_tool.py",
 ]
 
 

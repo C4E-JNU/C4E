@@ -63,13 +63,16 @@ async def terminal(command: str, workdir: str = "."):
         return json.dumps({"error": "安全模式下禁止高危破坏性命令，如需此操作请切换到完全访问模式", "blocked": True})
 
     # 2. workdir 解析（相对=项目根；safe 强制项目根内）
+    # 默认 cwd = **本人产出区**（用户 2026-09-26 定：产出源不固定，不能只认 write_file）——
+    # 这样用终端跑技能脚本产出的文件会被产出区收走、自动登记成附件、有同款打开方式。
+    # 需要操作项目本身时，显式传 workdir（相对项目根）。
     if workdir and workdir.strip():
         if os.path.isabs(workdir):
             wd = workdir
         else:
             wd = os.path.join(PROJECT_ROOT, workdir)
     else:
-        wd = PROJECT_ROOT
+        wd = file_tools._user_outputs_dir()
     wd = os.path.abspath(wd)
 
     if mode == "safe":

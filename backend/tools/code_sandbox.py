@@ -42,6 +42,11 @@ async def run_python(code: str, timeout: int = 30):
     timeout = min(max(1, timeout), 60)  # 1-60 秒
 
     try:
+        # 产出落点 = 本人产出区（持久）：脚本里 `open("report.png","w")` 写出来的文件
+        # 才不会随临时目录一起蒸发 —— 原来 cwd 是临时目录，函数一返回文件就没了，
+        # 所以 agent 过去只能把结果"贴在回答里"。
+        from tools.file_tools import _user_outputs_dir
+        outdir = _user_outputs_dir()
         with tempfile.TemporaryDirectory() as tmpdir:
             script_path = os.path.join(tmpdir, "script.py")
 
@@ -53,11 +58,14 @@ async def run_python(code: str, timeout: int = 30):
                 _python_exe(), "-u", script_path,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=tmpdir,
+                cwd=outdir,
                 env={
                     **os.environ,
                     "PYTHONIOENCODING": "utf-8",
-                    # 禁止写文件到外部
+                    # ⚠️ 原来这里注释写"禁止写文件到外部"，其实不准：PYTHONSAFEPATH 只影响
+                    # sys.path（不把脚本目录加进去），**管不住 open() 写文件**。
+                    # 真正拦住的只有上面 dangerous_patterns 那串字符串（挡 os.system/subprocess/
+                    # eval/exec/compile），裸的绝对路径写入仍可能发生。
                     "PYTHONSAFEPATH": "1",
                 }
             )

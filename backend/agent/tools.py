@@ -209,6 +209,26 @@ tools_registry["skill_list"] = StructuredTool.from_function(
     coroutine=_skill_list,
 )
 
+
+async def _list_outputs_tool():
+    """列出本人产出区（owner 由登录身份推导，**不接受模型传身份**）。"""
+    from tools.file_tools import list_outputs
+    return list_outputs()
+
+
+tools_registry["list_outputs"] = StructuredTool.from_function(
+    name="list_outputs",
+    description=(
+        "列出你生成的文件（产出区里的 csv/png/pptx/xlsx/md 等）及其 file_id。\n\n"
+        "WHEN to use: 你用 write_file('outputs/xxx') 或 run_code / 技能脚本生成了文件之后 —— "
+        "把产出交给用户时必须先拿到 file_id。\n\n"
+        "HOW: 拿到 file_id 后，在回答里写 {{file:<file_id>:<文件名>}} —— 前端会渲染成附件卡片，"
+        "用户点它就能『后端打开』或『前端下载/浏览器预览』（与笔记附件同款）。\n"
+        "注意：产出文件请写到 outputs/ 目录（相对路径），否则不会被收录。"
+    ),
+    coroutine=_list_outputs_tool,
+)
+
 tools_registry["run_code"] = _make_async_tool(
     name="run_code",
     description=(

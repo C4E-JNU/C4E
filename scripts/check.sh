@@ -117,6 +117,17 @@ chk backend/tools/file_tools.py 'def get_note(' '取单条条目（正文按需�
 chk js/database.js 'with_content=0' '数据库面板列表不带正文'
 chk js/database.js 'function _dbEnsureContent' '正文按需取（展开/编辑时才取那一条）'
 chk js/database.js 'function _dbFillEntryBody' '展开时才填充正文'
+# 产出区（用户 2026-09-26 定：同笔记附件一样一个占位符，链接后端真实文件位置）
+chk backend/tools/file_tools.py 'def _user_outputs_dir' '本人产出区目录'
+chk backend/tools/file_tools.py 'def register_output' '产出登记：只记指针、不复制文件'
+chk backend/tools/file_tools.py '"rel": rel_path' '★附件 meta 存相对指针（后端只有一份）'
+chk backend/tools/file_tools.py 'def list_outputs' '列产出（未登记自动补登记）'
+chk backend/tools/file_tools.py '".." in rel.split("/")' '★指针越界校验（唯一边界）'
+chk backend/app.py '/api/outputs/list' '产出清单端点'
+chk backend/agent/tools.py 'tools_registry["list_outputs"]' 'agent 侧产出工具'
+chk backend/agent/agent.py '产出文件一律写到' '提示词：产出规则 + 必须给占位符'
+chk backend/tools/code_sandbox.py 'cwd=outdir' 'run_python 产出落产出区（不再随临时目录蒸发）'
+chk backend/tools/terminal_tool.py '_user_outputs_dir()' 'terminal 默认 cwd = 产出区（原为项目根）'
 # Neo4j 失败必须降级而非终止对话（三处：两流式 + 一非流式）
 _n4="$(grep -c '连不上只降级摘掉图谱工具' backend/agent/agent.py 2>/dev/null || echo 0)"
 if [ "$_n4" -ge 3 ]; then ok "Neo4j 失败降级 ($_n4 处)"; else bad "Neo4j 降级仅 $_n4 处（应≥3）"; fi
