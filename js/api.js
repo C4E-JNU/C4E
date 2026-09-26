@@ -41,9 +41,11 @@
                 window.C4EAI_PLATFORM = d.platform || 'win32';
             }).catch(function () { window.C4EAI_PLATFORM = 'win32'; });
 
-            // 个人设置先拉回 localStorage 缓存，再初始化依赖设置的模块。
-            // （事件监听不依赖设置，保持在外面照旧绑定）
-            hydrateUserSettings().finally(initAfterSettings);
+            // 个人设置 + 对话历史先拉回 localStorage 缓存，再初始化依赖它们的模块。
+            // ⚠️ 对话必须在 loadBranches()（在上面的 initAfterSettings 里）之前灌回来，
+            //    否则新设备上读到的是空缓存 → 对话全没了。
+            // （事件监听不依赖这些，保持在外面照旧绑定）
+            Promise.allSettled([hydrateUserSettings(), hydrateUserChats()]).finally(initAfterSettings);
 
             // 事件监听
             startExperienceBtn.addEventListener('click', () => {

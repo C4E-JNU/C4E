@@ -39,8 +39,10 @@ DEFAULT_FILES = [
     "js/agent_config.js", "js/dom.js", "js/editing.js", "js/formatting.js",
     "js/mobile.js", "js/note_refs.js", "js/provider.js", "js/settings.js",
     "js/skill_system.js", "js/tools.js", "js/ui.js", "js/user_settings.js",
+    "js/user_chats.js",
     "js/utils.js",
-    "backend/app.py", "backend/tools/user_settings.py",
+    "backend/app.py", "backend/tools/user_settings.py", "backend/tools/user_chats.py",
+    "backend/auth.py",
 ]
 
 

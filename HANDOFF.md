@@ -48,6 +48,40 @@ C4EAI —— 组内科研辅助 / 共享 Wiki 智能体（江南大学）。前�
 存量修复脚本：`tools/backfill_shared_files.py`（`--apply` 执行）。
 同类问题排查口诀：**云端打开失败但本地能开 = 查 `pool/uploads` 里有没有该 file_id**。
 
+### 对话历史存在哪（2026-09-26 改：从浏览器搬到后端）
+
+**用户定**：「我换个浏览器数据就没了，这影响使用啊」「对话是最应该后端的」。
+
+| | 之前 | 现在 |
+|---|---|---|
+| 存放 | 只存浏览器 `localStorage['ai-branches::<身份>']` | **后端** `workspace/users/<身份>/chats.json` |
+| 换设备 | ❌ 聊天记录全丢 | ✅ 自动恢复 |
+
+**同步内容**：分支（含全部消息/分支笔记）+ 对话排序 + 上次打开的对话。
+
+**模型**：与个人设置完全同套 —— 后端权威 + localStorage 作本地缓存。
+```
+启动：Promise.allSettled([hydrateUserSettings(), hydrateUserChats()]).finally(initAfterSettings)
+      ⚠️ 必须在 loadBranches() 之前（它在 initAfterSettings 里），否则新设备读到空缓存
+写入：saveBranches() / persistCurrentBranch() → setUserChats()  节流 1.5s
+离开：visibilitychange(hidden) / pagehide 强制推一次
+```
+
+**端点**：`GET/PUT /api/user/chats`（本地实例沿用 `_notes_proxy` 转发云端）
+**安全**：owner 一律从登录身份推导（`_cur_user`），绝不接受请求体传身份。
+
+**并发 = 单账号单会话**（用户定）：`auth.login` 登录即踢掉该账号旧 token。
+**同一账号同时只有一个设备在线**，所以整份覆盖是安全的 —— 不做合并、不做冲突提示。
+> 代价：在第二台设备登录，第一台会被踢下线（需重新登录）。这是刻意的。
+
+**语义 = 覆盖**：payload 里出现的字段整体替换。branches 是整棵树，
+所以删掉一个对话也能同步过去（合并语义做不到，会把删掉的复活）。
+
+**不做**：逐条消息增量协议、冲突弹窗、版本历史/回滚、按 id 并集合并。
+
+**排查口诀**：换设备没恢复 → 看 `workspace/users/<身份>/chats.json` 是否存在、`_updated` 是否最新；
+对话没同步 → 先确认已登录（未登录=游客走本地缓存，PUT 会被静默吞掉）。
+
 ### 个人设置存在哪（2026-09-26 改：从浏览器搬到后端）
 
 **用户定**：密钥等设置「放在个人账号数据上，反正也就开发者知道密钥」。

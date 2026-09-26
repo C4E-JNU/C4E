@@ -31,6 +31,7 @@ import auth as _auth
 from tools.vector_search import search_history, search_knowledge
 from tools.shared_hub import publish_note_to_db
 import tools.user_settings as US
+import tools.user_chats as UC
 from tools.mineru_tools import save_token as _mineru_save_token, load_token as _mineru_load_token
 from agent.tools import tools_registry as _tools_registry
 from agent.agent import run_agent, stream_agent, stream_agent_lc
@@ -1297,6 +1298,35 @@ async def api_user_settings_put(req: UserSettingsReq, request: Request):
         return p
     user = _cur_user(request)
     return json.loads(US.save_user_settings(user["username"], req.settings))
+
+
+# ── 对话历史的后端存储（用户 2026-09-26 定）──────────────────────
+# 对话（分支 + 全部消息 + 分支笔记 + 排序 + 当前对话）原本只在浏览器 localStorage，
+# 换设备就全丢。这里把它搬到「个人账号数据」，与 settings.json 同套机制。
+# 并发：单账号单会话（auth.login 登录即踢旧 token）→ 只有一个写者 → 整份覆盖，不做合并。
+
+class UserChatsReq(BaseModel):
+    chats: Dict[str, Any] = {}
+
+
+@app.get("/api/user/chats")
+async def api_user_chats_get(request: Request):
+    """读本人的全部对话。本地实例 → 转发云端（与笔记/设置同一套分流）。"""
+    p = await _notes_proxy("GET", "/api/user/chats")
+    if p is not None:
+        return p
+    user = _cur_user(request)
+    return json.loads(UC.load_user_chats(user["username"]))
+
+
+@app.put("/api/user/chats")
+async def api_user_chats_put(req: UserChatsReq, request: Request):
+    """整份写入本人的对话（覆盖语义）。owner 从 token 推导，不接受请求体传身份。"""
+    p = await _notes_proxy("PUT", "/api/user/chats", {"chats": req.chats})
+    if p is not None:
+        return p
+    user = _cur_user(request)
+    return json.loads(UC.save_user_chats(user["username"], req.chats))
 
 
 # ── LangChain Agent ──────────────────────────────

@@ -228,6 +228,9 @@
                 }
                 // 同时记住当前打开的是哪个对话，便于重启后恢复
                 persistCurrentBranch();
+                // ★ 推到后端（用户 2026-09-26 定：对话必须存后端，换设备不能丢）。
+                // 节流 1.5s，这里 18 个调用点会合并成一次推送。
+                if (typeof setUserChats === 'function') setUserChats();
             }
 
         // 记住当前打开的对话 id，下次打开应用时恢复（避免每次重启都回默认对话）
@@ -235,6 +238,8 @@
         function persistCurrentBranch() {
             if (state && state.currentBranchId && state.currentBranchId !== 'main') {
                 try { localStorage.setItem(window.identityKey('ai-current-branch'), state.currentBranchId); } catch (e) {}
+                // 切换对话也要同步（下次在别的设备打开时，停在同一个对话上）
+                if (typeof setUserChats === 'function') setUserChats();
             }
         }
 

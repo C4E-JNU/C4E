@@ -6,6 +6,75 @@
 
 ---
 
+## [2026-09-26] feat(chats): 对话历史后端化（换浏览器不再丢聊天记录）
+
+> 用户原话：「我换个浏览器数据就没了，这影响使用啊」「对话是最应该后端的」。
+> 这是本项目最该后端化、却一直漏掉的一块 —— 设置丢了能重填，聊天记录丢了就没了。
+
+**为什么之前是坏的**
+对话（分支 + 全部消息 + 分支笔记 + 排序 + 当前对话）只写浏览器
+`localStorage['ai-branches::<身份>']`，后端 40 个端点里没有任何一个跟对话有关。
+换浏览器/换设备 → 资料都在，就聊天没了。
+
+**存储**：`workspace/users/<身份>/chats.json`（与 `settings.json`/`notes.json` 同级）
+```json
+{ "branches": { "branch-1": { ...全部分支对象（含 messages/notes）... } },
+  "branchOrder": [...], "currentBranchId": "branch-1", "_updated": "..." }
+```
+
+**端点**：`GET/PUT /api/user/chats`
+- owner **一律从登录 token 推导**（`_cur_user`），绝不接受请求体传身份 —— 防越权读写他人对话
+- 本地实例沿用 `_notes_proxy` 转发云端（与笔记/设置同一套分流）
+- 写入后**回读核对**，返回 `verified`；非白名单字段记 `rejected`
+
+**并发模型（用户 2026-09-26 定）**：**单账号单会话** —— `auth.login` 登录即踢掉该账号旧 token。
+同一时刻只有一个写者 → 整份覆盖即可，**不做合并、不做冲突处理**。
+> 用户否掉了「按对话 id 并集合并」那套（我原本推荐 B 方案）：多设备合并逻辑复杂且易坏，
+> 单点登录从根上消除并发写，简单且不可能卡死。
+
+**语义 = 覆盖（不是合并）**：payload 里出现的字段整体替换。
+`branches` 是整棵树，所以**「删掉一个对话」也能正确同步过去** —— 合并语义做不到这点
+（删掉的对话会被别处的旧副本复活）。
+
+**前端（沿用「后端权威 + localStorage 作本地缓存」，与设置完全同套）**
+```
+启动：Promise.allSettled([hydrateUserSettings(), hydrateUserChats()])
+        .finally(initAfterSettings)      ← loadBranches() 在里面，必须先灌回来
+写入：saveBranches() → setUserChats()    ← 节流 1.5s，18 个调用点合并成一次推送
+离开：visibilitychange(hidden) / pagehide 强制推一次
+```
+**现有 18 处读写一行都没改** —— `loadBranches()` 照旧同步读缓存。
+
+**影响文件**
+- 新增 `backend/tools/user_chats.py`（load/save/覆盖语义/16MB 上限/落盘核对）
+- 新增 `js/user_chats.js`（hydrate / setUserChats / pushUserChats / 离开页面 flush）
+- `backend/app.py`：`/api/user/chats` 两端点 + 导入
+- `backend/auth.py`：`login` 单账号单会话（踢旧 token）
+- `js/api.js`：`Promise.allSettled([...])` 时序（改掉原来的 `hydrateUserSettings().finally(...)`）
+- `js/branching.js`：`saveBranches()` / `persistCurrentBranch()` 挂钩推后端
+- `index.html`：引入 `js/user_chats.js`；`api.js` v10 / `branching.js` v11
+- `scripts/check.sh`：新增 10 条不变量（含**更新**原来那条断言旧 `hydrateUserSettings().finally` 的）
+- `tools/check_deploy.py`：纳入 `js/user_chats.js`、`backend/tools/user_chats.py`、`backend/auth.py`
+
+**验证（云端真机，一次性账号，跑完即删；24/24）**
+- API：空读 / 写(verified) / 回读(正文+排序+当前对话) / **覆盖语义（删掉的对话没被复活）**
+- 单点登录：第二次登录后**旧 token 立刻 401**
+- 浏览器真按钮：点「新建对话」+ 加消息 → **2s 后后端落盘**（含磁盘文件核对，不只是内存）
+- ★**换浏览器**：`localStorage.clear()` → 重新登录 → **对话 + 消息正文完整回来，侧栏列出**
+- 账号隔离：另一账号读不到
+
+**老数据**：不写迁移工具（用户明说现有数据丢得起）。
+但后端为空 + 本地有数据时会**自动当种子推一次**（与设置同一条一次性迁移路径）。
+
+**排查口诀**：换设备没恢复 → 看 `workspace/users/<身份>/chats.json` 在不在、`_updated` 是不是最新；
+对话没同步 → 先确认是否已登录（未登录=游客，走本地缓存，PUT 会 401 且被静默吞掉）。
+
+**⚠️ 已知残留（未改，等用户拍板）**
+`js/provider.js:266` 保存成功提示仍写「配置已保存 (密钥仅保存在本地)」——
+密钥**早已推到后端**，该文案是旧的（同类陈旧注释还有 `js/settings.js:97`）。
+
+---
+
 ## [2026-09-26] fix(settings): 修「在 hydrate 前读设置」导致的 3 处时序 bug
 
 > 用户提醒：「因为改了后端，然后发送给 llm 的对话形式、设置里面的对话轮次什么的，
