@@ -263,7 +263,7 @@
                         saveBtn.classList.remove('success-state');
                     }, 2000);
 
-                    showKeyStatus('配置已保存 (密钥仅保存在本地)', 'success');
+                    showKeyStatus('配置已保存（已同步到你的账号）', 'success');
 
                     // 如果当前选择的是这个服务商下的模型，更新状态
                     if (state.currentModel && providers[currentEditingProviderId].models.find(m => m.id === state.currentModel)) {

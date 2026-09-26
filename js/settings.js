@@ -94,7 +94,8 @@
              }
 
               // Hermes / Codex 等 Agent 网关：URL、密钥、模型均不内置——
-              // 用户在配置界面自行填写，保存后只存在其浏览器 localStorage（前端保存，不上送）。
+              // 用户在配置界面自行填写，保存后写 localStorage（本地缓存）+ 同步到本人账号
+              // （/api/user/settings → workspace/users/<身份>/settings.json，见 js/user_settings.js）。
 
               // 本地千问（实验室 llama-server，免密钥内置可用）；旧存档 IP 端点自动迁移到 c4eai.lab
               if (!providerSettings['qwen-local']) {
