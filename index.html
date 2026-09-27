@@ -37,7 +37,7 @@
     <link rel="stylesheet" href="css/input.css?v=8">
     <link rel="stylesheet" href="css/modals.css?v=4">
     <link rel="stylesheet" href="css/xiaoe.css?v=7">
-    <link rel="stylesheet" href="css/mobile.css?v=17">
+    <link rel="stylesheet" href="css/mobile.css?v=22">
     <link rel="stylesheet" href="css/components.css?v=7">
     <link rel="stylesheet" href="css/agent.css?v=5">
 
@@ -49,6 +49,8 @@
         <div class="container nav-container">
             <!-- 手机端汉堡按钮（桌面端 CSS 隐藏） -->
             <button class="mobile-menu-btn" id="mobile-menu-btn" title="对话管理" aria-label="打开对话管理">☰</button>
+            <!-- 手机端：当前对话标题（桌面端 CSS 隐藏；方案 A 顶栏 = ☰ + 标题 + ⋯） -->
+            <div class="mobile-chat-title" id="mobile-chat-title"></div>
             <div class="logo-area">
                 <div class="c4e-art-logo"><img src="assets/icons/c4e-logo.png" alt="C4E"></div>
                 <div class="logo-text-wrapper">
@@ -83,6 +85,9 @@
                 <!-- 登录/账号芯片插槽（auth.js 渲染） -->
                 <span id="auth-chip-slot" style="display:inline-flex;align-items:center;"></span>
             </div>
+            <!-- 手机端「⋯」：把桌面顶栏那组控件（主题/数据库/登录）整块搬进来（见 js/mobile.js） -->
+            <button class="mobile-more-btn" id="mobile-more-btn" aria-label="更多" title="更多">⋯</button>
+            <div class="mobile-more-sheet" id="mobile-more-sheet"></div>
         </div>
     </header>
 
@@ -779,7 +784,7 @@
     <script src="js/auth.js?v=21"></script>
     <script src="js/api.js?v=12"></script>
     <script src="js/database.js?v=21"></script>
-    <script src="js/sidebar.js?v=13"></script>
+    <script src="js/sidebar.js?v=16"></script>
     <script src="js/branching.js?v=14"></script>
     <script src="js/provider.js?v=9"></script>
     <script src="js/messages.js?v=9"></script>
@@ -792,13 +797,13 @@
     <!-- 前端工具注册表已删除（工具全部由后端提供） -->
     <script src="js/skill_system.js?v=3"></script>
     <script src="js/agent_config.js?v=10"></script>
-    <script src="js/ui.js?v=5"></script>
+    <script src="js/ui.js?v=6"></script>
     <script src="js/bubbles.js?v=5"></script>
     <script src="js/bubble_actions.js?v=3"></script>
     <script src="js/utils.js?v=2"></script>
     <script src="js/main.js?v=6"></script>
     <script src="js/xiaoe.js?v=8"></script>
-    <script src="js/mobile.js?v=1"></script>
+    <script src="js/mobile.js?v=4"></script>
 
     <div class="popup-panel bubble-context-menu" id="bubble-context-menu">
         <button class="menu-item" data-action="open-file">📂 打开文件</button>

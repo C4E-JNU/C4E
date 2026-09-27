@@ -8,6 +8,9 @@
 /* ---------- 只在手机上出现的汉堡按钮 ---------- */
 .mobile-menu-btn { display: none; }
 
+/* 方案 A（2026-09-27）：手机端专用元素 —— 桌面端一律不显示（手机规则在下面 @media 里） */
+.mobile-chat-title, .mobile-more-btn, .mobile-more-sheet, .mobile-item-more, .empty-chat-cta { display: none !important; }
+
 @media (max-width: 768px) {
 
     /* ========== ① 顶栏：只留 汉堡 + 主题 + 数据库 + 登录（logo 去掉） ========== */
@@ -520,6 +523,124 @@
 
     /* 消息气泡占满可用宽度 */
     .message-wrapper, .message { max-width: 100% !important; }
+
+    /* ========== ⑧ 方案 A（2026-09-27）：顶栏极简 = ☰ + 对话标题 + ⋯ ==========
+     * 桌面顶栏那组控件（9 个主题圆点 + 数据库 + 登录）在手机上挤掉半条，
+     * 这里整块搬进「⋯」面板（DOM 由 js/mobile.js 搬，不复制，事件照旧）。
+     * 其余：正文放大到 ≥15px、消息操作按钮常驻、条目操作常驻、给小e 留位。 */
+    /* ★★ 全屏对话模式下，桌面是把顶栏 translateY(-100%) 收起、靠鼠标悬停顶部 20px 滑出
+     *   （input.css:38/56）——手机上**没有 hover**，于是 ☰ / 标题 / ⋯ 永远点不到。
+     *   手机改为常驻，并把对话区整体下移一个顶栏高度。 */
+    body.full-screen-mode header {
+        transform: none !important;
+        height: 46px !important;              /* 与下面 chat-section 的下移量一致 */
+        overflow: visible !important;
+        position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important;
+        z-index: 2100 !important;
+    }
+    body.full-screen-mode header::after { display: none !important; }   /* 去掉桌面隐形热区 */
+    body.full-screen-mode .chat-section {
+        top: 46px !important;
+        height: calc(100dvh - 46px) !important;
+    }
+    /* 条目：标题可压缩、操作换到第二行，⋯ 常驻第一行右端（原来标题没 min-width:0 会挤掉 ⋯） */
+    .history-group .group-header { flex-wrap: wrap !important; }
+    .history-group .group-header > div:first-child { min-width: 0 !important; margin-right: 6px !important; }
+    .history-group .group-actions-wrapper { display: contents !important; }   /* 让 count/操作 直接参与 header 的换行 */
+    .history-group .mobile-item-more { order: 9 !important; }                 /* 第一行：标题 / 消息数 / ⋯ */
+    .history-group .group-actions { order: 10 !important; }                   /* 第二行：操作按钮 */
+    .history-group .group-message-count { flex: 0 0 auto !important; }
+    .history-group .group-actions { flex: 1 0 100% !important; justify-content: flex-start !important; }
+
+    .mobile-chat-title {
+        display: block !important;
+        flex: 1 1 auto !important;
+        min-width: 0 !important;
+        padding: 0 6px !important;
+        font-size: 15px !important;
+        font-weight: 600 !important;
+        color: var(--dark, #212529) !important;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .mobile-more-btn {
+        display: inline-flex !important; align-items: center; justify-content: center;
+        width: 44px !important; height: 44px !important; flex: 0 0 auto;
+        border: none; background: none; border-radius: 10px; cursor: pointer;
+        font-size: 1.4rem; line-height: 1; color: var(--text-secondary, #555);
+    }
+    .mobile-more-btn:active { background: var(--hover, #f0f2f5); }
+    .mobile-more-sheet {
+        display: none;
+        position: absolute; top: 100%; right: 8px; z-index: 2600;
+        min-width: 240px; max-width: calc(100vw - 16px);
+        background: var(--card-bg, #fff);
+        border: 1px solid var(--border, #eee);
+        border-radius: 14px; padding: 12px;
+        box-shadow: 0 10px 30px rgba(20, 30, 80, .16);
+        box-sizing: border-box;
+    }
+    body.mobile-more-open .mobile-more-sheet { display: block !important; }
+    /* 搬进来的那组控件：换行排布，主题圆点保持可点 */
+    .mobile-more-sheet .nav-controls {
+        display: flex !important; flex-wrap: wrap !important;
+        gap: 10px 12px !important; align-items: center !important;
+        margin: 0 !important; padding: 0 !important;
+        width: auto !important; max-width: none !important;
+    }
+    .mobile-more-sheet .header-theme-switcher { margin: 0 !important; padding: 0 !important; flex-wrap: wrap !important; gap: 8px !important; }
+    .mobile-more-sheet .theme-dot { width: 30px !important; height: 30px !important; }
+    /* 消息区：顶部呼吸留白 + 底部避开小e（原来首条贴 y=0、小e 压正文） */
+    #messages-container { padding-top: 12px !important; padding-bottom: 96px !important; }
+    /* 正文：手机端不低于 15px（对话字号默认值 0.75rem=12px 在手机上太小） */
+    #messages-container .message-content {
+        font-size: max(15px, var(--font-size-messages)) !important;
+        line-height: 1.75 !important;
+    }
+    #messages-container .message-content h1,
+    #messages-container .message-content h2 { font-size: 1.12em !important; }
+    #messages-container .message-content h3,
+    #messages-container .message-content h4 { font-size: 1.04em !important; }
+    #messages-container .message-content table { font-size: 13.5px !important; }
+    #messages-container .message-content pre,
+    #messages-container .message-content code { font-size: 13px !important; }
+    /* ★ 消息操作按钮：原来只有 :hover 才出现 → 手机永远摸不到复制/重答 */
+    #messages-container .message-actions {
+        opacity: 1 !important; visibility: visible !important; pointer-events: auto !important;
+        display: flex !important; flex-wrap: wrap; gap: 8px !important; margin-top: 8px !important;
+    }
+    #messages-container .message-actions > * {
+        min-height: 34px !important; min-width: 34px !important;
+        font-size: 12.5px !important; padding: 0 10px !important;
+    }
+    /* 筛选按钮：字大一点、够手指 */
+    .filter-btn { font-size: 12.5px !important; min-height: 40px !important; padding: 0 12px !important; }
+    /* ★ 对话条目：⋯ 常驻 → 展开重命名/删除/导出（原来整个 hover 才可见，手机删不掉对话） */
+    .history-group .group-actions-wrapper { min-width: 0 !important; }
+    .mobile-item-more {
+        display: inline-flex !important; align-items: center; justify-content: center;
+        width: 40px !important; height: 40px !important; flex: 0 0 auto;
+        border: none; background: none; border-radius: 10px; cursor: pointer;
+        font-size: 1.15rem; line-height: 1; color: var(--text-secondary, #777);
+    }
+    .mobile-item-more:active { background: var(--hover, #f0f2f5); }
+    .history-group .group-actions {
+        position: static !important; transform: none !important;
+        display: none !important; flex-wrap: wrap !important; gap: 8px !important;
+        opacity: 1 !important; visibility: visible !important; pointer-events: auto !important;
+        margin-top: 8px !important;
+    }
+    .history-group.mobile-actions-open .group-actions { display: flex !important; }
+    .history-group.mobile-actions-open .group-message-count { opacity: 1 !important; }
+    .history-group .group-action-btn { width: 40px !important; height: 40px !important; font-size: 15px !important; border-radius: 10px !important; }
+    /* 空态：直接给「新建对话」大按钮（原来只能去抽屉里点） */
+    .messages-container .message[data-id="empty"] .empty-chat-cta {
+        display: inline-flex !important; align-items: center; justify-content: center; gap: 6px;
+        margin: 18px auto 0; padding: 0 22px; min-height: 46px;
+        border: none; border-radius: 23px; cursor: pointer;
+        background: var(--primary-gradient, linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%));
+        color: #fff; font-size: 15px; font-weight: 600;
+        box-shadow: 0 6px 18px var(--primary-glow, rgba(67, 97, 238, .3));
+    }
 }
 
 /* ========== 超窄屏（≤380px）进一步压缩 ========== */

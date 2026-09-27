@@ -777,6 +777,11 @@
                             ${group.branchName}
                             
                         </div>
+                        <!-- 手机端：⋯ 展开条目操作（导出/重命名/删除/便携文件）。
+                             放在 wrapper 之前 + 手机端 order 控制行序：第一行 = 标题/消息数/⋯，第二行 = 操作。
+                             桌面端隐藏，桌面照旧 hover 出操作。 -->
+                        <button class="mobile-item-more" title="更多操作"
+                                onclick="event.stopPropagation(); this.closest('.history-group').classList.toggle('mobile-actions-open');">⋯</button>
                         <div class="group-actions-wrapper" onclick="event.stopPropagation()">
                             <div class="group-message-count">${group.messages.length}</div>
                             <div class="group-actions">
