@@ -441,8 +441,16 @@
     /* 拖拽分隔条在手机上无意义 */
     .sidebar-resizer { display: none !important; }
 
-    /* 抽屉里的「返回主页」按钮在手机上无意义（已有抽屉汉堡按钮） */
-    #full-screen-toggle { display: none !important; }
+    /* 「返回主页」按钮：手机端也要有（用户要求；点它退出全屏回主页） */
+    #full-screen-toggle {
+        display: flex !important;
+        width: 100% !important;
+        min-width: 40px !important;
+        min-height: 40px !important;
+        align-items: center !important;
+        justify-content: center !important;
+        margin: 6px 0 2px !important;
+    }
     /* 手机端隐藏「展开/收缩侧栏」箭头按钮（.sidebar-toggle-btn）
        —— 手机改成了 DeepSeek 同款抽屉，汉堡按钮已负责开合，
           这个箭头会与抽屉行为打架（bug），故整体隐藏。 */
@@ -553,9 +561,14 @@
         z-index: 3300 !important;          /* 高于遮罩(2900)与抽屉(3200)：抽屉开着时 ✕ 也点得到 */
     }
     body.full-screen-mode header::after { display: none !important; }   /* 去掉桌面隐形热区 */
+    /* 全屏时给顶栏让位：**不要**用 top/height 位移（.chat-section 是 relative，
+     *   top 只是视觉位移、不减流内高度 → 整块往下顶 46px，底部输入区被顶出屏幕、
+     *   #send-btn 跑到 y=845（视口 844）点不到）。改成内边距 + border-box，
+     *   让顶栏浮在它的上方空白处，输入区正好落在屏幕底部。 */
     body.full-screen-mode .chat-section {
-        top: 46px !important;
-        height: calc(100dvh - 46px) !important;
+        top: 0 !important;
+        padding-top: 46px !important;
+        box-sizing: border-box !important;
     }
     /* 条目：标题可压缩、操作换到第二行，⋯ 常驻第一行右端（原来标题没 min-width:0 会挤掉 ⋯） */
     .history-group .group-header { flex-wrap: wrap !important; }
@@ -594,6 +607,10 @@
         box-sizing: border-box;
     }
     body.mobile-more-open .mobile-more-sheet { display: block !important; }
+    .mobile-more-sheet {
+        max-height: 72vh !important;
+        overflow-y: auto !important;
+    }
     /* 搬进来的那组控件：换行排布，主题圆点保持可点 */
     .mobile-more-sheet .nav-controls {
         display: flex !important; flex-wrap: wrap !important;
@@ -602,7 +619,28 @@
         width: auto !important; max-width: none !important;
     }
     .mobile-more-sheet .header-theme-switcher { margin: 0 !important; padding: 0 !important; flex-wrap: wrap !important; gap: 8px !important; }
-    .mobile-more-sheet .theme-dot { width: 30px !important; height: 30px !important; }
+    /* 面板里的主题切换：容器原来被钉成 92×30 + overflow:hidden（那是给桌面顶栏用的），
+     *  色点还被 max-width:12px 卡住 → 手机上既挤成小条、又被裁掉，点不到。
+     *  这里整块放开：容器自适应、色点 36px 真实可点。 */
+    .mobile-more-sheet .global-theme-switcher,
+    .mobile-more-sheet .header-theme-switcher {
+        width: auto !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+        flex-wrap: wrap !important;
+        gap: 8px !important;
+        margin: 0 !important;
+    }
+    .mobile-more-sheet .theme-dot {
+        flex: 0 0 auto !important;
+        width: 36px !important;
+        height: 36px !important;
+        min-width: 36px !important;
+        max-width: 36px !important;
+    }
     /* 消息区：顶部呼吸留白 + 底部避开小e（原来首条贴 y=0、小e 压正文） */
     #messages-container { padding-top: 12px !important; padding-bottom: 96px !important; }
     /* 正文：手机端不低于 15px（对话字号默认值 0.75rem=12px 在手机上太小） */
