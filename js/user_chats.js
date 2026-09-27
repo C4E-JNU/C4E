@@ -51,8 +51,12 @@ function _stampChanged() {
         if (!b.updatedAt) b.updatedAt = now;
         if (_chatsDeleted[id]) delete _chatsDeleted[id];   // 本地看得见 = 活着
     });
+    // ★ 墓碑只由**显式删除动作**写（markBranchDeleted）。旧实现在这里做「这一轮看不见 = 刚被删」
+    //   的推断 → 只要 state.branches 短暂变少（缓存没写全 / 合并时序 / 切身份），就会批量写墓碑
+    //   → 推到后端就被真删。2026-09-27 就是这样在**同一毫秒**删掉 21 个对话（branch-17~26 / 36~46，
+    //   用户报「没删的对话也不见了」）。**看不见 ≠ 被删。**
     Object.keys(_chatsMeta).forEach(function (id) {
-        if (!seen[id]) { _chatsDeleted[id] = now; delete _chatsMeta[id]; }   // 刚被删
+        if (!seen[id]) delete _chatsMeta[id];   // 只清本地指纹账，绝不写墓碑
     });
 }
 
@@ -87,6 +91,14 @@ function _mergeBranchSets(localBranches, localDeleted, remote) {
     Object.keys(localBranches || {}).forEach(function (id) { if (!rb[id]) added++; });
 
     return { branches: br, deleted: dl, added: added };
+}
+
+/** 显式删除对话时调用：**只有这里**写墓碑（原因见 _stampChanged 的注释）。 */
+function markBranchDeleted(branchId) {
+    if (!branchId) return;
+    _chatsDeleted[branchId] = new Date().toISOString();
+    delete _chatsMeta[branchId];
+    if (typeof setUserChats === 'function') setUserChats();   // 立刻推后端
 }
 
 function _cacheKey(k) { return window.identityKey(k); }
@@ -209,4 +221,5 @@ window.addEventListener('pagehide', function () {
 window.hydrateUserChats = hydrateUserChats;
 window.setUserChats = setUserChats;
 window.pushUserChats = pushUserChats;
+window.markBranchDeleted = markBranchDeleted;
 window.syncChatsFromServer = syncChatsFromServer;

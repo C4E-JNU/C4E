@@ -173,7 +173,7 @@
             // 批量渲染图表
             setTimeout(renderMermaidDiagrams, 100);
 
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            scrollToBottomIfFollowing();
             updateHistoryList();
         }
 

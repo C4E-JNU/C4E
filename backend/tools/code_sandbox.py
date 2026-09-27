@@ -53,44 +53,45 @@ async def run_python(code: str, timeout: int = 30):
             with open(script_path, "w", encoding="utf-8") as f:
                 f.write(code)
 
-            # 在子进程中执行
-            process = await asyncio.create_subprocess_exec(
-                _python_exe(), "-u", script_path,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=outdir,
-                env={
-                    **os.environ,
-                    "PYTHONIOENCODING": "utf-8",
-                    # ⚠️ 原来这里注释写"禁止写文件到外部"，其实不准：PYTHONSAFEPATH 只影响
-                    # sys.path（不把脚本目录加进去），**管不住 open() 写文件**。
-                    # 真正拦住的只有上面 dangerous_patterns 那串字符串（挡 os.system/subprocess/
-                    # eval/exec/compile），裸的绝对路径写入仍可能发生。
-                    "PYTHONSAFEPATH": "1",
-                }
-            )
+            # 在子进程中执行。
+            # 为什么是「线程 + subprocess.run」而不是 asyncio.create_subprocess_exec：
+            #   Windows 本地实例跑在 Selector 事件循环上（原因见 backend/app.py 主程序的注释），
+            #   而 Selector 循环不支持 asyncio 子进程。subprocess.run 本身就是阻塞调用，
+            #   丢进线程里语义与原来的 PIPE + communicate() 一致（超时同样会杀掉子进程）。
+            def _exec():
+                return subprocess.run(
+                    [_python_exe(), "-u", script_path],
+                    cwd=outdir,
+                    capture_output=True,
+                    timeout=timeout,
+                    env={
+                        **os.environ,
+                        "PYTHONIOENCODING": "utf-8",
+                        # ⚠️ 原来这里注释写"禁止写文件到外部"，其实不准：PYTHONSAFEPATH 只影响
+                        # sys.path（不把脚本目录加进去），**管不住 open() 写文件**。
+                        # 真正拦住的只有上面 dangerous_patterns 那串字符串（挡 os.system/subprocess/
+                        # eval/exec/compile），裸的绝对路径写入仍可能发生。
+                        "PYTHONSAFEPATH": "1",
+                    },
+                )
 
             try:
-                stdout, stderr = await asyncio.wait_for(
-                    process.communicate(), timeout=timeout
-                )
-                stdout_text = stdout.decode("utf-8", errors="replace")
-                stderr_text = stderr.decode("utf-8", errors="replace")
-
-                return json.dumps({
-                    "stdout": stdout_text[-5000:] if len(stdout_text) > 5000 else stdout_text,
-                    "stderr": stderr_text[-2000:] if len(stderr_text) > 2000 else stderr_text,
-                    "exit_code": process.returncode,
-                }, ensure_ascii=False)
-
-            except asyncio.TimeoutError:
-                process.kill()
-                await process.wait()
+                proc = await asyncio.to_thread(_exec)
+            except subprocess.TimeoutExpired:
                 return json.dumps({
                     "error": f"执行超时 ({timeout} 秒)",
                     "stdout": "",
                     "stderr": f"脚本运行超过 {timeout} 秒，已终止"
                 })
+
+            stdout_text = proc.stdout.decode("utf-8", errors="replace")
+            stderr_text = proc.stderr.decode("utf-8", errors="replace")
+
+            return json.dumps({
+                "stdout": stdout_text[-5000:] if len(stdout_text) > 5000 else stdout_text,
+                "stderr": stderr_text[-2000:] if len(stderr_text) > 2000 else stderr_text,
+                "exit_code": proc.returncode,
+            }, ensure_ascii=False)
 
     except Exception as e:
         return json.dumps({

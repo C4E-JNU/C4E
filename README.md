@@ -10,7 +10,7 @@
 
 | 文档 | 什么时候读 |
 |---|---|
-| **[HANDOFF.md](HANDOFF.md)** | **接手项目先读这个** —— 当前状态快照：权限体系、部署形态、开发命令、已知坑 |
+| **[HANDOFF.md](开发中间产物/HANDOFF.md)** | **接手项目先读这个** —— 当前状态快照：权限体系、部署形态、开发命令、已知坑 |
 | **[CHANGELOG.md](CHANGELOG.md)** | 想知道"某处为什么这么写" —— 按日期记录了每次改动的原因与影响文件 |
 | [项目架构说明.md](项目架构说明.md) | 要改代码 —— 前后端文件职责、API 全表、核心链路 |
 
@@ -23,7 +23,7 @@
 | 模块 | 说明 |
 |---|---|
 | 🧠 **Agent 引擎** | 手搓流式（custom）与 LangChain 两套引擎，保留候选 |
-| 🌐 **知识图谱** | Neo4j 查询（graph_schema / execute_cypher），图谱结构可配置，当前库内存有科研实体关系数据 |
+| 🌐 **知识图谱** | Neo4j 查询（graph_query：schema / cypher / search），图谱结构可配置，当前库内存有科研实体关系数据 |
 | 📄 **文献解析** | MinerU v4 批量 PDF→Markdown（支持文件/文件夹） |
 | 🔍 **联网搜索** | web_search / web_extract，免费 Bing 抓取无 key |
 | 📎 **全后端文件解析** | pdf / docx / xlsx / xls / pptx / odt / txt（上传只存 file_id，历史附件即引用，Hermes 式） |
@@ -103,7 +103,7 @@ python app.py
 
 | 分组 | 工具 |
 |---|---|
-| 图谱 (graph) | graph_schema · execute_cypher |
+| 图谱 (graph) | graph_query（schema / cypher / search 三合一） |
 | 联网 (web) | web_search · web_extract |
 | 技能 (skills) | skill_list · skill_view · skill_write |
 | 文件 (file) | read_file · write_file · list_files |

@@ -44,8 +44,8 @@
 
             // 智能体配置
             agentConfig: {
-                enabledTools: ['graph_schema', 'execute_cypher', 'shared_search', 'shared_upload', 'search_history', 'conversation_notes', 'skill_list', 'skill_view', 'skill_write', 'web_search', 'web_extract', 'todo', 'mineru_parse', 'read_file', 'write_file', 'list_files', 'run_code', 'terminal', 'delegate_task'],
-                loadedSkills: ['graph-guide', 'self-modify'],
+                enabledTools: ['graph_query', 'shared_search', 'shared_upload', 'search_history', 'conversation_notes', 'skill_list', 'skill_view', 'skill_write', 'web_search', 'web_extract', 'todo', 'mineru_parse', 'read_file', 'write_file', 'list_files', 'run_code', 'terminal', 'delegate_task'],
+                loadedSkills: ['self-modify'],
                 permissionMode: 'safe',
                 engine: 'custom',          // custom=裸API手写循环 / langchain=LangChain流式
                 maxRounds: 8,              // 工具循环步数，0=无限

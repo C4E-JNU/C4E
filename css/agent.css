@@ -134,6 +134,10 @@
     max-width: 90%;
 }
 .agent-step-header {
+    /* 一行，不折行（用户 2026-09-27 报：「⏳ 智能体思考中」被折成两行）*/
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     font-size: 0.75rem;
     font-weight: 600;
     color: var(--gray, #666);
@@ -292,6 +296,7 @@
     margin: 0.15rem 0;
 }
 .reasoning-steps-container .agent-step-header {
+    white-space: nowrap;
     font-size: var(--font-size-thinking);
     font-weight: 600;
     color: var(--gray, #666);

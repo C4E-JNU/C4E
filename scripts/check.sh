@@ -2,7 +2,7 @@
 # C4EAI 快速自检（canonical check）—— 提交前跑一次，秒级完成。
 #   bash scripts/check.sh
 # 覆盖：Python 语法 / JS 语法 / 关键不变量。
-# 不含浏览器真机验证（需起实例 + Edge CDP，见 HANDOFF.md「验证方法」）。
+# 不含浏览器真机验证（需起实例 + Edge CDP，见 开发中间产物/HANDOFF.md「验证方法」）。
 set -u
 cd "$(dirname "$0")/.."
 PY="${C4EAI_PYTHON:-<ANACONDA-DIR>/python.exe}"

@@ -22,8 +22,7 @@ async function loadSkillsIndex() {
             }
         }
     } catch(e) { /* 降级 */ }
-    // 硬编码兜底
-    return { 'graph-guide': '催化降解图谱查询指引 — 图谱结构、别名映射、查询策略、回答格式' };
+    return {};   // 拿不到就是没有（旧的硬编码兜底已删：技能描述的唯一来源是 skills/index.json）
 }
 
 // 缓存

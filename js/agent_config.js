@@ -2,11 +2,11 @@
 
 // 工具分组（Hermes toolset 风格：按能力域分组勾选）
 const TOOL_GROUPS = [
-    { name: '图谱 (graph)', tools: ['graph_schema', 'execute_cypher'] },
+    { name: '图谱 (graph)', tools: ['graph_query'] },
     { name: '数据库/共享库 (database)', tools: ['shared_search', 'shared_upload'] },
     { name: '联网 (web)', tools: ['web_search', 'web_extract'] },
     { name: '技能 (skills)', tools: ['skill_list', 'skill_view', 'skill_write'] },
-    { name: '文件 (file)', tools: ['read_file', 'write_file', 'list_files'] },
+    { name: '文件 (file)', tools: ['read_file', 'write_file', 'list_files', 'list_outputs'] },
     { name: '代码/终端 (code)', tools: ['run_code', 'terminal'] },
     { name: '记忆/历史 (memory)', tools: ['search_history', 'conversation_notes'] },
     { name: '任务 (task)', tools: ['todo'] },
@@ -47,11 +47,6 @@ async function renderToolsGroups() {
 
     container.innerHTML = html || '<div style="color:var(--gray)">（后端未返回工具）</div>';
 
-    // 隐藏旧的硬编码工具勾选（避免重复读取）；保留 DOM 兼容
-    document.querySelectorAll('#tool-graph-schema, #tool-execute-cypher, #tool-skill-list, #tool-skill-view, #tool-web-search, #tool-web-extract, #tool-todo, #tool-notes, #tool-run-code, #tool-read-file, #tool-write-file, #tool-list-files, #tool-skill-write, #tool-search-history, #tool-shared-search, #tool-shared-upload, #tool-mineru').forEach(cb => {
-        cb.style.display = 'none';
-        if (cb.closest('label')) cb.closest('label').style.display = 'none';
-    });
 }
 
 
@@ -79,9 +74,6 @@ async function renderSkillsCheckboxes() {
         } catch(e2) { /* 降级 */ }
     }
 
-    if (skills.length === 0) {
-        skills = [{ name: 'graph-guide', description: '催化降解图谱查询指引' }];
-    }
 
     // 获取当前已启用的技能列表
     const enabled = state.agentConfig?.loadedSkills || [];
@@ -175,7 +167,9 @@ function saveSubagentConfigFromPanel() {
     const _sw = document.getElementById('subagent-warn');
     const _sa = document.getElementById('subagent-abort');
     if (_se) state.settings.subagentEnabled = !!_se.checked;
-    if (_sr) state.settings.subagentMaxRounds = Math.min(20, Math.max(1, parseInt(_sr.value) || 4));
+    // 0 = 无限（与主智能体「工具循环步数」同一约定）。旧实现 Math.min(20, …) 把上限锁死在 20，
+// 用户 2026-09-27 报「设置不了无限」——那正是多余的钳制，去掉。
+if (_sr) state.settings.subagentMaxRounds = Math.max(0, parseInt(_sr.value) || 0);
     if (_sp) state.settings.subagentMaxParallel = Math.min(8, Math.max(1, parseInt(_sp.value) || 2));
     if (_sm) state.settings.subagentMaxTasks = Math.min(8, Math.max(1, parseInt(_sm.value) || 4));
     if (_sn) state.settings.subagentNudge = Math.max(0, parseInt(_sn.value) || 0);
@@ -272,24 +266,6 @@ function loadToolsConfigFromState() {
     // 动态渲染工具分组（异步，用 cfg.enabledTools 同步勾选态）
     renderToolsGroups();
 
-    // 旧 DOM 兜底（向后兼容；动态渲染成功后会隐藏它们）
-    if (toolGraphSchema) toolGraphSchema.checked = cfg.enabledTools.includes('graph_schema');
-    if (toolExecuteCypher) toolExecuteCypher.checked = cfg.enabledTools.includes('execute_cypher');
-    if (toolSkillList) toolSkillList.checked = cfg.enabledTools.includes('skill_list');
-    if (toolSkillView) toolSkillView.checked = cfg.enabledTools.includes('skill_view');
-    if (toolWebSearch) toolWebSearch.checked = cfg.enabledTools.includes('web_search');
-    if (toolWebExtract) toolWebExtract.checked = cfg.enabledTools.includes('web_extract');
-    if (toolTodo) toolTodo.checked = cfg.enabledTools.includes('todo');
-    if (toolNotes) toolNotes.checked = cfg.enabledTools.includes('conversation_notes');
-    if (toolRunCode) toolRunCode.checked = cfg.enabledTools.includes('run_code');
-    if (toolReadFile) toolReadFile.checked = cfg.enabledTools.includes('read_file');
-    if (toolWriteFile) toolWriteFile.checked = cfg.enabledTools.includes('write_file');
-    if (toolListFiles) toolListFiles.checked = cfg.enabledTools.includes('list_files');
-    if (toolSkillWrite) toolSkillWrite.checked = cfg.enabledTools.includes('skill_write');
-    if (toolSearchHistory) toolSearchHistory.checked = cfg.enabledTools.includes('search_history');
-    if (toolSearchKnowledge) toolSearchKnowledge.checked = cfg.enabledTools.includes('shared_search');
-    if (toolSharedUpload) toolSharedUpload.checked = cfg.enabledTools.includes('shared_upload');
-    if (toolMineru) toolMineru.checked = cfg.enabledTools.includes('mineru_parse');
     loadSkillsConfigFromState();
     loadPermissionModeFromState();
     loadAgentEngineFromState();
@@ -303,31 +279,10 @@ function saveAgentConfigToLocal() {
 
 // 「保存」按钮：统一读取面板 UI 状态 → 提交到 state/localStorage → 收起面板
 function saveAgentConfig() {
+    // 工具：唯一真源 = 动态分组勾选（后端 /api/tools 渲染的 .tool-checkbox）
     const tools = [];
-    // 优先读动态分组勾选（后端 /api/tools 渲染的 .tool-checkbox）
-    const dynChecked = document.querySelectorAll('#tools-groups-container .tool-checkbox:checked');
-    if (dynChecked.length > 0) {
-        dynChecked.forEach(cb => { if (cb.dataset.tool) tools.push(cb.dataset.tool); });
-    } else {
-        // 兜底：后端不可用、未渲染时读旧 DOM
-        if (toolGraphSchema && toolGraphSchema.checked) tools.push('graph_schema');
-        if (toolExecuteCypher && toolExecuteCypher.checked) tools.push('execute_cypher');
-        if (toolSkillList && toolSkillList.checked) tools.push('skill_list');
-        if (toolSkillView && toolSkillView.checked) tools.push('skill_view');
-        if (toolWebSearch && toolWebSearch.checked) tools.push('web_search');
-        if (toolWebExtract && toolWebExtract.checked) tools.push('web_extract');
-        if (toolTodo && toolTodo.checked) tools.push('todo');
-        if (toolNotes && toolNotes.checked) tools.push('conversation_notes');
-        if (toolRunCode && toolRunCode.checked) tools.push('run_code');
-        if (toolReadFile && toolReadFile.checked) tools.push('read_file');
-        if (toolWriteFile && toolWriteFile.checked) tools.push('write_file');
-        if (toolListFiles && toolListFiles.checked) tools.push('list_files');
-        if (toolSkillWrite && toolSkillWrite.checked) tools.push('skill_write');
-        if (toolSearchHistory && toolSearchHistory.checked) tools.push('search_history');
-        if (toolSearchKnowledge && toolSearchKnowledge.checked) tools.push('shared_search');
-        if (toolSharedUpload && toolSharedUpload.checked) tools.push('shared_upload');
-        if (toolMineru && toolMineru.checked) tools.push('mineru_parse');
-    }
+    document.querySelectorAll('#tools-groups-container .tool-checkbox:checked')
+        .forEach(cb => { if (cb.dataset.tool) tools.push(cb.dataset.tool); });
 
     const skills = [];
     document.querySelectorAll('.skill-checkbox:checked').forEach(cb => {

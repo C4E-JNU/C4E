@@ -70,12 +70,13 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
         }
     }
     noteRefs = (noteRefs || []).map(function (r) { return { id: r.id, scope: r.scope || 'notes', title: r.title || '' }; });
-    // 生成开始：切入停止态（sendBtn 变 ■，可点击停止）
+    // 生成开始：按钮切成「⚡立即回答」（用户 2026-09-27 定：不硬中断、不丢已探索内容，只催它马上出答案）
     state.isGenerating = true;
-    if (typeof sendBtn !== 'undefined' && sendBtn) { sendBtn.innerHTML = '■'; sendBtn.classList.add('stop'); }
+    state.userHasScrolledUp = false;   // 刚发出去 = 人在看底部，允许贴底
+    if (typeof sendBtn !== 'undefined' && sendBtn) { sendBtn.innerHTML = '⚡'; sendBtn.classList.add('stop'); sendBtn.title = '立即回答'; }
     if (typeof updateSendButtonState === 'function') updateSendButtonState();
-    const enabledTools = state.agentConfig?.enabledTools || ['graph_schema', 'execute_cypher', 'shared_search', 'search_history', 'conversation_notes', 'skill_view', 'web_search', 'web_extract', 'todo', 'delegate_task', 'mineru_parse', 'read_file', 'list_files'];
-    const loadedSkills = state.agentConfig?.loadedSkills || ['graph-guide'];
+    const enabledTools = state.agentConfig?.enabledTools || ['graph_query', 'shared_search', 'search_history', 'conversation_notes', 'skill_view', 'web_search', 'web_extract', 'todo', 'delegate_task', 'mineru_parse', 'read_file', 'list_files'];
+    const loadedSkills = state.agentConfig?.loadedSkills || ['self-modify'];
     const currentBranch = state.branches[state.currentBranchId];
     const modelId = state.currentModel;
     const modelCfg = modelConfig[modelId];
@@ -123,10 +124,10 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
 
     liveEl.appendChild(liveContent);
     messagesContainer.appendChild(liveEl);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    scrollToBottomIfFollowing();
 
     // 实时渲染辅助
-    function liveScroll() { messagesContainer.scrollTop = messagesContainer.scrollHeight; }
+    function liveScroll() { scrollToBottomIfFollowing(); }
     function ensureReasoningBox() {
         if (!reasoningBox) {
             reasoningBox = document.createElement('div');
@@ -176,9 +177,9 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
 
     // ── 超时保护提示（催促 / 警告 / 终止）──
     function handleTimeoutNotice(level, text, elapsed) {
-        var icon = level === 'abort' ? '⏹️' : (level === 'warn' ? '⚠️' : '⏳');
-        var label = level === 'abort' ? '超时终止' : (level === 'warn' ? '超时警告' : '超时催促');
-        var color = level === 'abort' ? '#e02020' : (level === 'warn' ? '#e6a23c' : 'var(--gray)');
+        var icon = level === 'abort' ? '⏹️' : (level === 'warn' ? '⚠️' : (level === 'immediate' ? '⚡' : '⏳'));
+        var label = level === 'abort' ? '超时终止' : (level === 'warn' ? '超时警告' : (level === 'immediate' ? '立即回答' : '超时催促'));
+        var color = level === 'abort' ? '#e02020' : (level === 'warn' ? '#e6a23c' : (level === 'immediate' ? 'var(--primary)' : 'var(--gray)'));
         reasoningSteps.push({ type: 'timeout_notice', level: level, text: text || '', elapsed: elapsed || 0 });
         appendStepNode('<div class="agent-step-header" style="color:' + color + ';">' + icon + ' ' + label +
             (elapsed ? '（' + elapsed + 's）' : '') + '</div><div class="obs-content">' + escHtml(text || '') + '</div>');
@@ -461,14 +462,14 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
     if (mergeInto) {
         // 续写：整体重渲染消息列表 → 原消息框显示【原文+续写+推理】在同一框
         if (typeof renderMessages === 'function') renderMessages();
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        scrollToBottomIfFollowing();
     } else {
         // 用规范渲染替换临时 live DOM（含操作按钮 + 持久化推理容器）
         var finalMsg = currentBranch.messages[currentBranch.messages.length - 1];
         var msgEl = createMessageElement(finalMsg);
         if (msgEl && liveEl.parentNode) {
             liveEl.parentNode.replaceChild(msgEl, liveEl);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            scrollToBottomIfFollowing();
         }
     }
 
@@ -476,7 +477,7 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
     updateTokenDisplay();
     // 生成结束：恢复发送态
     state.isGenerating = false;
-    if (typeof sendBtn !== 'undefined' && sendBtn) { sendBtn.innerHTML = '➤'; sendBtn.classList.remove('stop'); }
+    if (typeof sendBtn !== 'undefined' && sendBtn) { sendBtn.innerHTML = '➤'; sendBtn.classList.remove('stop'); sendBtn.title = '发送'; }
     if (typeof updateSendButtonState === 'function') updateSendButtonState();
     return answer;
 }

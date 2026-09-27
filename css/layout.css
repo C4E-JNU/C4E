@@ -1022,10 +1022,16 @@
 
         /* 笔记面板 - 浮动窗口（默认隐藏；打开时以 fixed 覆盖层出现，不挤占中间布局） */
         /* 可在全屏/非全屏下通用；拖标题栏移动、四角缩放手柄调大小，位置大小存 localStorage */
+        /* 浮动内容面板（对话笔记 #notes-panel / 数据库 #database-panel 共用此类）
+           z-index 必须是"浮窗层"而不是 1500：对话视图里 body.full-screen-mode .chat-section 是
+           position:fixed; z-index:2000 且铺满全屏，1500 的浮窗会被它整个盖住（实测 elementFromPoint
+           命中 .message，面板点不到也看不见）。兄弟浮窗早已在同层：文件预览 .file-preview-panel 9997、
+           笔记编辑 .floating-editor 9999 —— 这里统一到同层（笔记/数据库两个浮窗同时修好）。
+           注意 mobile.css 另有 .notes-panel{z-index:3200}（窄屏分支，本条不生效）。 */
         .notes-panel {
             display: none;
             position: fixed;
-            z-index: 1500;
+            z-index: 9997;
             top: 120px;
             left: 60px;
             width: 480px;

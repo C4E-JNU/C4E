@@ -9,6 +9,22 @@
         // 修复：用 data-disabled 替代 disabled 属性，避免浏览器阻止点击事件
         sendBtn.removeAttribute('disabled');
         function setSendBtnDisabled(val) { sendBtn.classList.toggle('btn-disabled', val); }
+        // 发送按钮的**唯一状态真源**（用户 2026-09-27）：
+        //   · 生成中 = 「⚡立即回答」，**必须可点**。旧代码发送后把按钮置 btn-disabled，
+        //     而点击处理第一行就是 `if (btn-disabled) return` → 停止/立即回答永远点不到（踩过）。
+        //   · 空闲 = 有文字 + 模型已配置 才可点。
+        function updateSendButtonState() {
+            if (state.isGenerating) { setSendBtnDisabled(false); return; }
+            const hasText = messageInput.value.trim().length > 0;
+            const hasKey = !!(state.currentModel && state.apiKeys[state.currentModel]);
+            setSendBtnDisabled(!hasText || !hasKey);
+        }
+        // 流式输出的自动滚动（用户 2026-09-27）：只在用户没往上滑时贴底——
+        //   否则正在看前面的思考内容会被强制拽到底部看最新消息。
+        function scrollToBottomIfFollowing() {
+            if (state.userHasScrolledUp) return;
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
         const typingIndicator = document.getElementById('typing-indicator');
         const startExperienceBtn = document.getElementById('start-experience');
         const totalTokensEl = document.getElementById('total-tokens');
@@ -72,23 +88,6 @@
         const agentConfigPanel = document.getElementById('agent-config-panel');
         const closeAgentConfig = document.getElementById('close-agent-config');
         const neo4jStatusDot = document.getElementById('neo4j-status-dot');
-        const toolGraphSchema = document.getElementById('tool-graph-schema');
-        const toolExecuteCypher = document.getElementById('tool-execute-cypher');
-        const toolSkillList = document.getElementById('tool-skill-list');
-        const toolSkillView = document.getElementById('tool-skill-view');
-        const toolWebSearch = document.getElementById('tool-web-search');
-        const toolWebExtract = document.getElementById('tool-web-extract');
-        const toolTodo = document.getElementById('tool-todo');
-        const toolNotes = document.getElementById('tool-notes');
-        const toolRunCode = document.getElementById('tool-run-code');
-        const toolReadFile = document.getElementById('tool-read-file');
-        const toolWriteFile = document.getElementById('tool-write-file');
-        const toolListFiles = document.getElementById('tool-list-files');
-        const toolSkillWrite = document.getElementById('tool-skill-write');
-        const toolSearchHistory = document.getElementById('tool-search-history');
-        const toolSearchKnowledge = document.getElementById('tool-shared-search');   // 数据库检索（云端 shared_search）
-        const toolSharedUpload = document.getElementById('tool-shared-upload');      // 数据库上传（shared_upload）
-        const toolMineru = document.getElementById('tool-mineru');
         // MinerU 配置面板元素
         const panelMineruToken = document.getElementById('panel-mineru-token');
         const panelMineruSave = document.getElementById('panel-mineru-save');

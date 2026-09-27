@@ -1,7 +1,64 @@
 # 更新日志（CHANGELOG）
+## [2026-09-27] fix/feat: 图谱工具合并 · 数据库浮窗层级 · 前端四项体验修复 · 热更新包取错源码
+
+### 原来的毛病
+
+1. **图谱三件套**：`graph_schema` / `execute_cypher` / `graph_vector_search` 三个工具，前端「图谱」组
+   只列了前两个 —— `graph_vector_search` 用户根本勾不到；三份 `tools/*.md` 还是纯前端时代的死文档。
+2. **对话页点「数据库」看不到浮窗**：`#database-panel` 复用的 `.notes-panel` 层级是 1500，被对话视图
+   `body.full-screen-mode .chat-section`（`position:fixed; z-index:2000`，铺满全屏）整个盖住
+   （`elementFromPoint` 实测命中 `.message`）。`#notes-panel`（对话笔记）同款毛病。
+3. **打包版启动报 `Accept failed on a socket` / `WinError 64`**：CPython Windows **Proactor** 事件循环的 bug
+   —— accept 出错会 `sock.close()` 关掉**监听 socket** 且不再 re-arm，服务从此静默不接受连接。
+4. **前端四项体验问题**：当前对话靠一段「(当前)」绿字标记；删掉当前对话会跳到一个又旧又空的对话
+   （旧代码取对象插入顺序的第一个 = 最早创建的）；「⏳ 智能体思考中」被折成两行（父级
+   `.message-content{display:inline-block}` 按内容收缩把盒子算窄了）；**用着用着莫名弹出登录框**。
+5. **热更新包里的代码是旧的**：`stage_hotfix()` 从 `SNAP`（公开仓脱敏快照 clone，属 `public` 流程）取 app
+   代码，那份快照停更后就把几十小时前的旧代码打进热更新包 —— 用户双击 `更新.bat` 会把修好的 bug 又盖回去
+   （0.1.3 的包已中招，未外发，已删除）。
+
+### 设计（用户拍板）
+
+- 图谱三工具**合成一个 `graph_query`**（`action ∈ {schema, cypher, search}`，照 `shared_search` 的写法）：
+  一个白名单、一处参数模型、一个勾选框。删掉 `skills/graph-guide` 技能 —— 其中真正独有的「空结果降级链」
+  与「回答格式」两段**并进工具描述**（LLM 真正读到的地方）；图谱结构本由工具实时返回、别名本就在图里
+  （节点的 `aliases` 属性），不丢东西。「现在是纯后端」→ 旧前端的三份 `tools/*.md` 全删。
+- 浮窗层级**统一到浮窗层**：`.notes-panel` `1500 → 9997`，对齐兄弟浮窗（文件预览 9997 / 笔记编辑 9999），
+  并在 CSS 里写明为什么不能是 1500。
+- 当前对话**用 hover 那套颜色常驻**（用户原话：不要文字标记，鼠标移过去的颜色加深常驻即可），4 个主题各配一条。
+- 401 **不再直接弹登录框**：先静默复检 `/api/auth/me`，只有它也 401 才弹；否则轻提示 + 顶栏芯片标红
+  （状态位落在 `_renderChip()` 里，避免被重渲染冲掉）。`/api/auth/*` 自身的 401（密码错）排除在外。
+- 热更新包**与安装包同一个白名单、同一份字节**（`stage_hotfix` 复用 `make_portable.stage_files`），
+  从结构上不可能再取到旧代码。
+
+### 改动
+
+- `backend/agent/tools.py`：3 个参数模型/工具 → `GraphQueryParams` + `graph_query(action)`；`agent.py`（降级逻辑×3
+  + 提示词）、`subagent.py`、`role_policy.py`、`app.py` 同步；`skills/index.json` 6→5。
+- 前端：`agent_config.js` 图谱组只留 `graph_query`，删 15 个纯前端时代的静态工具勾选框及其兜底分支；
+  `dom.js` 删对应缓存；`state.js` / `graph_rag.js` / `skill_system.js` / `index.html` 同步。
+- `css/layout.css`：`.notes-panel` z-index `1500 → 9997`。
+- `js/sidebar.js` + `css/sidebar.css`：当前对话 `.current` 常驻高亮（删掉「(当前)」）。
+- `js/branching.js`：删掉当前对话后切到**侧栏顺序里的第一条**，一条都不剩才进空态。
+- `css/agent.css`：`.agent-step-header` 加 `white-space: nowrap`（实时提示与推理步骤两处）。
+- `js/auth.js`：401 静默复检 + 顶栏芯片标红 + 轻提示。
+- `backend/app.py`：`__main__` 用 Selector 事件循环 + uvicorn `loop=none`；横幅给 `127.0.0.1`；
+  `code_sandbox.py` 改线程执行（Selector 不支持 asyncio 子进程）。
+- `_private/c4eai_release.py`：`stage_hotfix` 改为从安装包同一白名单取字节，删掉已无人引用的 `SNAP`。
+- `index.html`：升缓存版本号（`auth.js v=20`、`sidebar.js v=11`、`branching.js v=12`、`sidebar.css v=7`、`agent.css v=5`）。
+
+### 验证
+
+- `bash scripts/check.sh` **ALL_PASS**；改过的 JS 全部 `node --check` 通过。
+- 真浏览器（1600×900、CDP）：图谱勾选框恰好 1 个、工具 19 个、保存收集 19+5、重开回填一致；`.current` 背景
+  `rgba(67,97,238,.1)` 且无「(当前)」文字；删 `probe-2` 后当前自动变列表第一条 `probe-0`；「思考中」实测
+  **换行段数 1 / 高度 19px**；强制 401 实测**登录框不弹**、芯片 `⚠ … 重新登录`（红框、3 秒后仍在）、服务端日志
+  确认 `/api/auth/me` 复检请求真的发出。
+- 安装包 `verify_package.py` **FAIL=0**（包内 app 区 101 文件逐字节 == 工作区、无 workspace 残留、Selector 循环、
+  共享库地址在包里）；热更新包 app 区 101 文件与底座**不一致 0**，并逐项确认本轮改动都在包里。
 
 > 本文件记录**每次改动做了什么、为什么、影响哪些文件**。
-> 接手项目前先读本文件 + [`HANDOFF.md`](HANDOFF.md)（当前状态快照）。
+> 接手项目前先读本文件 + [`HANDOFF.md`](开发中间产物/HANDOFF.md)（当前状态快照）。
 > 格式：`[日期] 类型(范围): 摘要` + 改动明细 + 影响文件。
 
 ---

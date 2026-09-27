@@ -11,6 +11,11 @@
             loadBranches();
             updateUI();
             initSidebar();
+            // 把「上次打开的对话」的内容渲染出来（用户 2026-09-27 报：刚进对话界面时
+            // 默认亮起的对话一片空白、点它也没反应——loadBranches() 只恢复了
+            // currentBranchId，列表由 initSidebar() 点亮那一条，但**没人调 renderMessages()**；
+            // 再点当前那条又被 switchToBranch 的早退挡掉，必须点别的对话再点回来才出来）。
+            if (typeof renderMessages === 'function') renderMessages();
             initFileAttachments(); // 新的文件附件系统
             initDatabase();
             initNotesPanel(); // 初始化笔记面板
@@ -71,7 +76,7 @@
                 // 手动检查禁用状态（disabled 属性已被移除，避免阻止点击事件）
                 if (sendBtn.classList.contains('btn-disabled')) return;
                 if (state.isGenerating) {
-                    stopGeneration();
+                    requestImmediateAnswer();
                 } else {
                     sendMessage();
                 }
@@ -122,13 +127,7 @@
             });
 
             // 监听输入，实时更新发送按钮状态
-            messageInput.addEventListener('input', () => {
-                if (!state.isGenerating) {
-                    const hasText = messageInput.value.trim().length > 0;
-                    const hasKey = state.currentModel && state.apiKeys[state.currentModel];
-                    setSendBtnDisabled(!hasText || !hasKey);
-                }
-            });
+            messageInput.addEventListener('input', updateSendButtonState);
 
             // 聊天区模型选择器事件
             chatModelSelector.addEventListener('change', (e) => {
@@ -208,14 +207,11 @@
             renderMessages();
 
             // 监听对话容器滚动，检测用户是否手动向上滚动
+            // 用户是否正在自己看上面的内容（用户 2026-09-27：上滑时流式输出不得强制拉到底）。
+            // 旧实现只在"生成中"才置位 → 一开新生成又把正在读的人拽走；而且那个标记从来没人读。
             messagesContainer.addEventListener('scroll', () => {
                 const isAtBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop - messagesContainer.clientHeight < 50;
-                if (isAtBottom) {
-                    state.userHasScrolledUp = false;
-                } else if (state.isGenerating) {
-                    // 如果正在生成且用户向上滚动力度较大，标记向上滚动
-                    state.userHasScrolledUp = true;
-                }
+                state.userHasScrolledUp = !isAtBottom;
             });
         }
 
@@ -357,13 +353,16 @@
 
         // ==================== 统一的消息发送函数 ====================
 
-        function stopGeneration() {
-            if (state.isGenerating && state.abortController) {
-                state.abortController.abort();
-                state.isGenerating = false;
-                sendBtn.innerHTML = '➤';
-                sendBtn.classList.remove('stop');
-                addSystemMessageWithDelete('已停止回答生成。');
+        // 生成中的按钮 = 「⚡立即回答」（用户 2026-09-27 定）：不中断连接、不丢已探索的内容，
+        // 只给后端一个"马上收尾出答案"的信号 —— 后端注入与超时警告同款的催促提示，然后照常输出。
+        async function requestImmediateAnswer() {
+            if (!state.isGenerating) return;
+            try {
+                const r = await fetch('/api/agent/nudge', { method: 'POST' });
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                showToast('已请求立即回答：它会用现有信息收尾', 'success');
+            } catch (e) {
+                showToast('❌ 请求失败：' + (e && e.message ? e.message : '网络错误'), 'error');
             }
         }
 

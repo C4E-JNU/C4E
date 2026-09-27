@@ -26,7 +26,7 @@ SUBAGENT_TOOL_ALLOWLIST = {
     "read_file", "list_files",
     "shared_search", "search_history",
     "conversation_notes",
-    "graph_schema", "execute_cypher",
+    "graph_query",
     "skill_list", "skill_view",
     "mineru_parse",
 }
@@ -64,7 +64,7 @@ _SUBAGENT_SYSTEM = (
     "你是一个被主智能体派发的子智能体（worker）。你只负责完成交给你的那个子任务，"
     "不负责回答用户的完整问题。\n"
     "规则：\n"
-    "1. 先用最少的工具调用收集事实（建议 ≤ {max_rounds} 轮），不要反复试探。\n"
+    "1. 先用最少的工具调用收集事实（" + ("建议 ≤ %d 轮" % max_rounds if int(max_rounds) > 0 else "按需，尽量少") + "），不要反复试探。\n"
     "2. 完成后必须给出一段**结构化结论摘要**：结论要点 + 关键数据 + 来源（如有）。\n"
     "3. 摘要要能独立阅读：不要写“如上”“见上文”这类依赖上下文的话。\n"
     "4. 不要向用户提问；信息不足时，就在摘要里写明“信息不足：<缺什么>”。\n"
@@ -111,6 +111,7 @@ async def run_subagent(goal: str, context: str = "", tools: list[str] | None = N
     """
     from agent.agent import generation_cancelled, get_current_model_config
     from agent.tools import tools_registry
+    from tools.file_tools import split_image_result as _split_img
 
     t0 = time.time()
     _T = dict(SUBAGENT_TIMEOUTS_DEFAULT)
@@ -171,8 +172,10 @@ async def run_subagent(goal: str, context: str = "", tools: list[str] | None = N
 
     async def _loop() -> None:
         nonlocal summary, rounds_used, _nudged, _warned
+        _pending_images: list = []       # image_read：待附加的图片 dataURL
         async with httpx.AsyncClient(timeout=httpx.Timeout(connect=20, read=180, write=60, pool=20)) as client:
-            for rnd in range(1, max(1, int(max_rounds)) + 1):
+            _cap = int(max_rounds) if int(max_rounds) > 0 else 100000   # 0 = 无限（用户 2026-09-27：不要锁死 20）
+            for rnd in range(1, _cap + 1):
                 if generation_cancelled():
                     _push({"type": "notice", "text": "子智能体被用户停止"})
                     return
@@ -234,12 +237,28 @@ async def run_subagent(goal: str, context: str = "", tools: list[str] | None = N
                     else:
                         try:
                             res = await tool.ainvoke(args)
-                            result = res if isinstance(res, str) else json.dumps(res, ensure_ascii=False)
+                            result = res if isinstance(res, (str, list)) else json.dumps(res, ensure_ascii=False)
                         except Exception as e:
                             result = json.dumps({"error": f"工具执行失败: {e}"}, ensure_ascii=False)
+                    # ── image_read：先抽出图片，再把正文换成桩（必须在 4000 截断之前）──
+                    _img_u, _img_txt = _split_img(result)
+                    if _img_u:
+                        if len(_pending_images) < 3:
+                            _pending_images.append(_img_u)
+                        result = json.dumps({"ok": True, "mode": "image",
+                                             "note": "图片已作为图像附加，可直接查看像素",
+                                             "meta": _img_txt},
+                                            ensure_ascii=False)
+                    elif isinstance(result, list):
+                        result = json.dumps(result, ensure_ascii=False, default=str)
                     _push({"type": "tool_result", "name": name, "content": str(result)[:2000]})
                     messages.append({"role": "tool", "tool_call_id": tc.get("id") or name,
                                      "content": str(result)[:4000]})
+                if _pending_images:
+                    _vis = [{"type": "text", "text": "[系统] 上一步工具返回的图片如下，可直接读取像素："}]
+                    _vis += [{"type": "image_url", "image_url": {"url": _u}} for _u in _pending_images]
+                    messages.append({"role": "user", "content": _vis})
+                    _pending_images.clear()
             summary = summary or "（子智能体达到轮次上限，未给出明确结论）"
 
     _hard = int(_T.get("abort") or SUBAGENT_TIMEOUT_DEFAULT)

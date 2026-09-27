@@ -117,7 +117,7 @@ def can_manage_levels(user: dict) -> bool:
 
 
 def agent_cypher_denied(cypher: str) -> bool:
-    """供 agent 内 execute_cypher 工具调用：非主管理员的删除类语句拒。"""
+    """供 agent 内 graph_query(action=cypher) 调用：非主管理员的删除类语句拒。"""
     if not HUB:
         return False
     return _CURRENT_CLS != "super" and bool(_CYPHER_DEL.search(cypher or ""))

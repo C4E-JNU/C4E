@@ -1,8 +1,8 @@
 ---
 name: literature-contradiction
-description: "单篇文献内部对账：图账（数据图 vs 正文）、表账（表格 vs 正文引用句）、段落账（同一量两个值/结论被自身数据否定）三轨道交叉核对，按 E 类裁决+A-E 分级输出矛盾台账表格。当用户要'核对本篇文献数据一致性/找矛盾/图文表对账/这篇数据自洽吗'时使用。图账表账用 delegate_task(role=contradiction) 并行。"
-version: 1.0.0
-tags: [contradiction, verification, literature, ledger, subagent]
+description: "当要对单篇已归档文献做内部矛盾审计时用。图账先做像素读数（image_read，已打通）再与图注/正文三方交叉，图账表账用 delegate_task(role=contradiction) 并行，段落账主控做，输出 A–E 分级矛盾台账表。"
+version: 1.3.0
+tags: [文献, 矛盾核查, 图账, 表账, 段落账, 像素读数]
 ---
 
 # 单篇文献对账（图账 · 表账 · 段落账 → 矛盾台账表）
@@ -11,20 +11,46 @@ tags: [contradiction, verification, literature, ledger, subagent]
 
 ## 🔒 读文件白名单（铁律）
 
-只读：`00_full_cleaned.md`（分页，按返回的 `next_offset` 续读）、`00_images_map.json`、`images/FigureN/FigureN.txt`、`images/TableN/TableN.txt`。
-**❌ 禁读**：`layout.json`、`*_model.json`、`*_content_list*.json`（巨型转储）。**默认不读图片像素**（无视觉模型时读图=烧 token；视觉增强仅在用户明确要求且模型支持时开启）。
+只读：`00_full_cleaned.md`（分页，按返回的 `next_offset` 续读）、`00_images_map.json`、`images/FigureN/FigureN.txt`、`images/TableN/TableN.txt`、`images/` 下的图片文件（**必须**走"像素读数"通道，见下节）。
+**❌ 禁读**：`layout.json`、`*_model.json`、`*_content_list*.json`（巨型转储）。
+
+## 🖼 像素读数（image_read 通道）—— 图账的第三源
+
+**为什么必须做**：饼图扇区、柱高、散点、谱峰这些分量**只存在于像素里**，图注与正文都没有。只做"图注 ↔ 正文"对账 = 图账做了一半。
+
+**通道现状（两个引擎都已打通，勿再凭想象）**：`read_file(path="x.jpg")` / `read_file(file_id=...)` 直接返回**结构化图像块** `[{"type":"text",...},{"type":"image_url",...}]`。
+- **langchain 引擎**：走框架原生路径（`_format_output` → `ToolMessage.content` 内容块 → wire 上 `role=tool` 带 `image_url`），零 middleware。
+- **custom 引擎**：循环把图提升成独立的 `user` 图像块，工具消息只留文字桩。
+两种引擎主控都能直接"看到"像素。详见 `references/image_read_channel.md`。
+
+**两条铁律**
+1. **像素读数只能由主控做**：子智能体无图像通道（工具结果纯文本 + 4000 字符截断）。主控读完后转录成"像素读数表"（纯文本）塞进摘录包，再派子智能体。
+2. **读不到就写"需图核"，绝不虚构数值**（历史事故：未读原文编出 0.88 → 假矛盾）。凡"值"来自图画而非文字的，台账里必须标 `source: image_read`。
+
+**前置闸门（三步，缺一即降级）**
+1. **通道闸门**：两个引擎默认开（`set_image_emit("blocks")`）。若返回 `mode=image_no_inline`，说明被显式关了（langchain 可设环境变量 `C4EAI_LC_IMAGE_MODE=off` 关闭）→ 改回默认重启，或让用户把图作为当轮附件发送。
+2. **尺寸闸门**：单张 dataURL ≤ `IMAGE_INLINE_MAX_CHARS`(200000)；**实操建议 ≤20 KB/张**。超限就用 `run_code`+PIL 裁 panel / 转灰度 / 降 quality / 缩宽度，或把长图切两半分别登记。
+3. **登记闸门**：要按 `file_id` 读，图必须落在**产出区**（`users/<u>/outputs/`）→ `list_outputs()` 自动补登记拿 `file_id`。
+
+**操作序列（主控自己跑）**
+```python
+from PIL import Image      # run_code 的工作目录即产出区，直接写文件名
+im = Image.open(r"<归档>/images/Figure6/<hash>.jpg")
+im.crop((0, 0, im.width, im.height//2)).convert("L").save("fig6_top.png", optimize=True)
+```
+→ `list_outputs()` 取 file_id → `read_file(file_id=..., as_base64=True)` → 逐 panel 转录成**像素读数表** `{panel, 轴/量程, 图例序列, 读数, 单位, 不确定度}`；**不确定度按轴最小刻度半格估**，估不出就留空 —— **没不确定度的读数值不得进台账**。
 
 ## 裁决体系（全程适用）
 
-**先剔除，不进台账**：E1 我方读数错｜E2 我方读文/条件对应错（修正即可）｜OCR 伪影（清洗稿与 TableN.txt/FigureN.txt 原文不一致 → 以原文为准，非文献问题）｜E5 口径差异（两值并存并标注口径）。
+**先剔除，不进台账**：E1 我方读数错｜E2 我方读文/条件对应错（修正即可）｜E6 图像估读误差（差 ≤ 该轴 1 格 ×2 → 估读内，取正文值，不报）｜OCR 伪影（清洗稿与 TableN.txt/FigureN.txt 原文不一致 → 以原文为准，非文献问题）｜E5 口径差异（两值并存并标注口径）。
 
 **真矛盾只收两类**：① 同一量两个值（同一对象同一指标，不同位置给出不同值）；② 结论被自身数据否定（定性结论与文中数据方向/量级相悖）。
 
 **阈值**：两值相对差 <1%（或明显为舍入/修约差异）→ 判一致不报；有量程信息时差 <5% 量程 → 估读误差内，取正文值不报。
 **不报**：模糊表述（about/nearly）、术语漂移、缩写不一致、参考文献编号。
-**特例**：正文自相矛盾时**不自动"正文优先"**——取多源佐证方，两个出处都引全。
+**特例**：正文自相矛盾时**不自动"正文优先"** —— 取多源佐证方，两个出处都引全。
 
-**分级（写入台账 `grade`）**：A 数值偏差（量级同、不影响结论方向）｜B 归属错误（数值安在错误条件/对象/子图上）｜C 结构命名（名称/编号/计数错）｜D 结论错误（定性结论被自身数据否定）｜E 交叉矛盾（两个内部来源互斥，如图A与图B、图与表）。
+**分级（写入台账 `grade`）**：A 数值偏差（量级同、不影响结论方向）｜B 归属错误（数值安在错误条件/对象/子图上）｜C 结构命名（名称/编号/计数错）｜D 结论错误（定性结论被自身数据否定）｜E 交叉矛盾（两个内部来源互斥，如图A与图B、图与表、**像素与图注/正文**）。
 
 ## 流程（五阶段）
 
@@ -37,14 +63,15 @@ tags: [contradiction, verification, literature, ledger, subagent]
    - **进图账（含可读数内容）**：图注/正文出现 坐标、单位、数值、曲线、峰位、条形/占比/热图/谱图/显微测量 等**可读取的数据**；
    - **跳过（无数据内容）**：机理示意、流程框图、装置示意、路线图、纯照片等无可读数内容的图；
    - **拿不准 → 跳过**，列入末尾"未核图"清单。
+4. **像素读数**：对每张进图账的图按上节读数，逐 panel 转录，并顺手核对**图注所引数值是否与像素一致**（此处常出 B 级：子图字母与条件对调）。读不到 → 该 panel 记 `需图核`。
 
 ### 阶段 1 · 图账（并行子智能体）
 对每张**数据图**一个子任务，分批派发（每批 ≤"最多子任务"数）：
 ```
 delegate_task(tasks=[
  {"role":"contradiction","tools":["read_file"],
-  "goal":"图账：核对 Figure2 与正文的一致性。比对①图注中数值/趋势 vs 正文描述②子图字母(a/b/c…)与正文条件的绑定是否对调（B级）③结论方向 vs 图所呈数据。只输出 JSON 数组：[{\"type\",\"figure\",\"field\",\"text_quote\",\"figure_quote\",\"value_a\",\"value_b\",\"adopted_value\",\"grade\",\"confidence\"}]，无矛盾输出[]。禁止复述正文。",
-  "context":"<该图完整图注 + 正文相关段落摘录（阶段0产出）+ 阈值/剔除规则一句话摘要>"},
+  "goal":"图账：核对 Figure2 与正文的一致性。三方交叉：①图注/正文数值·趋势 vs 图像像素读数（摘录包中 source:image_read 的条目）②子图字母(a/b/c…)与正文条件的绑定是否对调（B级）③结论方向 vs 图所呈数据。只输出 JSON 数组：[{\"type\",\"figure\",\"field\",\"text_quote\",\"figure_quote\",\"value_a\",\"value_b\",\"adopted_value\",\"grade\",\"confidence\"}]，无矛盾输出[]。禁止复述正文。",
+  "context":"<该图完整图注 + 正文相关段落摘录 + 该图像素读数表（含不确定度）+ 阈值/剔除规则一句话摘要>"},
  ... ≤4 个/批
 ])
 ```
@@ -64,12 +91,12 @@ delegate_task(tasks=[
 | # | 位置 | 指标 | 值A（出处） | 值B（出处） | 采纳值 | 等级 | 置信 |
 |---|---|---|---|---|---|---|---|
 
-表后附三行小结：**矛盾 N 条（分级计数）｜剔除 M 条（E1/E2/OCR/E5 各几）｜未核图 K 张（列出）**。
-4. 台账 JSON 仅在用户要求留档时 `write_file` 到 `workspace/contradiction_ledger/<篇名>_台账.json`。
+表后附三行小结：**矛盾 N 条（分级计数）｜剔除 M 条（E1/E2/E6/OCR/E5 各几）｜未核图 K 张（列出）**。
+4. 台账 JSON 仅在用户要求留档时 `write_file` 到 `outputs/<篇名>_台账.json`。
 
 ## 完成核验清单
 
-1. 每条矛盾都有可回溯的 `text_quote`（能在归档文件里找到原句）；
+1. 每条矛盾都有可回溯的 `text_quote`（能在归档文件里找到原句）；来自像素的条目须同时有 `panel + 读数 + 不确定度`；
 2. 表文冲突的裁决依据是 TableN.txt 而非 markdown 表；
 3. 阈值与"不报"清单确实执行（台账里不该出现 <1% 相对差条目）；
 4. 未核图/剔除数量级合理（示意图占比高的论文，未核数应大于矛盾数）；
@@ -79,10 +106,15 @@ delegate_task(tasks=[
 
 - **别把示意图派去对账**：无可读数内容的图只会产出假矛盾；拿不准就跳过进"未核图"。
 - **别跳过阶段 0 直接派子**：没有摘录包的子智能体会各自重复全文分页读，慢且超限。
+- **别期待子智能体看得见图**：它只有文本。像素读数是主控的活，转录后以文本下传。
+- **别凭"图应该长这样"写数值**：读不到就标 `需图核`。虚构读数是本技能最严重的事故。
+- **别忘重启后端**：改过 `backend/` 代码后必须重启才生效。
 - 子任务返回超长会被截断 → goal 里"只输出 JSON、禁止复述"必须写。
 - 单篇模式：不做跨文献对账（条件不可比，假矛盾多）；用户要求跨篇时明确说明本技能不适用，建议走数据提取管线。
 - `role="contradiction"` 是子智能体带上裁决纪律的关键，忘带=自由发挥。
 
 ## 依赖
 
-前置归档：`mineru-agent-parse`（需 `00_full_cleaned.md` + `00_images_map.json` + FigureN/TableN txt）。子智能体角色预设：`delegate_task` 的 `role=contradiction`。
+前置归档：`mineru-agent-parse`（需 `00_full_cleaned.md` + `00_images_map.json` + FigureN/TableN txt + `images/` 原图）。
+像素读数通道：**两个引擎都已打通**（`file_tools.py` / `agent.py` / `subagent.py` 三处加法式改动：工具返回图像内容块），用法与常量见 `references/image_read_channel.md`；需**视觉模型**，改代码后重启后端。
+子智能体角色预设：`delegate_task` 的 `role=contradiction`。改项目代码请先读 `self-modify` 技能。

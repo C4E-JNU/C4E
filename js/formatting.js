@@ -92,7 +92,8 @@
 
             // 1. 预处理 LaTeX 公式，避免 marked 解析过程破坏反斜杠等内容
             // 匹配块级公式: $$...$$ 或 \[...\]
-            processedContent = processedContent.replace(/\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]/g, (match, p1, p2) => {
+            // (?<!\\)：被反斜杠转义的 \$ 不是公式定界符（用户 2026-09-27 报「转义段出现空公式框」）。
+            processedContent = processedContent.replace(/(?<!\\)\$\$([\s\S]+?)(?<!\\)\$\$|\\\[([\s\S]+?)\\\]/g, (match, p1, p2) => {
                 const formula = (p1 || p2).trim();
                 const placeholder = `MATH_BLOCK_PLACEHOLDER_${mathBlocks.length}_MATH`;
                 mathBlocks.push({ placeholder, formula, displayMode: true });
@@ -100,7 +101,7 @@
             });
 
             // 匹配行内公式: $...$ 或 \(...\)
-            processedContent = processedContent.replace(/\$([^\$\n]+?)\$|\\\(([\s\S]+?)\\\)/g, (match, p1, p2) => {
+            processedContent = processedContent.replace(/(?<!\\)\$([^\$\n]+?)(?<!\\)\$|\\\(([\s\S]+?)\\\)/g, (match, p1, p2) => {
                 const formula = (p1 || p2).trim();
                 const placeholder = `MATH_INLINE_PLACEHOLDER_${mathBlocks.length}_MATH`;
                 mathBlocks.push({ placeholder, formula, displayMode: false });
@@ -141,6 +142,22 @@
                         var style = wStyle + hStyle + 'border-radius:6px;cursor:zoom-in;vertical-align:middle;';
                         return '<span class="msg-image-item"><img class="msg-image" src="' + u + '" alt="' + a + '" loading="lazy" onclick="openImagePreview(this.getAttribute(\'src\'))" style="' + style + '"></span>';
                     });
+                    // 1.6 脚注（用户 2026-09-27 报「脚注没渲染」）：marked 12 不认 [^1]，会把它当**链接**，
+                    //     并且把定义行整行吃掉（正文内容直接丢失！）。自己实现：先摘定义行，引用换成上标，
+                    //     正文末尾追加脚注区。
+                    var _fnDefs = [];
+                    processedContent = processedContent.replace(/^\[\^([^\]\s]+)\]:[ \t]*(.+)$/gm, function (m, id, text) {
+                        _fnDefs.push({ id: id, text: text });
+                        return '';
+                    });
+                    if (_fnDefs.length) {
+                        var _fnIdx = {};
+                        _fnDefs.forEach(function (d, i) { _fnIdx[d.id] = i + 1; });
+                        processedContent = processedContent.replace(/\[\^([^\]\s]+)\]/g, function (m, id) {
+                            var _n = _fnIdx[id] || 0;
+                            return _n ? ('<sup class="fn-ref"><a href="#fn-' + id + '" id="fnref-' + id + '">[' + _n + ']</a></sup>') : m;
+                        });
+                    }
                     let html = marked.parse(processedContent);
 
                     // 2. 将公式占位符替换为 KaTeX 渲染后的 HTML
@@ -180,6 +197,17 @@
                         return '<img ' + attrs + ' class="msg-image" loading="lazy" onclick="openImagePreview(this.src)" style="max-width:100%;height:auto;border-radius:6px;cursor:zoom-in;margin:4px 0;">';
                     });
 
+                    // 脚注区（正文末尾）
+                    if (_fnDefs.length) {
+                        html += '<div class="footnotes" style="margin-top:1rem;font-size:.8rem;color:var(--gray);">'
+                             + '<hr style="border:none;border-top:1px solid var(--border-color,#e5e5e5);margin:.6rem 0;">'
+                             + '<ol style="padding-left:1.2rem;">'
+                             + _fnDefs.map(function (d) {
+                                   return '<li id="fn-' + d.id + '" style="margin:.15rem 0;">' + d.text
+                                        + ' <a href="#fnref-' + d.id + '" class="fn-back" title="回到引用处">↩</a></li>';
+                               }).join('')
+                             + '</ol></div>';
+                    }
                     // 异步调用 mermaid 渲染（仅在生成完成时）
                     if (isFinal) {
                         setTimeout(renderMermaidDiagrams, 100);

@@ -41,7 +41,7 @@ def set_subagent_options(opts: dict = None):
         if opts and opts.get(k) is not None:
             o[k] = opts[k]
     try:
-        o["max_rounds"] = max(1, min(20, int(o.get("max_rounds", 4))))
+        o["max_rounds"] = max(0, int(o.get("max_rounds", 4)))   # 0 = 无限（用户 2026-09-27：不要锁死 20）
         o["max_parallel"] = max(1, min(8, int(o.get("max_parallel", 2))))     # 并发上限（自由调节 1-8）
         o["max_tasks"] = max(1, min(8, int(o.get("max_tasks", 4))))           # 单次最多子任务数
         o["nudge"] = max(0, min(3600, int(o.get("nudge", 60))))
@@ -142,10 +142,30 @@ def cancel_active_generation():
 def generation_cancelled() -> bool:
     return _GENERATION_CANCELLED
 
+# ── 全局「立即回答」令牌（用户 2026-09-27 定：生成中点⚡立即回答 = 催促它马上出答案，不是硬中断）──
+#    与超时保护的「警告级」走同一条注入通道：把催促提示塞进 messages，下个检查点模型就收尾。
+_IMMEDIATE_ANSWER_REQUESTED = False
+_IMMEDIATE_ANSWER_TEXT = ("[系统·立即回答] 用户要求你现在就作答：**立即**基于已获得的信息给出最终答案，"
+                          "不要再调用任何工具、不要继续探索；答案可以不完整，但必须马上输出。")
+
+def reset_immediate_answer():
+    """新一轮开始时清除「立即回答」标记。"""
+    global _IMMEDIATE_ANSWER_REQUESTED
+    _IMMEDIATE_ANSWER_REQUESTED = False
+
+def request_immediate_answer():
+    """用户在生成中点⚡立即回答：最近一个检查点注入「立即作答」提示。"""
+    global _IMMEDIATE_ANSWER_REQUESTED
+    _IMMEDIATE_ANSWER_REQUESTED = True
+
+def immediate_answer_requested() -> bool:
+    return _IMMEDIATE_ANSWER_REQUESTED
+
 from agent.tools import tools_registry, get_tools
 from tools.neo4j_tools import Neo4jClient
 from tools.skill_tools import skill_list as _skill_list
-from tools.file_tools import set_permission_mode, set_current_user as _set_ft_user
+from tools.file_tools import (set_permission_mode, set_current_user as _set_ft_user,
+                              set_image_emit, split_image_result as _split_img)
 
 _WORKSPACE = Path(__file__).parent.parent / "workspace"
 
@@ -201,7 +221,7 @@ async def _build_system_prompt(enabled_tools: list[str], loaded_skills: list[str
     """
     lines = [
         "你是 C4EAI · Shared Wiki ——实验室协作知识与文献智能体（组内共享库）。核心能力：",
-        "① 图谱检索：Neo4j 协作知识图谱 + GraphRAG（schema/execute_cypher）；"
+        "① 图谱检索：Neo4j 协作知识图谱 + GraphRAG（graph_query：schema / cypher / search）；"
         "② 多智能体协作：delegate_task 派发专有子智能体（矛盾核查/数据提取/数据核查）并行处理；"
         "③ 数据分析与代码：run_code 计算/统计/绘图，terminal 执行命令；"
         "④ 共享数据库：组内文献/笔记/文档的上传与语义检索（shared_upload / shared_search）；"
@@ -366,6 +386,7 @@ async def run_agent(
     _current_branch_id = branch_id or ""
     set_permission_mode(permission_mode or "safe")
     set_current_user(user or "")
+    set_image_emit("off")     # 阻塞式入口：工具结果不做图像提升，保守关掉
     set_current_model_config(model_config)
     set_subagent_options(subagent or {})
     _T = _resolve_timeouts(timeouts)
@@ -373,12 +394,12 @@ async def run_agent(
     _t_start = time.time()
     # 1. Neo4j 连接（可选增强：连不上只降级摘掉图谱工具，绝不终止 —— 用户 2026-09-22 定）
     if neo4j_config and neo4j_config.get("uri"):
-        if {"graph_schema", "execute_cypher"} & set(enabled_tools):
+        if "graph_query" in enabled_tools:
             if not Neo4jClient.is_connected():
                 cr = Neo4jClient.connect(neo4j_config["uri"], neo4j_config["user"], neo4j_config["password"])
                 if not cr.get("success"):
                     enabled_tools = [t for t in enabled_tools
-                                     if t not in ("graph_schema", "execute_cypher")]
+                                     if t != "graph_query"]
 
     # 2. System Prompt
     system_prompt = await _build_system_prompt(enabled_tools, loaded_skills)
@@ -493,6 +514,7 @@ async def stream_agent(
     _current_branch_id = branch_id or ""
     set_permission_mode(permission_mode or "safe")
     set_current_user(user or "")
+    set_image_emit("blocks")  # custom 引擎：工具返回内容块，由循环提升成 user 图像块
     set_current_model_config(model_config)
     set_subagent_options(subagent or {})
     _T = _resolve_timeouts(timeouts)
@@ -500,15 +522,15 @@ async def stream_agent(
 
     # Neo4j（可选增强：连不上只降级摘掉图谱工具，绝不终止对话 —— 用户 2026-09-22 定）
     # 理由：用户常只想问普通问题/读附件；图谱没连上不该让整个对话失败。
-    # 降级后 execute_cypher 工具本身也返回 {"error":"Neo4j 未连接"}，LLM 自会判断跳过。
+    # 降级后 graph_query 工具本身也返回 {"error":"Neo4j 未连接"}，LLM 自会判断跳过。
     if neo4j_config and neo4j_config.get("uri"):
-        if {"graph_schema", "execute_cypher"} & set(enabled_tools):
+        if "graph_query" in enabled_tools:
             if not Neo4jClient.is_connected():
                 cr = Neo4jClient.connect(neo4j_config["uri"], neo4j_config["user"], neo4j_config["password"])
                 if not cr.get("success"):
                     _n4_err = cr.get("error", "")
                     enabled_tools = [t for t in enabled_tools
-                                     if t not in ("graph_schema", "execute_cypher")]
+                                     if t != "graph_query"]
                     yield {"type": "reasoning",
                            "text": f"（图谱未连接，已跳过图谱工具继续回答：{_n4_err}）\n"}
 
@@ -602,6 +624,14 @@ async def stream_agent(
                 if generation_cancelled():
                     yield {"type": "stopped", "text": "已停止"}
                     return
+
+                # ── 用户点「⚡立即回答」：注入与超时警告同款的催促，让模型马上收尾 ──
+                if immediate_answer_requested():
+                    reset_immediate_answer()
+                    messages.append({"role": "user", "content": _IMMEDIATE_ANSWER_TEXT})
+                    yield {"type": "timeout_notice", "level": "immediate",
+                           "text": "已按你的「立即回答」注入催促：请它马上收尾出答案。",
+                           "elapsed": int(time.time() - _t_start)}
 
                 # ── 三级超时保护：催促 → 警告 → 终止 ──
                 _elapsed = time.time() - _t_start
@@ -727,6 +757,7 @@ async def stream_agent(
                 ordered = [tool_acc[i] for i in sorted(tool_acc)]
                 assistant_tc = []
                 tool_messages = []
+                pending_images = []          # 本轮工具产出的图片（image_read 通道）
                 for tc in ordered:
                     name = tc["name"]
                     args_str = tc["arguments"] or "{}"
@@ -809,9 +840,22 @@ async def stream_agent(
                         else:
                             try:
                                 res = await tool.ainvoke(args)
-                                result = res if isinstance(res, str) else json.dumps(res, ensure_ascii=False)
+                                # 结构化内容块（图像通道）原样保留；其余序列化成 JSON 文本
+                                result = res if isinstance(res, (str, list)) else json.dumps(res, ensure_ascii=False)
                             except Exception as e:
                                 result = json.dumps({"error": f"工具执行失败: {str(e)}"})
+                    # ── image_read：图提升为独立的 user 图像块，工具消息里只留文字桩 ──
+                    # （OpenAI 系 role=tool 只收字符串，base64 留在 tool 消息里等于喂 token 乱码）
+                    _img_u, _img_txt = _split_img(result)
+                    if _img_u:
+                        if len(pending_images) < 3:      # 单步最多 3 张，防上下文爆炸
+                            pending_images.append(_img_u)
+                        result = json.dumps({"ok": True, "mode": "image",
+                                             "note": "图片已作为图像附加，可直接查看像素",
+                                             "meta": _img_txt},
+                                            ensure_ascii=False)
+                    elif isinstance(result, list):
+                        result = json.dumps(result, ensure_ascii=False, default=str)
                     yield {"type": "tool_result", "name": name, "content": str(result)[:2000]}
                     if generation_cancelled():
                         yield {"type": "stopped", "text": "已停止"}
@@ -825,6 +869,10 @@ async def stream_agent(
                 # 追加本轮 assistant(含 tool_calls) + 各 tool 结果，进入下一轮
                 messages.append({"role": "assistant", "content": cur_content, "tool_calls": assistant_tc})
                 messages.extend(tool_messages)
+                if pending_images:
+                    _vis = [{"type": "text", "text": "[系统] 上一步工具返回的图片如下，可直接读取像素："}]
+                    _vis += [{"type": "image_url", "image_url": {"url": _u}} for _u in pending_images]
+                    messages.append({"role": "user", "content": _vis})
 
         if not final_answer:
             cap = max_rounds if max_rounds and max_rounds > 0 else 100000
@@ -866,6 +914,13 @@ async def stream_agent_lc(
     _current_branch_id = branch_id or ""
     set_permission_mode(permission_mode or "safe")
     set_current_user(user or "")
+    # 图像通道：LangChain 原生支持 list[dict] 内容块经 ToolMessage 直达 wire
+    # （tool 角色带 image_url，见 langchain_openai._sanitize_chat_completions_content），
+    # 故默认 "blocks" 走原生；若所用端点拒收 tool 角色图像（400），
+    # 可设环境变量 C4EAI_LC_IMAGE_MODE=off 关闭通道后重启，不做 middleware 绕行。
+    import os as _os
+    _lc_img = (_os.environ.get("C4EAI_LC_IMAGE_MODE") or "blocks").strip().lower()
+    set_image_emit(_lc_img if _lc_img in ("blocks", "off") else "blocks")
     set_current_model_config(model_config)
     set_subagent_options(subagent or {})
     _T = _resolve_timeouts(timeouts)
@@ -874,15 +929,15 @@ async def stream_agent_lc(
 
     # Neo4j（可选增强：连不上只降级摘掉图谱工具，绝不终止对话 —— 用户 2026-09-22 定）
     # 理由：用户常只想问普通问题/读附件；图谱没连上不该让整个对话失败。
-    # 降级后 execute_cypher 工具本身也返回 {"error":"Neo4j 未连接"}，LLM 自会判断跳过。
+    # 降级后 graph_query 工具本身也返回 {"error":"Neo4j 未连接"}，LLM 自会判断跳过。
     if neo4j_config and neo4j_config.get("uri"):
-        if {"graph_schema", "execute_cypher"} & set(enabled_tools):
+        if "graph_query" in enabled_tools:
             if not Neo4jClient.is_connected():
                 cr = Neo4jClient.connect(neo4j_config["uri"], neo4j_config["user"], neo4j_config["password"])
                 if not cr.get("success"):
                     _n4_err = cr.get("error", "")
                     enabled_tools = [t for t in enabled_tools
-                                     if t not in ("graph_schema", "execute_cypher")]
+                                     if t != "graph_query"]
                     yield {"type": "reasoning",
                            "text": f"（图谱未连接，已跳过图谱工具继续回答：{_n4_err}）\n"}
 
@@ -942,6 +997,15 @@ async def stream_agent_lc(
         async for ev in agent.astream_events({"messages": messages}, version="v2", config=config):
             if generation_cancelled():
                 yield {"type": "stopped", "text": "已停止"}
+                return
+            # 用户点「⚡立即回答」：LangChain 图内无法安全注入提示 → 直接用已有内容收尾作答
+            if immediate_answer_requested():
+                reset_immediate_answer()
+                yield {"type": "timeout_notice", "level": "immediate",
+                       "text": "已按「立即回答」收尾（LangChain 引擎无法中途注入提示，直接用已有内容作答）。"}
+                yield {"type": "final",
+                       "text": (final_answer.strip() + "\n\n---\n⚡ **立即回答**：按你的要求提前收尾，以上是已有内容。")
+                               if final_answer.strip() else "⚡ **立即回答**：按你的要求收尾，但本轮还没有产出内容，可继续追问。"}
                 return
             # 超时终止（LangChain 引擎：图内无法安全注入催促/警告提示，故只做硬终止级保护）
             if _T.get("abort") and (time.time() - _t_start) >= _T["abort"]:
@@ -1015,9 +1079,15 @@ async def stream_agent_lc(
                 if _inside_delegate:
                     continue
                 out = data.get("output")
-                if not isinstance(out, str):
+                # 工具产出里若含图像块：只给前端发摘要，绝不让 base64 进事件流
+                _u, _t = _split_img(out.content if hasattr(out, "content") else out)
+                if _u:
+                    out = json.dumps({"ok": True, "mode": "image",
+                                      "note": "图片已随工具消息一并发送给模型（LangChain 原生 image_url 内容块）",
+                                      "meta": _t}, ensure_ascii=False)
+                elif not isinstance(out, str):
                     try:
-                        out = json.dumps(out, ensure_ascii=False)
+                        out = json.dumps(out, ensure_ascii=False, default=str)
                     except Exception:
                         out = str(out)
                 yield {"type": "tool_result", "name": name, "content": out[:2000]}

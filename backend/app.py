@@ -1224,7 +1224,7 @@ async def api_xiaoe_ask(req: XiaoeAskReq, request: Request):
         "   可「上传数据库」把本地笔记原样复制到共享库（云端）。\n"
         "3) 数据库（共享库）：条目=笔记形态，含附件原件+自动解析正文；按 owner 分组；\n"
         "   支持 📌 引用给智能体、浮窗预览/下载原件、删除；上传后全组可检索（向量检索 shared_search）。\n"
-        "4) 图谱检索：Neo4j 图谱（graph_schema/execute_cypher）；需要先在配置里连库。\n"
+        "4) 图谱检索：Neo4j 图谱（graph_query：schema / cypher / search）；需要先在配置里连库。\n"
         "5) 设置：模型/服务商配置、界面字号、打开方式、显示小e 开关等。\n"
         "6) 账号：可用自己的数据库（注册即蓝色 L1）；查询所有人数据库需橙色 L3 起，"
         "身份等级由金色(L5)或主管理员在用户管理里调整。\n"
@@ -1457,19 +1457,18 @@ def _chats_rev_of(username: str) -> str:
 @app.get("/api/user/chats/version")
 async def api_user_chats_version(request: Request):
     """几十字节的版本号。SSE 断线重连后用它判断「我们漏掉了变化」→ 才拉全量。"""
-    p = await _notes_proxy("GET", "/api/user/chats/version")
-    if p is not None:
-        return p
     user = _cur_user(request)
     return json.loads(UC.chats_rev(user["username"]))
 
 
 @app.get("/api/user/chats")
 async def api_user_chats_get(request: Request):
-    """读本人的全部对话。本地实例 → 转发云端（与笔记/设置同一套分流）。"""
-    p = await _notes_proxy("GET", "/api/user/chats")
-    if p is not None:
-        return p
+    """读本人的全部对话。
+
+    ★ 用户 2026-09-27 定：**对话数据属于本地实例**（存在程序目录 workspace/users/<身份>/chats.json），
+      不上云、也不转发 —— 只有共享数据库条目（branch_id=__db__）才在云端。
+      旧实现把本接口转发到共享库，导致本机实例"看不到自己的对话/对话存在云端"（踩过）。
+    """
     user = _cur_user(request)
     return json.loads(UC.load_user_chats(user["username"]))
 
@@ -1477,10 +1476,7 @@ async def api_user_chats_get(request: Request):
 @app.put("/api/user/chats")
 async def api_user_chats_put(req: UserChatsReq, request: Request):
     """**按对话 id 合并**写入本人的对话（不是覆盖 —— 两边同时在线会互相抹）。
-    owner 从 token 推导，不接受请求体传身份。"""
-    p = await _notes_proxy("PUT", "/api/user/chats", {"chats": req.chats})
-    if p is not None:
-        return p
+    owner 从 token 推导，不接受请求体传身份。写本地（见 GET 的说明）。"""
     user = _cur_user(request)
     out = json.loads(UC.save_user_chats(user["username"], req.chats))
     if out.get("status") == "ok":
@@ -1571,19 +1567,33 @@ async def agent_run(req: AgentRunRequest, request: Request):
         _RP.add_qwen_usage(u, len(req.input) + sum(len(str(m.get('content',''))) for m in req.history if isinstance(m, dict)) + len(_txt))
     return _ans
 
+@app.post("/api/agent/nudge")
+async def api_agent_nudge(request: Request):
+    """用户在生成中点「⚡立即回答」：让正在跑的那一轮注入「立即作答」催促（与超时警告同一条通道）。
+
+    为什么不做成硬中断（用户 2026-09-27 定）：硬中断会把已经探索出来的东西全丢；
+    注入催促能让模型**用已有信息立刻收尾**，答案还在。
+    """
+    from agent.agent import request_immediate_answer
+    request_immediate_answer()
+    return {"status": "ok"}
+
+
 @app.post("/api/agent/stream")
 async def agent_stream(req: AgentRunRequest, request: Request = None):
     """SSE 流式 Agent 端点（支持用户停止：前端 abort → 检测断连 → 取消生成）"""
     if not req.model or not req.model.get("model"):
         return {"final_answer": "错误: 缺少模型配置"}
 
-    from agent.agent import cancel_active_generation, reset_generation_cancel
+    from agent.agent import (cancel_active_generation, reset_generation_cancel,
+                            reset_immediate_answer)
 
     async def event_generator():
         engine = (req.engine or "custom").lower()
         max_rounds = req.max_rounds if req.max_rounds is not None else 8
         runner = stream_agent_lc if engine == "langchain" else stream_agent
         reset_generation_cancel()
+        reset_immediate_answer()
 
         # 云端角色策略：裁剪工具 + 钳制权限模式 + 注入文件沙盒
         user = _policy_for(request, req) if request is not None else _cur_user(request)
@@ -1655,14 +1665,31 @@ if (_PROJECT_ROOT / "index.html").exists():
     app.mount("/", StaticFiles(directory=str(_PROJECT_ROOT), html=True), name="frontend")
 
 if __name__ == "__main__":
+    import asyncio
     import uvicorn
     # 监听地址/端口可用环境变量覆盖：服务器/局域网部署设 C4EAI_HOST=0.0.0.0（默认仍只监听本机，安全）
     _host = os.environ.get("C4EAI_HOST", "127.0.0.1")
     _port = int(os.environ.get("C4EAI_PORT", "8080"))
+    # ★ Windows 必须跑 Selector 事件循环，不能用默认的 Proactor：
+    #   Proactor 的 accept 出错处理有 CPython bug（gh-156365，2026-08 仍是 open）——
+    #   它捕获 OSError 之后执行的是 sock.close()，关掉的是【监听 socket】，并且不再重新挂载
+    #   accept；后果是服务从此不再接受任何连接（浏览器打不开、客户端 connection refused），
+    #   日志里只留一行 "Accept failed on a socket / WinError 64 指定的网络名不再可用"。
+    #   触发很日常：某个客户端连接在 accept 那一瞬间被中断（校园网/防火墙/浏览器取消请求）。
+    #   实测（同一故障注入对比）：Proactor 出事后监听 socket 被关、连接被拒；Selector 只记日志、
+    #   照常服务。Selector 不用 AcceptEx，所以这类 accept 错误根本不产生。
+    #   Linux 服务器本来就是 epoll，不受影响。
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    # uvicorn 在 Windows 上硬编码 ProactorEventLoop，只有 loop="none" 时才交给事件循环策略决定
+    _loop = "none" if sys.platform == "win32" else "auto"
+    # 0.0.0.0 / :: 是"监听所有网卡"的意思，不是能打开的网址 → 本机浏览器地址一律用 127.0.0.1
+    _url = "127.0.0.1" if _host in ("0.0.0.0", "::") else _host
     print("=" * 56)
-    print(f"  C4EAI Server ({_host}:{_port}, SSE streaming)")
+    print(f"  C4EAI Server (listening {_host}:{_port}, SSE streaming)")
     print("=" * 56)
-    print(f"  Frontend: http://{_host}:{_port}")
+    print(f"  Frontend: http://{_url}:{_port}")
     print("  Agent:    POST /api/agent/run (sync)")
     print("           POST /api/agent/stream (SSE)")
-    uvicorn.run(app, host=_host, port=_port, log_level="info")
+    print(f"  Loop:     {asyncio.get_event_loop_policy().__class__.__name__}")
+    uvicorn.run(app, host=_host, port=_port, log_level="info", loop=_loop)

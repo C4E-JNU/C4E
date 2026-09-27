@@ -28,6 +28,11 @@ PROJ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # 需要校验的前端产物（后端 .py 由重启流程管，不在此列）
 DEFAULT_FILES = [
     "index.html",
+    # 站点图标（index.html 里 <link rel=icon> 实际引用的那几个）
+    # 原先漏在校验外：换了 logo 没部署线上 → 标签一直显示旧图标，看着像"缓存问题"，其实没传
+    "assets/icons/favicon.ico", "assets/icons/apple-touch-icon.png",
+    "assets/icons/c4e-logo-16.png", "assets/icons/c4e-logo-32.png",
+    "assets/icons/c4e-logo-48.png",
     "css/layout.css", "css/components.css", "css/messages.css",
     "css/mobile.css", "css/sidebar.css", "css/xiaoe.css", "css/agent.css",
     "css/input.css", "css/modals.css",

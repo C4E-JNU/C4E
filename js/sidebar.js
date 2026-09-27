@@ -152,6 +152,12 @@
         function initNotesPanel() {
             var btn = document.getElementById('notes-toggle-btn');
             var addBtn = document.getElementById('notes-add-btn');
+            var scopeBtn = document.getElementById('notes-scope-btn');
+            if (scopeBtn) scopeBtn.addEventListener('click', function () {
+                _notesScope = (_notesScope === 'all') ? 'branch' : 'all';
+                scopeBtn.textContent = (_notesScope === 'all') ? '📄 本对话' : '📚 全部';
+                renderNotesPanel();
+            });
             if (btn) btn.addEventListener('click', toggleNotesPanel);
             if (addBtn) addBtn.addEventListener('click', function() {
                 addNoteCard(state.currentBranchId, '', '');
@@ -312,15 +318,18 @@
             if (!notesListEl || !notesEmptyEl) return;
 
             // 从后端加载笔记（带当前对话过滤）
+            // 范围由「📚 全部 / 📄 本对话」按钮决定（用户 2026-09-27 定）：本对话=带 branch_id 过滤；
+            // 全部=不带该参数（后端 file_tools.list_notes 空 branch_id 即不过滤）。
             var branchId = state.currentBranchId || '';
-            fetch(BACKEND_API_URL + '/api/notes?branch_id=' + encodeURIComponent(branchId))
+            var _nq = _notesScope === 'all' ? '' : ('?branch_id=' + encodeURIComponent(branchId));
+            fetch(BACKEND_API_URL + '/api/notes' + _nq)
                 .then(r => r.json())
                 .then(data => {
                     var notes = data.notes || [];
                     _currentNotes = notes;  // 缓存，供编辑时查找
                     var branch = state.branches[state.currentBranchId];
                     var titleEl = np.querySelector('.notes-panel-title');
-                    if (titleEl) titleEl.textContent = branch ? '📝 ' + branch.name : '📝 对话笔记';
+                    if (titleEl) titleEl.textContent = _notesScope === 'all' ? '📚 全部笔记' : (branch ? '📝 ' + branch.name : '📝 对话笔记');
 
                     if (notes.length === 0) {
                         notesListEl.innerHTML = '';
@@ -343,6 +352,7 @@
         }
 
         // 笔记折叠状态（按 noteId 记录，默认闭合；会话内重绘时保留手动展开状态）
+        var _notesScope = 'branch';   // 'branch' = 本对话笔记；'all' = 我的全部笔记（点面板里「📚 全部」切换）
         var _noteCollapsedMap = {};
         var _currentNotes = [];  // 最近一次渲染的笔记缓存（供编辑时查找）
 
@@ -755,6 +765,7 @@
                 groupEl.draggable = true;
 
                 const isCurrentBranch = branchId === state.currentBranchId;
+                if (isCurrentBranch) groupEl.classList.add('current');
                 const isExpanded =
                     state.sidebar.searchQuery ||
                     state.sidebar.currentFilter !== 'all' ||
@@ -764,7 +775,7 @@
                     <div class="group-header" onclick="handleBranchClick('${branchId}')">
                         <div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 10px;">
                             ${group.branchName}
-                            ${isCurrentBranch ? ' <span style="color: var(--success);">(当前)</span>' : ''}
+                            
                         </div>
                         <div class="group-actions-wrapper" onclick="event.stopPropagation()">
                             <div class="group-message-count">${group.messages.length}</div>
@@ -1061,10 +1072,17 @@
         }
 
         function switchToBranch(branchId) {
-            if (state.currentBranchId === branchId) return;
+            // 点已经打开的那条对话 → 只重渲染一次（用户 2026-09-27：早退会让"默认亮起但没加载"
+            // 的对话永远点不出来）。不清输入框、不收起附件面板。
+            if (state.currentBranchId === branchId) {
+                state.userHasScrolledUp = false;
+                renderMessages();
+                return;
+            }
 
             // 保存当前对话状态（不再区分临时/永久）
             state.currentBranchId = branchId;
+            state.userHasScrolledUp = false;   // 切对话 = 看底部
             // 记住当前对话（切对话不一定走 saveBranches，这里显式持久化以便重启恢复）
             if (typeof persistCurrentBranch === 'function') persistCurrentBranch();
             messageInput.value = '';

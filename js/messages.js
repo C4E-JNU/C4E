@@ -42,7 +42,7 @@
             if (!isSystem) {
                 const messageEl = createMessageElement(message);
                 messagesContainer.appendChild(messageEl);
-                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                scrollToBottomIfFollowing();
 
                 updateHistoryList();
             }
@@ -142,9 +142,9 @@
                                </div>`;
                            }
                            case 'timeout_notice': {
-                               const tColor = step.level === 'abort' ? '#e02020' : (step.level === 'warn' ? '#e6a23c' : 'var(--gray)');
-                               const tIcon = step.level === 'abort' ? '⏹️' : (step.level === 'warn' ? '⚠️' : '⏳');
-                               const tLabel = step.level === 'abort' ? '超时终止' : (step.level === 'warn' ? '超时警告' : '超时催促');
+                               const tColor = step.level === 'abort' ? '#e02020' : (step.level === 'warn' ? '#e6a23c' : (step.level === 'immediate' ? 'var(--primary)' : 'var(--gray)'));
+                               const tIcon = step.level === 'abort' ? '⏹️' : (step.level === 'warn' ? '⚠️' : (step.level === 'immediate' ? '⚡' : '⏳'));
+                               const tLabel = step.level === 'abort' ? '超时终止' : (step.level === 'warn' ? '超时警告' : (step.level === 'immediate' ? '立即回答' : '超时催促'));
                                return `<div class="agent-step-header" style="color:${tColor};">${tIcon} ${tLabel}${step.elapsed ? '（' + step.elapsed + 's）' : ''}</div><div class="obs-content">${escHtml(step.text || '')}</div>`;
                            }
                            default: return '';

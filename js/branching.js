@@ -346,35 +346,34 @@
                 });
             });
 
-            // 如果删除的是当前对话，切换到其他对话
+            // 如果删除的是当前对话：先把这条删掉，再切到**列表最上面那条**（= 用户看到的最新对话）；
+            // 一条都不剩才进空态。旧实现取对象插入顺序里的第一个 —— 那是**最早创建**的那条，
+            // 所以常跳到一个又旧又空的对话（用户 2026-09-27 报）。
             if (targetBranchId === state.currentBranchId) {
-                // 找到第一个可用的对话
-                let nextBranchId = null;
-                for (const id in state.branches) {
-                    if (id !== targetBranchId && !state.branches[id].isTemporary) {
-                        nextBranchId = id;
+                markBranchDeleted(targetBranchId);   // 显式删除 → 留墓碑（唯一写墓碑的地方）
+                delete state.branches[targetBranchId];
+                // 顺序真源 = 侧栏实际渲染出来的顺序（用户拖拽排序后就是这个）
+                var visibleIds = Array.prototype.map.call(
+                    document.querySelectorAll('.history-group'),
+                    function (g) { return g.dataset.branchId; });
+                var nextBranchId = null;
+                for (var vi = 0; vi < visibleIds.length; vi++) {
+                    var cand = visibleIds[vi];
+                    if (cand !== targetBranchId && state.branches[cand] && !state.branches[cand].isTemporary) {
+                        nextBranchId = cand;
                         break;
                     }
                 }
-
-                // 如果没有其他对话，保持无对话空态（不自动新建，直接置 null）
-                if (!nextBranchId) {
-                    state.currentBranchId = null;
-                    persistCurrentBranch();
-                    renderMessages();
-                    updateTokenDisplay();
-                    updateHistoryList();
-                } else {
-                    state.currentBranchId = nextBranchId;
-                    persistCurrentBranch();
-                    renderMessages();
-                    updateTokenDisplay();
-                    // 如果笔记面板打开，同步更新
-                    syncNotesPanel();
-                }
+                state.currentBranchId = nextBranchId;   // null = 一条都不剩 → 空态（无可避免）
+                persistCurrentBranch();
+                renderMessages();
+                updateTokenDisplay();
+                if (nextBranchId) syncNotesPanel();
+            } else {
+                markBranchDeleted(targetBranchId);   // 显式删除 → 留墓碑（唯一写墓碑的地方）
+                delete state.branches[targetBranchId];
             }
 
-            delete state.branches[targetBranchId];
             saveBranches();
             updateHistoryList();
 

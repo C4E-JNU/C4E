@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from tools.neo4j_tools import (
     execute_graph_schema as _exec_graph_schema,
     execute_cypher as _exec_cypher,
+    execute_graph_vector_search as _exec_graph_vector_search,
     Neo4jClient,
 )
 from tools.web_tools import web_search as _web_search, web_extract as _web_extract
@@ -27,9 +28,15 @@ from tools.mineru_tools import parse_pdfs, load_token
 
 # ── Pydantic 参数模型（提供给 LLM 的 JSON Schema） ──
 
-class CypherParams(BaseModel):
-    cypher: str = Field(description="要执行的 Cypher 查询语句，例如: MATCH (n) WHERE n.name CONTAINS $q RETURN n.name LIMIT 10")
-    params: dict = Field(default={}, description="查询参数（可选），例如: {'q': '关键词'}")
+class GraphQueryParams(BaseModel):
+    """图谱查询的唯一入口参数（schema / cypher / search 三合一）。"""
+    action: str = Field(description="动作：schema=先看图谱结构（首次调用）｜cypher=执行 Cypher｜search=自然语言语义检索")
+    cypher: str = Field(default="", description="action=cypher 时填：Cypher 语句。例: MATCH (p:Pollutant {name:$name})-[:DEGRADES]->(c) RETURN c.name LIMIT 10")
+    params: dict = Field(default={}, description="action=cypher 时的查询参数（可选）。例: {'name': 'Ciprofloxacin'}")
+    query: str = Field(default="", description="action=search 时填：自然语言查询。例: '镍掺杂四氧化三铁降解DDT'")
+    scope: str = Field(default="catalyst", description="action=search 的检索对象：catalyst(催化剂)/category(催化剂类别)/pollutant(污染物)/experiment(实验)/contradiction(矛盾)")
+    top_k: int = Field(default=8, description="action=search 返回条数 1-25")
+
 
 class SearchParams(BaseModel):
     query: str = Field(description="搜索关键词，例如: '向量数据库 Qdrant 用法'")
@@ -39,7 +46,7 @@ class FetchParams(BaseModel):
     url: str = Field(description="要抓取的网页完整 URL，必须以 http:// 或 https:// 开头")
 
 class SkillViewParams(BaseModel):
-    name: str = Field(description="技能名称，例如: 'graph-guide'")
+    name: str = Field(description="技能名称，例如: 'literature-translate'")
     file_path: str = Field(default="SKILL.md", description="技能内的文件路径，不传则读 SKILL.md")
 
 class CodeParams(BaseModel):
@@ -165,18 +172,50 @@ def get_tools(enabled_names: list[str]) -> list[BaseTool]:
 
 # ── 注册工具 ─────────────────────────────────────
 
-tools_registry["graph_schema"] = StructuredTool.from_function(
-    name="graph_schema",
-    description="获取 Neo4j 知识图谱的完整结构，包括所有节点类型（如 Pollutant, Catalyst）、关系类型（如 DEGRADES）、各类型的属性列表、向量索引信息。首次查询时调用此工具了解图谱结构。",
-    coroutine=_exec_graph_schema,
+# ── 图谱查询：一个入口，三个动作 ──────────────────
+# 为什么合并（用户 2026-09-27 定）：原先 graph_schema / execute_cypher / graph_vector_search 三个工具
+# 各占一个槽，前端配置面板只显示了前两个（第三个用户根本勾不到）；合并成一个入口后，前端只出现
+# 一个「图谱 (graph)」，而 LLM 侧仍按 action 拿到完全一样的三条路径（实现照旧复用，不重写）。
+async def _exec_graph_query(action: str = "", cypher: str = "", params: dict = None,
+                            query: str = "", scope: str = "catalyst", top_k: int = 8) -> str:
+    """图谱查询唯一入口：按 action 分发到原有实现。"""
+    a = (action or "").strip().lower()
+    if a == "schema":
+        return await _exec_graph_schema()
+    if a == "cypher":
+        if not (cypher or "").strip():
+            return json.dumps({"error": "action=cypher 需要提供 cypher 语句"}, ensure_ascii=False)
+        return await _exec_cypher(cypher, params or {})
+    if a == "search":
+        if not (query or "").strip():
+            return json.dumps({"error": "action=search 需要提供自然语言 query"}, ensure_ascii=False)
+        return await _exec_graph_vector_search(query, scope, top_k)
+    return json.dumps({"error": "未知 action: %r（可用 schema / cypher / search）" % action}, ensure_ascii=False)
+
+
+tools_registry["graph_query"] = _make_async_tool(
+    name="graph_query",
+    description=(
+        "催化降解知识图谱（Neo4j）的统一查询入口。**所有图谱数据都通过它获取**，按 action 选动作：\n"
+        "· schema —— 获取图谱结构（节点类型/关系类型/各类型属性/向量索引）。首次查图谱时先调它了解结构。\n"
+        "· cypher —— 执行任意 Cypher（MATCH/RETURN/CALL 皆可）。写操作（CREATE/DELETE/SET）需管理权限。\n"
+        "· search —— 自然语言/同义词语义检索（本地 bge 向量 + 图谱向量索引）。不确定图谱里精确名称时先用它拿候选。\n"
+        "\n"
+        "WHEN: 用户问催化剂、污染物、降解效率、实验条件、文献矛盾等图谱里的事。\n"
+        "HOW（分步，别一步问大而全的问题）: 1) 首次先 action=schema；2) 名称精确时直接 action=cypher；\n"
+        "名称不确定先用 action=search 拿候选，再用 action=cypher 按 paper_id 深查。\n"
+        "cypher 三步走：先模糊 MATCH (n) WHERE n.name CONTAINS $q，再精确 MATCH (p:Pollutant {name:$name})，"
+        "再展开 MATCH (p)-[r]-(c) RETURN p,r,c。\n"
+        "空结果降级链：模糊匹配 → 搜节点的 aliases 属性（中文别名/简称就写在里面）→ 换标签类型 → 最后才用自身知识（标注 💡）。\n"
+        "search 结果带相似度，score>0.6 才引用。\n"
+        "\n"
+        "回答格式：📊 来自图谱 / 💡 来自自身知识 / 📊+💡 混合来源；数据优先用表格（催化剂 | 效率 | 时间 | pH），保留专业术语英文原名。\n"
+        "图谱未连接时本工具返回 error，据实说明即可，别反复重试。"
+    ),
+    args_schema=GraphQueryParams,
+    func=_exec_graph_query,
 )
 
-tools_registry["execute_cypher"] = _make_async_tool(
-    name="execute_cypher",
-    description="执行任意 Cypher 查询语句，返回查询结果数组。所有图谱数据都通过此工具获取。支持任何 MATCH / RETURN / CALL 语句。如果是写操作（CREATE / DELETE / SET）需谨慎。",
-    args_schema=CypherParams,
-    func=_exec_cypher,
-)
 
 tools_registry["web_search"] = _make_async_tool(
     name="web_search",

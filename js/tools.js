@@ -76,10 +76,30 @@
             }
         }
 
+        // 渲染所有未处理的 mermaid 图（用户 2026-09-27 报「有的图变成 Syntax error in text」）：
+        //   · 旧实现用 v9 的 mermaid.init（已废弃），且失败时 mermaid 会把错误文字**糊进页面**；
+        //   · 改成 v10 的 mermaid.run(nodes) + suppressErrorRendering，失败时保留源码 + 一句可操作的提示
+        //     （图坏了必须能看见原始代码，否则没法改）。
         function renderMermaidDiagrams() {
-            if (typeof mermaid !== 'undefined') {
-                mermaid.init(undefined, document.querySelectorAll('.mermaid'));
-            }
+            if (typeof mermaid === 'undefined') return;
+            try {
+                mermaid.initialize({ startOnLoad: false, securityLevel: 'loose', suppressErrorRendering: true });
+            } catch (e) { /* 已初始化过则忽略 */ }
+            document.querySelectorAll('.mermaid').forEach(function (el) {
+                if (el.querySelector('svg')) return;                  // 已经渲染过
+                var code = el.textContent || '';
+                function failed() {
+                    el.innerHTML = '<div style="text-align:left;color:#b45309;font-size:.82rem;">'
+                        + '⚠️ 这段 Mermaid 代码没能渲染。常见原因：节点文字里含 <code>&gt;</code> <code>,</code>'
+                        + ' <code>?</code> <code>( )</code> 等特殊字符却没加引号（写成 A["效率 &gt; 90% ？"] 即可）。'
+                        + '<pre style="white-space:pre-wrap;word-break:break-all;background:rgba(0,0,0,.03);padding:.5rem;border-radius:6px;margin-top:.4rem;">'
+                        + code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                        + '</pre></div>';
+                }
+                try {
+                    Promise.resolve(mermaid.run({ nodes: [el] })).catch(failed);
+                } catch (e) { failed(); }
+            });
         }
 
         function copyCode(btn, codeId) {

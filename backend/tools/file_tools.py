@@ -15,6 +15,56 @@ READ_FILE_MAX_CHARS = 20000
 HISTORY_MSG_MAX_CHARS = 8000
 HISTORY_TOTAL_MAX_CHARS = 300000
 
+# ── 图像内联（image_read 通道）────────────────────────────
+# 单张图片 dataURL 上限（≈150KB 原图）。超限不内联，提示先裁 panel / 降质量。
+IMAGE_INLINE_MAX_CHARS = 200000
+# 工具产出图片的形态（由 agent 每请求设置）：
+#   "blocks" → 内容块 [{"type":"text",...},{"type":"image_url",...}]
+#              · LangChain/LangGraph 原生就能吃：list[dict] 块经
+#                langchain_core.tools.base._format_output → _normalize_message_content
+#                装进 ToolMessage.content（type 须在 TOOL_MESSAGE_BLOCK_TYPES 内），
+#                再由 langchain_openai._sanitize_chat_completions_content 原样发到 wire。
+#              · custom 引擎没有这层框架管道，由 agent 自己把图提升成独立的 user 图像块。
+#   "hoist"  → 返回含 data_url 的 JSON 文本，由引擎嗅探后提升（兜底路径）
+#   "off"    → 不内联，只回一句提示（引擎/模型不支持视觉时）
+_IMG_EMIT = "off"
+
+
+def set_image_emit(mode: str):
+    """设置工具产出图片的形态："blocks" / "hoist" / "off"。"""
+    global _IMG_EMIT
+    _IMG_EMIT = mode if mode in ("blocks", "hoist", "off") else "off"
+
+
+def set_image_inline(on: bool):
+    """兼容旧调用：True = 结构化内容块（blocks），False = 关闭（off）。"""
+    set_image_emit("blocks" if on else "off")
+
+
+def image_emit_mode() -> str:
+    return _IMG_EMIT
+
+
+_IMG_MIME = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+             ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp"}
+
+
+def _image_payload(data_url: str, meta: dict):
+    """按当前产出形态包装一张图片。
+
+    blocks → [text块(元数据JSON), image_url块]（LangChain 原生通道 / custom 由 agent 提升）
+    hoist  → 含 data_url 的 JSON 文本（旧行为，兜底）
+    """
+    m = dict(meta or {})
+    if _IMG_EMIT == "blocks":
+        m["mode"] = "image"
+        m["note"] = "图片已作为图像块附加，可直接查看像素"
+        return [{"type": "text", "text": json.dumps(m, ensure_ascii=False)},
+                {"type": "image_url", "image_url": {"url": data_url}}]
+    m["mode"] = "base64"
+    m["data_url"] = data_url
+    return json.dumps(m, ensure_ascii=False)
+
 
 def _get_workspace_dir():
     """获取 workspace 目录的绝对路径（项目根目录下的 workspace/）"""
@@ -109,7 +159,8 @@ def _resolve_safe_path(relative_path: str, write: bool = False) -> str:
 
 async def read_file(path: str = "", file_id: str = "", as_base64: bool = False, offset: int = 1, limit: int = 500):
     """读取文件内容。统一入口：
-    - 提供 file_id（上传附件 id）时，按附件读取：文档返回解析全文，图片(或 as_base64=True)返回 base64(dataURL)
+    - 提供 file_id（上传附件 id）时，按附件读取：文档返回解析全文；图片在图像通道开启时返回【图像内容块】
+      （[{"type":"text"...},{"type":"image_url"...}]），可直接看到像素；通道关闭时只回提示，不回吐 base64 文本
     - 否则按 path 读取磁盘文件（原逻辑，行号分页）
     Args:
         path: 相对于 workspace/ 的文件路径
@@ -125,11 +176,18 @@ async def read_file(path: str = "", file_id: str = "", as_base64: bool = False, 
         # 图片 → 返回 base64(dataURL)；文档 → 返回解析全文
         data_url = await image_to_base64(fid)
         if data_url:
-            if len(data_url) > READ_FILE_MAX_CHARS:
+            if _IMG_EMIT == "off":
+                return json.dumps({"ok": True, "source": "attachment", "file_id": fid,
+                                   "mode": "image_no_inline",
+                                   "hint": "当前引擎不支持把工具结果内联成图像块。请让用户把图作为当轮附件发送，"\
+                                           "或改用 custom 引擎；不要靠读 base64 文本猜图内容。"}, ensure_ascii=False)
+            if len(data_url) > IMAGE_INLINE_MAX_CHARS:
                 return json.dumps({"ok": True, "source": "attachment", "file_id": fid, "mode": "image_too_large",
-                                   "hint": f"图片 base64 过大（{len(data_url)} 字符），未内联返回以免撑爆上下文；"
-                                           f"如需读取内容请用 vision/OCR 或指定更小图片。"}, ensure_ascii=False)
-            return json.dumps({"ok": True, "source": "attachment", "file_id": fid, "mode": "base64", "data_url": data_url}, ensure_ascii=False)
+                                   "hint": f"图片 dataURL 过大（{len(data_url)} 字符 > 上限 {IMAGE_INLINE_MAX_CHARS}）；"
+                                           f"请先用 run_code(PIL) 裁 panel / 降质量 / 缩宽度，或切成多张小图分别读取。"},
+                                  ensure_ascii=False)
+            return _image_payload(data_url, {"ok": True, "source": "attachment", "file_id": fid,
+                                             "data_url_chars": len(data_url)})
         text = await get_upload_text(fid)
         if text:
             clipped = text[:READ_FILE_MAX_CHARS]
@@ -195,6 +253,30 @@ async def read_file(path: str = "", file_id: str = "", as_base64: bool = False, 
 
         if not os.path.isfile(full_path):
             return json.dumps({"error": f"文件不存在: {path}"})
+
+        # ── 图片：按 path 直接转 dataURL（image_read 通道）──────────
+        _ext = os.path.splitext(full_path)[1].lower()
+        if _ext in _IMG_MIME:
+            if _IMG_EMIT == "off":
+                return json.dumps({"ok": False, "mode": "image_no_inline", "path": path,
+                                   "hint": "当前引擎不支持把工具结果内联成图像块（改用 custom 引擎，"
+                                           "或让用户把图作为当轮附件发送）。"}, ensure_ascii=False)
+            try:
+                import base64 as _b64
+                with open(full_path, "rb") as _f:
+                    _b = _f.read()
+                _du = f"data:{_IMG_MIME[_ext]};base64," + _b64.b64encode(_b).decode()
+                if len(_du) > IMAGE_INLINE_MAX_CHARS:
+                    return json.dumps({"ok": True, "source": "path", "mode": "image_too_large",
+                                       "path": path, "bytes": len(_b),
+                                       "hint": f"dataURL {len(_du)} 字符 > 上限 {IMAGE_INLINE_MAX_CHARS}；"
+                                               f"请先用 run_code(PIL) 裁 panel / 降质量 / 缩宽度，"
+                                               f"或切成多张小图分别读取。"}, ensure_ascii=False)
+                return _image_payload(_du, {"ok": True, "source": "path", "path": path,
+                                            "bytes": len(_b)})
+            except Exception as e:
+                return json.dumps({"error": f"图片读取失败: {type(e).__name__}: {str(e)[:120]}"},
+                                  ensure_ascii=False)
 
         with open(full_path, "r", encoding="utf-8", errors="replace") as f:
             lines = f.readlines()
@@ -945,6 +1027,51 @@ async def move_note(note_id: str, direction: int, owner: str = "guest") -> str:
 
 
 # ═══════════════ 后端化：按 file_id 读取（_resolve_upload 已在上方统一定义，跨 pool/用户区/旧目录） ═══════════════
+
+
+def split_image_result(tool_result):
+    """把工具产出拆成 (data_url, text)。两种形态都吃：
+
+    - 结构化内容块 list[dict]（blocks 形态）：取 type=image_url 的 url，text 块拼成 meta
+    - JSON 文本（hoist 形态）：mode=="base64" 时取 data_url，其余字段作为 meta
+    无图返回 ("", "")。data_url 超限（IMAGE_INLINE_MAX_CHARS）视为无图，交由上游提示裁剪。
+    """
+    if isinstance(tool_result, (list, tuple)):
+        url, texts = "", []
+        for b in tool_result:
+            if not isinstance(b, dict):
+                texts.append(str(b))
+                continue
+            if b.get("type") == "image_url":
+                inner = b.get("image_url")
+                u = inner.get("url") if isinstance(inner, dict) else ""
+                if isinstance(u, str) and u.startswith("data:image/") and len(u) <= IMAGE_INLINE_MAX_CHARS:
+                    url = url or u
+            elif b.get("type") == "text":
+                texts.append(b.get("text") or "")
+            else:
+                texts.append(json.dumps(b, ensure_ascii=False, default=str))
+        return url, "\n".join(t for t in texts if t).strip()
+    s = tool_result if isinstance(tool_result, str) else str(tool_result or "")
+    if "data:image/" not in s:
+        return "", ""
+    try:
+        d = json.loads(s)
+    except Exception:
+        return "", ""
+    if not isinstance(d, dict) or d.get("mode") != "base64":
+        return "", ""
+    u = d.get("data_url") or ""
+    if isinstance(u, str) and u.startswith("data:image/") and len(u) <= IMAGE_INLINE_MAX_CHARS:
+        # meta 里剔除 data_url：工具消息里绝不能留 base64 文本
+        meta = {k: v for k, v in d.items() if k != "data_url"}
+        return u, json.dumps(meta, ensure_ascii=False)
+    return "", ""
+
+
+def extract_image_data_url(tool_result) -> str:
+    """从工具产出里嗅探图片 dataURL（image_read 通道用）。无则返回空串。"""
+    return split_image_result(tool_result)[0]
 
 
 async def image_to_base64(file_id: str) -> str:

@@ -19,7 +19,7 @@ class Neo4jClient:
             uri,
             auth=(user, password),
             max_connection_pool_size=2,
-            connection_timeout=10000,
+            connection_timeout=10,  # 秒（driver 单位是秒，此前误写 10000 相当于 2.8 小时）
         )
         cls._driver.verify_connectivity()
         return cls._driver
@@ -113,7 +113,95 @@ def _serialize_value(v):
         return str(v)
 
 
-# ── 工具函数 ──────────────────────────────────────────
+# ── 向量检索（图谱语义查询）──────────────────────────
+
+# 向量索引名 → 节点标签；索引维度由 step10_graph_sync.py 按本地 bge-small-zh-v1.5 (512) 创建
+VECTOR_INDEX_LABELS = {
+    "vec_catalyst": "Catalyst",
+    "vec_category": "CatalystCategory",
+    "vec_pollutant": "Pollutant",
+    "vec_experiment": "Experiment",
+    "vec_contradiction": "Contradiction",
+}
+
+
+async def execute_graph_vector_search(query: str, scope: str = "catalyst", top_k: int = 8):
+    """图谱语义检索：本地 bge 模型向量化 query → Neo4j 原生向量索引召回 → 沿边扩展上下文。
+
+    scope: catalyst / category / pollutant / experiment / contradiction（对应 5 个向量索引）
+    返回节点属性 + score + 一跳图上下文，供 LLM 直接引用。
+    """
+    if not Neo4jClient.is_connected():
+        return json.dumps({"error": "Neo4j 未连接"})
+    query = (query or "").strip()
+    if not query:
+        return json.dumps({"error": "查询文本不能为空"})
+    index_name = f"vec_{scope}"
+    label = VECTOR_INDEX_LABELS.get(index_name)
+    if not label:
+        return json.dumps({"error": f"scope 必须是 {list(VECTOR_INDEX_LABELS.keys())}"})
+    top_k = max(1, min(int(top_k or 8), 25))
+    try:
+        from tools.vector_search import embed_texts
+        # bge 官方建议：查询侧加检索指令前缀（文档侧/图谱 search_text 侧不加）
+        q_inst = "为这个句子生成表示以用于检索相关文章："
+        q_vec = embed_texts([q_inst + query])[0].tolist()
+    except Exception as e:
+        return json.dumps({"error": f"本地向量化模型加载失败: {e}"})
+
+    expand = {
+        "Catalyst": """
+            OPTIONAL MATCH (n)-[:IN_CATEGORY]->(cat:CatalystCategory)
+            OPTIONAL MATCH (n)<-[:USES_CATALYST]-(e:Experiment)-[:DEGRADES]->(pl:Pollutant)
+            OPTIONAL MATCH (k:Contradiction)-[:DISPUTES]->(e)
+            RETURN n, score, cat.display_name AS category,
+                   collect(DISTINCT pl.name)[..6] AS pollutants,
+                   count(DISTINCT k) AS contradictions""",
+        "CatalystCategory": """
+            OPTIONAL MATCH (n)<-[:IN_CATEGORY]-(c:Catalyst)<-[:USES_CATALYST]-(e:Experiment)
+            RETURN n, score, count(DISTINCT e) AS experiments, count(DISTINCT c) AS members""",
+        "Pollutant": """
+            OPTIONAL MATCH (n)<-[:DEGRADES]-(e:Experiment)-[:USES_CATALYST]->(c:Catalyst)
+            OPTIONAL MATCH (k:Contradiction)-[:DISPUTES]->(e)
+            RETURN n, score, count(DISTINCT e) AS experiments,
+                   collect(DISTINCT c.catalyst_name)[..6] AS catalysts,
+                   count(DISTINCT k) AS contradictions""",
+        "Experiment": """
+            OPTIONAL MATCH (n)-[:USES_CATALYST]->(c:Catalyst)
+            OPTIONAL MATCH (n)-[:DEGRADES]->(pl:Pollutant)
+            OPTIONAL MATCH (n)-[:WITH_OXIDANT]->(o:Oxidant)
+            OPTIONAL MATCH (k:Contradiction)-[:DISPUTES]->(n)
+            RETURN n, score, c.catalyst_name AS catalyst, pl.name AS pollutant,
+                   o.oxidant_key AS oxidant, count(DISTINCT k) AS contradictions""",
+        "Contradiction": """
+            OPTIONAL MATCH (p:Paper)-[:HAS_CONTRADICTION]->(n)
+            RETURN n, score, p.title AS paper_title, p.doi AS doi, p.paper_id AS paper_id""",
+    }[label]
+
+    try:
+        rows = Neo4jClient.run(
+            f"""
+            CALL db.index.vector.queryNodes($index, $k, $vec) YIELD node, score
+            WITH node AS n, score
+            {expand}
+            """,
+            {"index": index_name, "k": top_k, "vec": q_vec},
+        )
+        out = []
+        for r in rows:
+            node = r.get("n") or {}
+            props = node.get("properties", {}) if isinstance(node, dict) else {}
+            props.pop("embedding", None)  # 向量不回传给 LLM
+            out.append({"score": r.get("score"), **{k2: v for k2, v in r.items()
+                                                     if k2 not in ("n", "score") and v is not None},
+                        "node": props})
+        return json.dumps({
+            "query": query, "scope": scope, "count": len(out), "results": out,
+            "hint": "score 为余弦相似度；>0.6 高相关。数据细节可再对 node.node_id/paper_id 用 execute_cypher 深查。",
+        }, ensure_ascii=False, indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": f"向量检索失败: {str(e)}", "cypher_hint":
+                           "若报 'no such vector index'，先在 skill 目录跑 step10_graph_sync.py --embed 重建索引并回填向量。"})
 
 async def execute_graph_schema():
     """获取 Neo4j 图谱的节点类型、关系类型、属性结构"""

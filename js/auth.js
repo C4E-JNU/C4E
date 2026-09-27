@@ -34,6 +34,7 @@
     };
     function setAuth(token, user) {
         localStorage.setItem(TOKEN_KEY, token);
+        _sessionExpired = false;   // 重新登录成功：清掉「会话已过期」标记
         localStorage.setItem(USER_KEY, JSON.stringify(user));
     }
     function clearAuth() {
@@ -44,6 +45,7 @@
     // ── fetch 注入：同源 /api 自动带 token；401 弹登录框 ──
     var _origFetch = window.fetch.bind(window);
     var _loginOpen = false;
+    var _sessionExpired = false;   // 共享库会话过期（代理请求 401）：芯片常驻标红，登录成功后清掉
     window.fetch = function (url, opts) {
         opts = opts || {};
         try {
@@ -54,13 +56,47 @@
             }
         } catch (e) {}
         return _origFetch(url, opts).then(function (r) {
-            // 401 自动弹登录框：桌面端保留（方便），手机端不弹（会遮屏，改为点顶栏「登录」）
-            var _isMobile = false;
-            try { _isMobile = window.matchMedia('(max-width: 768px)').matches; } catch (e) {}
-            if (r.status === 401 && !_loginOpen && !_isMobile) { _loginOpen = true; _openLogin(true); }
+            // 401：先**静默复检**一次会话，只有「确实没登录 / 会话真失效」才弹登录框。
+            // 为什么（用户 2026-09-27 报「用着用着突然弹登录」）：本机实例的对话/笔记/设置/SSE
+            // 全是代理到共享库的，共享库会话一过期，后台自动推送（节流保存、SSE 重连）就 401 ——
+            // 以前这里直接弹框，表现为「明明登录过却莫名被弹窗打断」。代理请求的 401 不该打断用户。
+            // 说明：/api/auth/* 自身（如密码错）的 401 有它自己的错误提示，不走这里。
+            if (r.status === 401 && !_loginOpen && (u || '').indexOf('/api/auth/') !== 0) {
+                var _isMobile = false;
+                try { _isMobile = window.matchMedia('(max-width: 768px)').matches; } catch (e) {}
+                if (_isMobile) {
+                    _markSessionExpired();      // 手机端不弹（会遮屏）：只标红顶栏芯片
+                } else {
+                    _loginOpen = true;
+                    _recheckSessionThenMaybeLogin();
+                }
+            }
             return r;
         });
     };
+
+    /** 401 后静默问一次 /api/auth/me：它也 401 → 真没登录，弹框；它正常 → 只是那条代理请求的 401
+     *  （共享库会话过期）→ 不打断，轻提示 + 顶栏芯片标红，点芯片即可重新登录。 */
+    function _recheckSessionThenMaybeLogin() {
+        var h = {};
+        try { var _t = window.getAuthToken(); if (_t) h.Authorization = 'Bearer ' + _t; } catch (e) {}
+        _origFetch('/api/auth/me', { headers: h }).then(function (r2) {
+            return r2.status === 401 ? 'expired' : 'ok';
+        }).catch(function () { return 'unknown'; }).then(function (st) {
+            if (st === 'expired') { _openLogin(true); return; }
+            _loginOpen = false;       // 不是会话问题 → 放开，日后真 401 仍能弹
+            if (st === 'ok') _markSessionExpired();
+        });
+    }
+
+    /** 标记「共享库会话已过期」：置状态位 → 重渲染顶栏芯片（标红/改成「重新登录」）→ 一条轻提示。
+     *  放在状态位里而不是只改一次 DOM，是因为 _renderChip 会被多处重渲染，改 DOM 会被冲掉（踩过）。 */
+    function _markSessionExpired() {
+        if (_sessionExpired) return;        // 已经标过，别重复弹提示
+        _sessionExpired = true;
+        _renderChip();
+        if (typeof showToast === 'function') showToast('共享库会话已过期，点右上角身份芯片重新登录', 'error');
+    }
 
     function _esc(s) {
         return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -403,6 +439,14 @@
             chip.insertBefore(dot, chip.firstChild);
         }
         chip.onmouseover = function () { chip.style.borderColor = lvColor; };
+        if (_sessionExpired) {
+            // 会话过期：常驻标红 + 改成「重新登录」，鼠标移开也不复位（用户 2026-09-27 报「莫名弹登录」）
+            chip.title = '共享库会话已过期：点这里重新登录';
+            chip.textContent = '⚠ ' + ((me && me.username) || '未登录') + ' 重新登录';
+            chip.style.borderColor = 'var(--danger, #ef4444)';
+            chip.style.color = 'var(--danger, #ef4444)';
+        }
+        chip.onmouseover = function () { chip.style.borderColor = _sessionExpired ? 'var(--danger, #ef4444)' : lvColor; };
         chip.onmouseout = function () { chip.style.borderColor = 'var(--border)'; };
         slot.appendChild(chip);
 

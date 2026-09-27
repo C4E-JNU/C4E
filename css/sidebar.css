@@ -839,6 +839,23 @@
             background: linear-gradient(to right, var(--primary-soft), transparent);
         }
 
+        /* 当前对话：常驻高亮（用户 2026-09-27 定：不要「(当前)」文字，直接用 hover 那套颜色常驻） */
+        .history-group.current .group-header {
+            background: var(--primary-soft);
+            color: var(--primary);
+        }
+
+        .theme-warm .history-group.current .group-header {
+            background: #eee8d5;
+        }
+
+        .theme-macaron-pink .history-group.current .group-header,
+        .theme-macaron-green .history-group.current .group-header,
+        .theme-macaron-violet .history-group.current .group-header,
+        .theme-macaron-blue .history-group.current .group-header {
+            background: linear-gradient(to right, var(--primary-soft), transparent);
+        }
+
         .group-actions-wrapper {
             position: relative;
             display: flex;
