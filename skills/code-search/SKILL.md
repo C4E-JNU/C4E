@@ -18,6 +18,8 @@ tags: [code, search, grep, glob, edit, github]
 | 工具 | 用途 | 关键参数 |
 |---|---|---|
 | `search_files` | **搜内容**（正则）。三态：`files_with_matches` / `content` / `count` | `pattern`、`path`、`file_glob`、`context`(=-A/-B/-C)、`limit`/`offset` |
+
+> `path` 的相对路径**以 `workspace/` 为基准**（和 `read_file` 一致）。要搜项目代码就传绝对路径，例如 `path="<PROJECT-DIR>/backend"`。
 | `find_files` | **按文件名**找，按修改时间新→旧 | `pattern`（glob，如 `*.py`）、`path` |
 | `edit_file` | **改一处**：old_string → new_string | `file_path`、`old_string`、`new_string`、`replace_all` |
 

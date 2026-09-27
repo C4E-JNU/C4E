@@ -34,6 +34,9 @@ tags: [literature, search, doi, arxiv, crossref]
 - **换词最多两次**：第一次用用户原话，第二次换同义词或英文术语（如「光催化降解抗生素」→ `photocatalytic degradation of antibiotics`）。两次都空 → 直接告诉用户「没检索到，建议给出 DOI 或题名」，**不要继续换词**。
 - **认「够了」**：拿到 3~5 条题名+年份+期刊+DOI，就够回答「有哪些相关文献」；不要为了凑数继续搜。
 - **认「失败」**：`semantic_scholar_search` 报 429 限流时**不要重试**，改用 `crossref_lookup`（无严格限流），并在回答里说明限流。
+  ⚠️ 实测：**匿名 key 下 S2 的 search 端点在本网络里是持续 429**（等 30~90 秒也一样），
+  而 `https://api.semanticscholar.org/graph/v1/paper/DOI:<doi>` 是 200 —— 也就是说
+  「已知道 DOI、要引用数」时可走详情端点，但「按关键词搜」这条路基本别指望，直接用 crossref。
 - **不许编造**：任何一个 DOI、年份、期刊名都必须来自工具返回。工具没返回就不写。
 
 ## 常见错误
