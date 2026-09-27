@@ -412,9 +412,23 @@
         overflow-y: auto !important;
         -webkit-overflow-scrolling: touch;
     }
-    /* 打开状态 */
+    /* 打开状态。⚠️ 必须把 app 自己那套桌面规则一起盖回来，否则手机上只会出现遮罩、看不见抽屉：
+     *   ① .chat-sidebar.collapsed（input.css）= width:0 + opacity:0 + padding:0 + （还可能 display:none）
+     *      —— 家园页的侧栏就是收起的，光有 translateX(0) 也还是个 0 宽的框（用户报的"暗屏，没打开"）
+     *   ② .chat-section 是 position:relative + z-index:2000 → 层叠上下文，把 position:fixed 的侧栏困在里面，
+     *      抽屉永远压在遮罩(2900)之下 → 只看得到"暗屏"；而且家园页 .chat-section 还是 display:none，
+     *      侧栏整个 0×0。这两个都是**结构性的**，纯 CSS 盖不住 → mobile.js 在打开时把侧栏搬到 body 下
+     *      （关抽屉时原样搬回），于是 position:fixed + z-index:3200 在根层叠上下文里直接生效。 */
     body.mobile-drawer-open .chat-sidebar {
+        display: flex !important;
+        width: 82vw !important;
+        max-width: 320px !important;
+        opacity: 1 !important;
+        /* 顶栏（46px）压在抽屉之上，好让 ✕ 能点到 → 抽屉内容从它下面开始 */
+        padding: 3.4rem 1.5rem 1.5rem !important;
+        overflow-y: auto !important;
         transform: translateX(0) !important;
+        z-index: 3200 !important;
     }
     /* 遮罩层（点空白关闭抽屉） */
     body.mobile-drawer-open::before {
@@ -536,7 +550,7 @@
         height: 46px !important;              /* 与下面 chat-section 的下移量一致 */
         overflow: visible !important;
         position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important;
-        z-index: 2100 !important;
+        z-index: 3300 !important;          /* 高于遮罩(2900)与抽屉(3200)：抽屉开着时 ✕ 也点得到 */
     }
     body.full-screen-mode header::after { display: none !important; }   /* 去掉桌面隐形热区 */
     body.full-screen-mode .chat-section {

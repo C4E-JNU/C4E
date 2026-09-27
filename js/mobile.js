@@ -19,9 +19,36 @@
         return document.body.classList.contains(OPEN_CLS);
     }
 
+    /** 侧栏在 DOM 里的老家（.chat-section 内）。家园页那一块是 display:none，
+     *  而且 .chat-section 是层叠上下文（position:relative + z-index:2000），会把
+     *  position:fixed 的侧栏困住、永远压在 body::before 遮罩(2900) 之下 —— 用户看到的
+     *  就是"点了只暗屏、抽屉不出来"。纯 CSS 盖不住 → 打开时把侧栏搬到 body 下，
+     *  关掉时原样搬回（DOM 搬家不影响它自己与子节点上的监听器）。 */
+    var sbHome = null;
+
+    function adoptSidebar() {
+        var sb = document.getElementById('chat-sidebar');
+        if (!sb || sb.parentElement === document.body) return;
+        sbHome = { parent: sb.parentElement, next: sb.nextElementSibling };
+        document.body.appendChild(sb);
+        void sb.offsetWidth;               // 强制重排，让 translateX 的过渡从屏外开始
+    }
+
+    function restoreSidebar() {
+        var sb = document.getElementById('chat-sidebar');
+        if (!sb || !sbHome || !sbHome.parent) return;
+        if (sbHome.next && sbHome.next.parentElement === sbHome.parent) {
+            sbHome.parent.insertBefore(sb, sbHome.next);
+        } else {
+            sbHome.parent.appendChild(sb);
+        }
+        sbHome = null;
+    }
+
     function openDrawer() {
         if (!isMobile()) return;
         closeSheet();                      // 抽屉与 ⋯ 面板不叠加
+        adoptSidebar();
         document.body.classList.add(OPEN_CLS);
         // 打开抽屉时锁滚动，避免背景跟着滑
         document.body.style.overflow = 'hidden';
@@ -31,6 +58,7 @@
 
     function closeDrawer() {
         document.body.classList.remove(OPEN_CLS);
+        restoreSidebar();
         document.body.style.overflow = '';
         var b = document.getElementById('mobile-menu-btn');
         if (b) { b.textContent = '☰'; b.setAttribute('aria-label', '打开对话管理'); }
@@ -101,6 +129,7 @@
             var onChange = function (ev) {
                 if (!ev.matches) {          // 变宽（回桌面）
                     document.body.classList.remove(OPEN_CLS);
+                    restoreSidebar();
                     document.body.style.overflow = '';
                     var b2 = document.getElementById('mobile-menu-btn');
                     if (b2) b2.textContent = '☰';
