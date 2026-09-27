@@ -8,6 +8,15 @@ from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 from langchain_core.chat_history import InMemoryChatMessageHistory
+import contextvars
+
+# ── A0：单次回答内的上下文治理（实现在 agent/context_engine.py）──
+from agent.context_engine import (cap_tool_result, prune_tool_results_only,
+                                  ContextBudget, estimate_tokens)
+
+# 模型窗口（DeepSeek V4 = 256K，用户铁律：绝不压低，统一 262144）。
+# 前端可在 model.context_window 里显式覆盖；这里只是没有该字段时的取值。
+DEFAULT_CONTEXT_WINDOW = 262144
 
 # ── 当前对话上下文（供工具读取）────────────────────
 _current_branch_id = ""
@@ -66,33 +75,44 @@ def get_subagent_options() -> dict:
 # ── 子智能体事件槽（引擎无关）──────────────────────
 # 工具执行时把"派了哪些子任务 / 各自结果"放进来，主循环（custom 与 langchain 都行）取走并流给前端。
 # 这样就不依赖 LC 事件里的工具名（实测 astream_events 有时取不到名字）。
-_delegate_pending_tasks: list = []
-_delegate_pending_results: list = []
+# 子智能体的待办/结果：**按请求隔离**。
+# 原实现是模块级 list，每次生成入口 clear() 一次 —— 云端并发时 A 的生成会清掉 B 的子智能体
+# 待办（真实 bug）。改成 contextvars 持有一份可变对象：请求入口 set 新对象，
+# 该请求派生的子任务继承同一份引用（asyncio 子任务共享对象本身），互不干扰。
+_delegate_pending = contextvars.ContextVar("delegate_pending", default=None)
+
+
+def _pending() -> dict:
+    p = _delegate_pending.get()
+    if p is None:
+        p = {"tasks": [], "results": []}
+        _delegate_pending.set(p)
+    return p
 
 
 def set_delegate_tasks(tasks: list):
-    _delegate_pending_tasks.extend(tasks or [])
+    _pending()["tasks"].extend(tasks or [])
 
 
 def pop_delegate_tasks() -> list:
-    out = list(_delegate_pending_tasks)
-    _delegate_pending_tasks.clear()
+    out = list(_pending()["tasks"])
+    _pending()["tasks"].clear()
     return out
 
 
 def set_delegate_results(results: list):
-    _delegate_pending_results.extend(results or [])
+    _pending()["results"].extend(results or [])
 
 
 def pop_delegate_results() -> list:
-    out = list(_delegate_pending_results)
-    _delegate_pending_results.clear()
+    out = list(_pending()["results"])
+    _pending()["results"].clear()
     return out
 
 
 def clear_delegate_pending():
-    _delegate_pending_tasks.clear()
-    _delegate_pending_results.clear()
+    """本请求新开一份待办/结果（不是去清别人的）。"""
+    _delegate_pending.set({"tasks": [], "results": []})
 
 
 def _resolve_timeouts(t: dict = None) -> dict:
@@ -237,6 +257,13 @@ async def _build_system_prompt(enabled_tools: list[str], loaded_skills: list[str
         "- 图谱查询、联网搜索、文件解析、技能读取等，按用户问题需求选择合适的工具。",
         "- **不要在回答中重复或引用工具返回的原始 JSON 数据**。工具执行结果已被系统自动展示给用户，你在回答中只给出结论和分析。",
         "- **最终回答简洁明了**，不要包含中间步骤的描述。用户能看到你调用了哪些工具。",
+        "## 纪律（照着做，别打折扣）",
+        "- **先诊断再换招**：工具报错时先读错误信息、核对自己的假设、做一次针对性修正，再决定是否换别的办法。既不要盲目重复同一个调用，也不要一次失败就放弃可行的路子。",
+        "- **专用工具优先**：读文件用 read_file（不要 cat/type）、搜内容用 search_files（不要 shell 里 grep/rg）、找文件用 find_files（不要 ls 递归猜路径）、改文件用 edit_file（改一处不必整篇重写）；terminal 只用于系统命令与装包。",
+        "- **动手前先读**：没读过的文件不要提改法，也不要凭文件名猜内容。",
+        "- **完成前必须验证，并如实汇报**：跑过的就说跑过，没跑的就明说没跑；不要把未完成说成完成，也不要把已验证通过的过度弱化成「可能可以」。",
+        "- **长度定量**：工具调用之间的旁白不超过 25 个词；最终回答按任务复杂度写，不要为了短丢掉结论。",
+        "- **本对话已上传的文件**（系统提示末尾那段清单）：只要在清单里就直接 read_file(file_id=…) / read_image(file_id=…) 取内容，**不要因为消息变旧就说没有文件、也不要让用户重新上传**。",
         "- **调用工具后必须收敛**：每次工具执行完，先根据返回内容判断是否已足够回答用户问题。若已获得所需信息，立即生成最终回答并结束，**不要无意义地重复调用工具**。只有确实缺少关键信息时才继续调用**不同的、有必要的**工具。同一工具返回失败时，最多按需换用别的工具一次，不要反复重试同一工具。",
         "- 若某写操作工具返回包含 `__NEED_FULL__` 的错误，说明当前为询问模式、该操作超出权限范围。请明确告知用户：需要切换到完全访问模式后才能执行，并简要说明要做什么。",
         "- **产出文件一律写到 `outputs/` 目录**（相对路径，例如 `outputs/报告.pptx`）：用 write_file 写文本时路径就用 `outputs/xxx`；"
@@ -309,6 +336,36 @@ def _build_context(history: list[dict], user_input: str, context_length: int):
 
 # ── 文件上下文注入 ────────────────────────────────
 
+async def _build_file_manifest(file_ids: list) -> str:
+    """本对话已上传文件的清单 —— 进**系统提示**，每一轮都在。
+
+    为什么放系统提示而不是当轮消息尾部：附件原来只在"当轮用户消息"尾部注入一行引用，
+    且前端只收集最近 N 条消息里的附件 —— 更早那轮上传的文件根本进不了请求，
+    表现就是"我前面发了文件，下一轮说没有文件"（用户实测）。
+    清单按 file_id 排序 = 字节稳定（只在新附件加入时变化），不破坏隐式前缀缓存。
+    """
+    ids = sorted({f for f in (file_ids or []) if f})
+    if not ids:
+        return ""
+    from tools.file_tools import _resolve_upload, get_upload_text, image_to_base64
+    rows = []
+    for fid in ids:
+        _, meta, _ = _resolve_upload(fid)
+        name = (meta or {}).get("name") or fid
+        if await image_to_base64(fid):
+            rows.append("- [图片] %s（file_id: %s）" % (name, fid))
+        else:
+            text = await get_upload_text(fid)
+            if text:
+                rows.append("- [文档] %s（file_id: %s，已解析 %d 字）" % (name, fid, len(text)))
+            else:
+                rows.append("- [文档] %s（file_id: %s，无可用文本：扫描版请用 mineru_parse 解析）" % (name, fid))
+    return ("[本对话已上传的文件] —— 这些文件在本会话里**一直可用**，"
+            "不要因为消息变旧就说「没有文件」或者要求用户重新上传。\n"
+            + "\n".join(rows) +
+            "\n取正文用 read_file(file_id=…)，取图片用 read_image(file_id=…)；清单里有的就不要问用户要。")
+
+
 async def _prepare_file_context(file_ids: list, full_file_ids, images: list):
     """统一构建附件上下文。
 
@@ -328,7 +385,7 @@ async def _prepare_file_context(file_ids: list, full_file_ids, images: list):
     file_ids = [f for f in (file_ids or []) if f]
     full_set = None if full_file_ids is None else set(full_file_ids or [])
     image_urls = list(images or [])
-    full_texts, refs = [], []
+    full_texts = []
 
     for fid in file_ids:
         _, meta, _ = _resolve_upload(fid)
@@ -339,8 +396,7 @@ async def _prepare_file_context(file_ids: list, full_file_ids, images: list):
         if data_url:
             if is_full:
                 image_urls.append(data_url)
-            else:
-                refs.append(f"[图片文件: {name}]（file_id: {fid}）— 图片已在前文轮次提供")
+            # 历史图片不在这里重复列名：文件清单（系统提示）里已经有它的 file_id
             continue
 
         text = await get_file_text(fid)
@@ -350,16 +406,14 @@ async def _prepare_file_context(file_ids: list, full_file_ids, images: list):
                         f"\n…[文件 {name} 正文 {len(text)} 字符，已截断至 {READ_FILE_MAX_CHARS}；"
                         "如需更多内容请用 read_file 指定 file_id 或分页读取]")
             full_texts.append(f"[文件: {name}]\n{text}")
+        # 历史附件（非当轮）不在这里注入：改由 _build_file_manifest 进系统提示，
+        # 同一份信息不在用户消息尾部重复一遍（重复注入是纯浪费）。
         elif text:
-            refs.append(f'[文件: {name}]（file_id: {fid}）— 正文未随本轮注入；如需该文件内容，请调用 read_file(file_id="{fid}") 获取')
-        else:
-            refs.append(f"[文件: {name}]（file_id: {fid}）— 后端未提取到该文件的文本（扫描版 PDF 请用 mineru_parse 解析）")
+            pass
 
     parts = []
     if full_texts:
         parts.append("---\n用户上传了以下文件内容：\n" + "\n---\n".join(full_texts))
-    if refs:
-        parts.append("---\n本轮对话引用了以下历史附件：\n" + "\n".join(refs))
     text_block = ("\n\n" + "\n\n".join(parts)) if parts else ""
     return text_block, image_urls
 
@@ -403,6 +457,9 @@ async def run_agent(
 
     # 2. System Prompt
     system_prompt = await _build_system_prompt(enabled_tools, loaded_skills)
+    _manifest = await _build_file_manifest(file_ids)
+    if _manifest:
+        system_prompt = system_prompt + "\n\n" + _manifest
 
     # 3. LLM
     llm = ChatOpenAI(
@@ -536,6 +593,9 @@ async def stream_agent(
 
     # System prompt
     system_prompt = await _build_system_prompt(enabled_tools, loaded_skills)
+    _manifest = await _build_file_manifest(file_ids)
+    if _manifest:
+        system_prompt = system_prompt + "\n\n" + _manifest
 
     # Tools (LangChain StructuredTool)
     tools = get_tools(enabled_tools)
@@ -617,6 +677,10 @@ async def stream_agent(
     all_content = ""   # 累积所有轮次的模型正文，防止工具轮正文丢失
     _t_start = time.time()
     _nudged = _warned = False
+    # A0：单轮内上下文预算（用 API 真实 usage 校准；触发线 = (窗口 - 输出预留) × 0.75）
+    _ctx = ContextBudget(window_tokens=int(model_config.get("context_window") or DEFAULT_CONTEXT_WINDOW),
+                         max_output_tokens=max_tokens)
+    _overflow_retried = False
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(connect=20, read=300, write=60, pool=20)) as client:
             cap = max_rounds if max_rounds and max_rounds > 0 else 100000  # 0 = 无限
@@ -675,7 +739,24 @@ async def stream_agent(
                 async with client.stream("POST", endpoint, json=payload, headers=headers) as resp:
                     if resp.status_code != 200:
                         body = (await resp.aread()).decode(errors="replace")
-                        yield {"type": "error", "message": f"模型接口错误 {resp.status_code}: {body[:300]}"}
+                        # A0-T0.4：上下文溢出不再"抛一句 error 就结束"。
+                        # 判定为溢出 → 清一轮旧工具结果 → 重试一次；仍失败才明确报错，
+                        # 并在报错里说清"哪些内容被丢弃/已无处可清"。
+                        _low = body.lower()
+                        _overflow = resp.status_code in (400, 413, 422) and any(
+                            k in _low for k in ("context", "token", "too long", "maximum", "length", "exceed"))
+                        if _overflow and not _overflow_retried:
+                            _overflow_retried = True
+                            _cleared = prune_tool_results_only(messages, keep_recent=2)
+                            _ctx.record_compress_result(_cleared > 0)
+                            yield {"type": "context_pruned", "cleared": _cleared,
+                                   "reason": "模型报上下文溢出，已清理旧工具结果并重试一次"}
+                            if _cleared > 0:
+                                continue
+                        _hint = ("（上下文溢出：可清的工具结果已全部清理，仍超出窗口 —— "
+                                 "请缩小本次任务范围或新开对话）") if _overflow else ""
+                        yield {"type": "error",
+                               "message": f"模型接口错误 {resp.status_code}: {body[:300]}{_hint}"}
                         return
                     async for line in resp.aiter_lines():
                         if generation_cancelled():
@@ -865,10 +946,26 @@ async def stream_agent(
                         "id": call_id, "type": "function",
                         "function": {"name": name, "arguments": args_str},
                     })
-                    tool_messages.append({"role": "tool", "tool_call_id": call_id, "content": str(result)})
+                    # A0-T0.1：结果按工具上限封顶；截断时在文本里显式声明并给出续读出路（绝不静默）
+                    tool_messages.append({"role": "tool", "tool_call_id": call_id,
+                                          "content": cap_tool_result(name, result)})
                 # 追加本轮 assistant(含 tool_calls) + 各 tool 结果，进入下一轮
                 messages.append({"role": "assistant", "content": cur_content, "tool_calls": assistant_tc})
                 messages.extend(tool_messages)
+
+                # ── A0-T0.2/T0.3：单轮内清理旧的工具结果 ──
+                # 拿 API 真实 prompt_tokens 与粗估的较大值作为依据；超阈值就把白名单内
+                # （模型能自己重新取回的那些）旧工具结果原地换成占位符。
+                # **绝不删除消息**：删掉一条 tool 消息就留下孤儿 tool_call，协议层直接报错。
+                _pt = max(_ctx.last_prompt_tokens, estimate_tokens(messages))
+                _need, _why = _ctx.should_compress_info(_pt)
+                if _need:
+                    _cleared = prune_tool_results_only(messages, keep_recent=_ctx.keep_recent)
+                    _ctx.pruned_total += _cleared
+                    if _cleared:
+                        yield {"type": "context_pruned", "cleared": _cleared,
+                               "tokens_est": _pt, "reason": _why}
+
                 if pending_images:
                     _vis = [{"type": "text", "text": "[系统] 上一步工具返回的图片如下，可直接读取像素："}]
                     _vis += [{"type": "image_url", "image_url": {"url": _u}} for _u in pending_images]
@@ -992,6 +1089,9 @@ async def stream_agent_lc(
                            "text": f"（图谱未连接，已跳过图谱工具继续回答：{_n4_err}）\n"}
 
     system_prompt = await _build_system_prompt(enabled_tools, loaded_skills)
+    _manifest = await _build_file_manifest(file_ids)
+    if _manifest:
+        system_prompt = system_prompt + "\n\n" + _manifest
 
     tools = get_tools(enabled_tools)
     if not tools:

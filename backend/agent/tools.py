@@ -756,3 +756,199 @@ tools_registry["mineru_parse"] = _make_async_tool(
     args_schema=MinerUParams,
     func=_mineru_parse,
 )
+
+
+# ── 检索 / 编辑 / 文献 / GitHub（方案 A · A2）─────────────────────
+# 实现分别在 backend/tools/{search_tools,lit_tools,github_tools}.py，这里只做注册与措辞。
+# 三条纪律写进了 description（照着 Claude/Hermes 的工具措辞，用我们自己的话）：
+#   ① 先定位再读：不要一上来就整篇 read_file；
+#   ② 结果超限会显式告诉你还有多少、怎么续取；
+#   ③ 同一调用别反复重试，失败先看报错再换招。
+
+from tools.search_tools import (search_files as _search_files, find_files as _find_files,
+                                edit_file as _edit_file)
+from tools.lit_tools import (crossref_lookup as _crossref_lookup, arxiv_search as _arxiv_search,
+                             semantic_scholar_search as _s2_search)
+from tools.github_tools import (gh_repo_info as _gh_repo_info, gh_list_dir as _gh_list_dir,
+                                gh_read_file as _gh_read_file, gh_search_repos as _gh_search_repos,
+                                gh_search_code as _gh_search_code, gh_download_tarball as _gh_tarball)
+
+
+class SearchFilesParams(BaseModel):
+    pattern: str = Field(description="正则表达式（Python re 语法）")
+    path: str = Field(default=".", description="搜索起点（文件或目录；相对路径按项目根解析）")
+    file_glob: str = Field(default=None, description="只搜匹配该 glob 的文件，如 *.py / *.md")
+    output_mode: str = Field(default="files_with_matches",
+                             description="files_with_matches=只列文件名（先用它定位）/ content=带行号与上下文 / count=每文件命中数（判断有没有戏）")
+    context: int = Field(default=0, description="content 模式下的上下文行数（等价 grep -C）")
+    limit: int = Field(default=50, description="最多返回条数（超限会告诉你还剩多少，用 offset 续取）")
+    offset: int = Field(default=0, description="跳过前 N 条（分页）")
+    order: str = Field(default="modified", description="modified=最近修改优先 / discovery=目录遍历顺序")
+
+
+class FindFilesParams(BaseModel):
+    pattern: str = Field(description="文件名 glob，如 *.py、**/test_*.py")
+    path: str = Field(default=".", description="搜索起点目录")
+    limit: int = Field(default=50, description="最多返回条数")
+    offset: int = Field(default=0, description="跳过前 N 条")
+
+
+class EditFileParams(BaseModel):
+    file_path: str = Field(description="要改的文件路径")
+    old_string: str = Field(description="被替换的原文（必须唯一命中，否则会报错并列出出现次数）")
+    new_string: str = Field(description="替换后的内容")
+    replace_all: bool = Field(default=False, description="true=替换全部出现（默认 false，只在 old_string 唯一时改一处）")
+
+
+class CrossrefParams(BaseModel):
+    doi: str = Field(default=None, description="DOI，如 10.1038/s41467-026-70180-1（有 DOI 直接用它，最准）")
+    query: str = Field(default=None, description="题名/关键词（没 DOI 时用它查）")
+    rows: int = Field(default=5, description="query 模式返回条数")
+
+
+class ArxivParams(BaseModel):
+    query: str = Field(description="检索词（英文术语效果最好）")
+    max_results: int = Field(default=5, description="返回条数")
+    sort_by: str = Field(default="relevance", description="relevance=相关度 / lastUpdatedDate / submittedDate")
+
+
+class S2Params(BaseModel):
+    query: str = Field(description="检索词")
+    limit: int = Field(default=5, description="返回条数")
+    year: str = Field(default=None, description="年份过滤，如 2020-2026 或 2024")
+
+
+class GhRepoParams(BaseModel):
+    repo: str = Field(description="owner/name，如 NousResearch/hermes-agent")
+
+
+class GhListDirParams(BaseModel):
+    repo: str = Field(description="owner/name")
+    path: str = Field(default="", description="目录路径，空=仓库根")
+    ref: str = Field(default=None, description="分支/tag/commit，默认仓库默认分支")
+
+
+class GhReadFileParams(BaseModel):
+    repo: str = Field(description="owner/name")
+    path: str = Field(description="文件路径，如 src/main.py")
+    ref: str = Field(default=None, description="分支/tag/commit")
+    max_chars: int = Field(default=40000, description="最多返回字符数（超长会显式说明被截断并给出总长度）")
+
+
+class GhSearchReposParams(BaseModel):
+    query: str = Field(description="仓库检索词")
+    limit: int = Field(default=5, description="返回条数")
+    sort: str = Field(default="stars", description="stars / forks / updated")
+
+
+class GhSearchCodeParams(BaseModel):
+    query: str = Field(description="代码特征串（函数名、独特字符串；搜不到就换更独特的串，别原地重试）")
+    limit: int = Field(default=10, description="返回条数")
+    lang: str = Field(default=None, description="语言过滤，如 python")
+
+
+class GhTarballParams(BaseModel):
+    repo: str = Field(description="owner/name")
+    ref: str = Field(default=None, description="分支/tag/commit")
+    dest_dir: str = Field(default=None, description="落地目录（默认产出区）")
+
+
+tools_registry["search_files"] = _make_async_tool(
+    name="search_files",
+    description=(
+        "在本地文件里搜**内容**（正则）。给 LLM 用的 grep，带三态输出与分页。\n\n"
+        "WHEN: 用户问「X 在哪里实现/哪个文件里有 X」、改代码前要定位、要在项目里找某个函数名或字符串。\n"
+        "HOW（按顺序，1~2 次就该收敛）: 1) 先用 output_mode=files_with_matches 只问「在哪些文件」；"
+        "2) 文件不多时对某个文件用 output_mode=content + context=3 看命中上下文；"
+        "3) 命中太多就加 file_glob（如 *.py）或收紧正则，**不要改成整篇 read_file**；"
+        "4) 想确认「这条路有没有戏」用 output_mode=count。\n"
+        "结果超限时会明确告诉你还剩多少条，用 offset 续取（不要重复同一次搜索）。"
+    ),
+    args_schema=SearchFilesParams, func=_search_files)
+
+tools_registry["find_files"] = _make_async_tool(
+    name="find_files",
+    description=(
+        "按**文件名** glob 找文件（如 *.pdf、**/test_*.py），结果按修改时间新→旧。\n\n"
+        "WHEN: 只记得文件名/后缀，要定位它在哪里；或要看某目录下有哪些文件。\n"
+        "HOW: pattern 用 glob；找不到时放宽（先 *关键片段* 再 *）。不要用 terminal 的 ls/find 递归猜。"
+    ),
+    args_schema=FindFilesParams, func=_find_files)
+
+tools_registry["edit_file"] = _make_async_tool(
+    name="edit_file",
+    description=(
+        "把文件里的一段原文替换成新内容（改一处，不必整篇重写）。\n\n"
+        "WHEN: 用户要求修改代码/文本的某处，且你**已经读过**那一段。\n"
+        "HOW: old_string 要带上足够的上下文保证唯一；若返回「出现 N 次」的报错，就加更多上下文行重试，"
+        "**不要**改用 replace_all 蒙（会改到不该改的地方）。改完可再 read_file 复读确认。\n"
+        "未读过的文件不要动。"
+    ),
+    args_schema=EditFileParams, func=_edit_file)
+
+tools_registry["crossref_lookup"] = _make_async_tool(
+    name="crossref_lookup",
+    description=(
+        "查文献元数据（Crossref，无需密钥）：题名/期刊/年份/作者/DOI/被引。\n\n"
+        "WHEN: 已知 DOI 要补全信息；或只有题名要查它的 DOI。\n"
+        "HOW: 有 DOI 就直接传 doi=（最准）；否则传 query=题名。拿到 DOI 后要读原文，用 web_extract(url='https://doi.org/<DOI>')。\n"
+        "不要用 web_search 找元数据（噪声大）。"
+    ),
+    args_schema=CrossrefParams, func=_crossref_lookup)
+
+tools_registry["arxiv_search"] = _make_async_tool(
+    name="arxiv_search",
+    description=(
+        "检索 arXiv 预印本（无需密钥）：id/题名/摘要/作者/发布日/主分类。\n\n"
+        "WHEN: 找 arXiv 覆盖的领域文献（物理/CS/材料/工程等），或已知一篇 arXiv 论文要核对信息。\n"
+        "HOW: query 用英文术语；要更全就换同义词再搜**一次**，两次都空就如实告诉用户没检索到。"
+    ),
+    args_schema=ArxivParams, func=_arxiv_search)
+
+tools_registry["semantic_scholar_search"] = _make_async_tool(
+    name="semantic_scholar_search",
+    description=(
+        "检索 Semantic Scholar（无需密钥，有频率限制）：题名/年份/期刊/被引数/摘要/DOI。\n\n"
+        "WHEN: 要判断某主题文献的**影响力**（citationCount）或要摘要做快速判断。\n"
+        "HOW: 返回 429 限流时**不要重试**，改用 crossref_lookup，并在回答里说明。"
+    ),
+    args_schema=S2Params, func=_s2_search)
+
+tools_registry["gh_repo_info"] = _make_async_tool(
+    name="gh_repo_info",
+    description=("看 GitHub 仓库概况（stars/语言/描述/默认分支），无需 token。\n\n"
+                 "WHEN: 用户提到某个开源仓库，先确认它是什么、默认分支是哪个。"),
+    args_schema=GhRepoParams, func=_gh_repo_info)
+
+tools_registry["gh_list_dir"] = _make_async_tool(
+    name="gh_list_dir",
+    description=("列 GitHub 仓库某个目录下的文件（无需 token）。\n\n"
+                 "WHEN: 不知道目标文件在哪一层时。路径明确时直接用 gh_read_file，别一层层爬。"),
+    args_schema=GhListDirParams, func=_gh_list_dir)
+
+tools_registry["gh_read_file"] = _make_async_tool(
+    name="gh_read_file",
+    description=("读 GitHub 仓库里的一个文件（无需 token，走 raw）。超长会显式说明被截断并给出总长度。\n\n"
+                 "WHEN: 要「看看人家怎么实现的」。要通读整个项目时，用 gh_download_tarball 落到本地再用 search_files/read_file（更省调用）。"),
+    args_schema=GhReadFileParams, func=_gh_read_file)
+
+tools_registry["gh_search_repos"] = _make_async_tool(
+    name="gh_search_repos",
+    description=("按关键词搜 GitHub 仓库（无需 token），可按 stars 排序。\n\n"
+                 "WHEN: 不知道具体仓库名，先找到候选（如「XX 的 Python 实现」）。"),
+    args_schema=GhSearchReposParams, func=_gh_search_repos)
+
+tools_registry["gh_search_code"] = _make_async_tool(
+    name="gh_search_code",
+    description=("跨 GitHub 公开仓库搜**代码片段**（走公开搜索服务，无需 token）。\n\n"
+                 "WHEN: 找一个函数/类在哪些项目里出现、看某 API 的真实用法。\n"
+                 "HOW: query 用独特特征串（函数全名、报错原文）。官方代码搜索接口需要认证，这里走公开服务，"
+                 "搜不到就换更独特的串 —— **不要重复同一次搜索**。"),
+    args_schema=GhSearchCodeParams, func=_gh_search_code)
+
+tools_registry["gh_download_tarball"] = _make_async_tool(
+    name="gh_download_tarball",
+    description=("把 GitHub 仓库压缩包下载到本地（无需 token，codeload）。\n\n"
+                 "WHEN: 要整体读一个开源项目（比逐文件 gh_read_file 省大量调用）。\n"
+                 "HOW: 下载后返回落地路径，接着用 find_files/search_files/read_file 在本地读。"),
+    args_schema=GhTarballParams, func=_gh_tarball)

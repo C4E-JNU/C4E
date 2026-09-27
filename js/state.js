@@ -55,6 +55,7 @@
                 settings: {
                      temperature: 0.7,
                      contextLength: 10,
+                     contextWindow: 262144,   // 模型窗口（DeepSeek V4 256K，用户铁律：绝不压低）
                      expectedContextTokens: 4000,
                      streaming: true,
                      showRawData: false,

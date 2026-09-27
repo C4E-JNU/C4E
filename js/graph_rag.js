@@ -75,7 +75,7 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
     state.userHasScrolledUp = false;   // 刚发出去 = 人在看底部，允许贴底
     if (typeof sendBtn !== 'undefined' && sendBtn) { sendBtn.innerHTML = '⚡'; sendBtn.classList.add('stop'); sendBtn.title = '立即回答'; }
     if (typeof updateSendButtonState === 'function') updateSendButtonState();
-    const enabledTools = state.agentConfig?.enabledTools || ['graph_query', 'shared_search', 'search_history', 'conversation_notes', 'skill_view', 'web_search', 'web_extract', 'todo', 'delegate_task', 'mineru_parse', 'read_file', 'list_files'];
+    const enabledTools = state.agentConfig?.enabledTools || ['graph_query', 'shared_search', 'search_history', 'conversation_notes', 'skill_view', 'web_search', 'web_extract', 'todo', 'delegate_task', 'mineru_parse', 'read_file', 'list_files', 'search_files', 'find_files', 'edit_file', 'crossref_lookup', 'arxiv_search', 'semantic_scholar_search', 'gh_search_code', 'gh_read_file'];
     const loadedSkills = state.agentConfig?.loadedSkills || ['self-modify'];
     const currentBranch = state.branches[state.currentBranchId];
     const modelId = state.currentModel;
@@ -305,8 +305,11 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
         //   freshIds = 最后一条用户消息的附件（当轮上传 → 后端注入完整文本）
         var _collectFileIds = function () {
             var msgs = state.branches[state.currentBranchId]?.messages || [];
-            var windowN = (state.settings?.contextLength || 10) * 2 + 1;
-            var recent = msgs.slice(-windowN);
+            // 收集**本对话全部**用户消息引用的附件（不再只扫最近 contextLength*2+1 条）。
+            // 旧实现只扫最近 21 条 → 更早那轮上传的附件根本不进请求 → 后端拿不到
+            // file_ids → 模型下一轮就说"目前没有文件"（用户实测的 bug）。
+            // 附件本来就存在消息里，收全量只是多几个字符串，不新增任何存储。
+            var recent = msgs;
             var lastUserIdx = -1;
             for (var i = recent.length - 1; i >= 0; i--) {
                 if (recent[i].role === 'user') { lastUserIdx = i; break; }
@@ -340,6 +343,7 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
                 base_url: modelCfg ? getModelBaseUrl(modelCfg.endpoint) : '',
                 temperature: state.settings?.temperature || 0.7,
                 max_tokens: state.settings?.maxTokens || 8192,
+                context_window: state.settings?.contextWindow || 262144,
             },
             context_length: state.settings?.contextLength || 10,
             branch_id: state.currentBranchId || '',
