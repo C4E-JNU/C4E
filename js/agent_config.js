@@ -134,7 +134,7 @@ function loadAgentEngineFromState() {
     const eng = state.agentConfig?.engine || 'custom';
     const radio = document.querySelector(`input[name="agent-engine"][value="${eng}"]`);
     if (radio) radio.checked = true;
-    const rounds = (state.agentConfig?.maxRounds === 0 || state.agentConfig?.maxRounds) ? state.agentConfig.maxRounds : 8;
+    const rounds = (state.agentConfig?.maxRounds === 0 || state.agentConfig?.maxRounds) ? state.agentConfig.maxRounds : 20;
     const sel = document.getElementById('agent-max-rounds');
     if (sel) sel.value = String(rounds);
 }
@@ -299,7 +299,7 @@ function saveAgentConfig() {
     state.agentConfig.engine = engRadio ? engRadio.value : 'custom';
     const roundSel = document.getElementById('agent-max-rounds');
     const rounds = roundSel ? parseInt(roundSel.value, 10) : 8;
-    state.agentConfig.maxRounds = isNaN(rounds) ? 8 : rounds;
+    state.agentConfig.maxRounds = isNaN(rounds) ? 20 : rounds;
     saveAgentConfigToLocal();
 
     // 子智能体设置（写入 state.settings.*，独立持久化到 ai-settings）
@@ -330,7 +330,7 @@ function loadAgentConfigFromLocal() {
             state.agentConfig.enabledTools = parsed.enabledTools || [];
             state.agentConfig.permissionMode = parsed.permissionMode || 'safe';
             state.agentConfig.engine = parsed.engine || 'custom';
-            state.agentConfig.maxRounds = (parsed.maxRounds === 0 || parsed.maxRounds) ? parsed.maxRounds : 8;
+            state.agentConfig.maxRounds = (parsed.maxRounds === 0 || parsed.maxRounds) ? parsed.maxRounds : 20;
             // 技能勾选状态同样持久化（旧存档无此字段时保留默认）
             if (Array.isArray(parsed.loadedSkills)) {
                 state.agentConfig.loadedSkills = parsed.loadedSkills;

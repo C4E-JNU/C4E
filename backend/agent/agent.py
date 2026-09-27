@@ -486,7 +486,7 @@ async def stream_agent(
     full_file_ids: list[str] = None,
     permission_mode: str = "safe",
     images: list[str] = None,
-    max_rounds: int = 8,
+    max_rounds: int = 20,
     user: str = "",
     timeouts: dict = None,
     subagent: dict = None,
@@ -876,7 +876,57 @@ async def stream_agent(
 
         if not final_answer:
             cap = max_rounds if max_rounds and max_rounds > 0 else 100000
-            yield {"type": "final", "text": f"已达最大工具循环步数({cap})，仍未生成最终回答。可尝试精简问题或拆分任务。"}
+            # 步数耗尽 ≠ 没有信息：每一轮的工具结果都还在 messages 里。
+            # 旧实现在这里只吐一句「已达最大步数」就结束，把已经跑出来的探索全部丢掉，
+            # 用户看到的就是「忙了半天什么也没给」。改成再要一次【不带 tools 字段】的请求：
+            # 协议层面它无法再发起工具调用，只能就已有信息收敛出结论。
+            yield {"type": "timeout_notice", "level": "cap",
+                   "text": f"已达最大工具循环步数({cap})，改为基于已获得信息强制收尾。",
+                   "elapsed": int(time.time() - _t_start)}
+            forced = ""
+            try:
+                _fmsg = messages + [{"role": "user", "content":
+                    "[系统·步数上限] 工具调用次数已用完，这次回答【不能再调用工具】。"
+                    "请只依据上面已获得的信息给出最终答复："
+                    "① 先给结论；② 列出关键依据（带文件路径 / 数据出处）；"
+                    "③ 明确写出「还没查到的部分」和「下一步该做什么」。"}]
+                _fpayload = {"model": model, "messages": _fmsg,
+                             "temperature": temperature, "max_tokens": max_tokens,
+                             "stream": True}
+                async with client.stream("POST", endpoint, json=_fpayload, headers=headers) as _fr:
+                    if _fr.status_code == 200:
+                        async for _line in _fr.aiter_lines():
+                            if generation_cancelled():
+                                break
+                            if not _line or not _line.startswith("data: "):
+                                continue
+                            _data = _line[6:].strip()
+                            if _data == "[DONE]":
+                                break
+                            try:
+                                _ev = json.loads(_data)
+                            except Exception:
+                                continue
+                            _ch = (_ev.get("choices") or [{}])[0]
+                            _delta = _ch.get("delta") or {}
+                            _rc = _delta.get("reasoning_content")
+                            _ct = _delta.get("content")
+                            if _rc:
+                                yield {"type": "reasoning", "text": _rc}
+                            if _ct:
+                                forced += _ct
+                                yield {"type": "token", "text": _ct}
+            except Exception:
+                forced = ""
+            if not forced.strip():
+                forced = all_content  # 兜底：把前面各轮已写出的正文还给用户，别让它凭空消失
+            final_answer = _clean_final(forced)
+            _tail = (f"\n\n---\n⏳ **步数上限**：本次工具循环达 {cap} 步上限，以上结论由已获得的"
+                     "信息收敛而来，可能不完整。可继续追问让它接着做，"
+                     "或在「设置」里调大「最大工具步数」。")
+            yield {"type": "final", "text": (final_answer + _tail) if final_answer.strip() else (
+                f"已达最大工具循环步数({cap})，且没有可总结的内容。"
+                "可尝试精简问题或拆分任务。")}
 
     except Exception as e:
         import traceback
@@ -897,7 +947,7 @@ async def stream_agent_lc(
     full_file_ids: list[str] = None,
     permission_mode: str = "safe",
     images: list[str] = None,
-    max_rounds: int = 8,
+    max_rounds: int = 20,
     user: str = "",
     timeouts: dict = None,
     subagent: dict = None,
@@ -1097,7 +1147,13 @@ async def stream_agent_lc(
         else:
             final_answer = str(final_answer).strip()
         if not final_answer:
-            yield {"type": "final", "text": f"已达最大工具循环步数({cap})，仍未生成最终回答。可尝试精简问题或拆分任务。"}
+            # LangChain 引擎的 final_answer 是逐步累加各轮 AIMessage 正文的，
+            # 走到这里说明确实一个字都没产出；措辞与 custom 引擎保持一致，
+            # 告诉用户怎么办，而不是只报"失败了"。
+            yield {"type": "final", "text":
+                   f"⏳ **步数上限**：本次工具循环达 {cap} 步上限，仍未收敛出可展示的正文。"
+                   "可继续追问让它基于已有信息作答，或在「设置」里调大「最大工具步数」；"
+                   "本引擎（LangChain）为批处理，长任务建议改用 custom 引擎。"}
         else:
             if saw_length:
                 final_answer += "\n\n> ⚠️ 检测到模型输出曾因达到最大输出 Token 上限被截断；若结果不完整，请在设置中调大 Token 或让 AI 分多次写入。"

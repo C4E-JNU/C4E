@@ -51,14 +51,17 @@ class SkillViewParams(BaseModel):
 
 class CodeParams(BaseModel):
     code: str = Field(description="要执行的 Python 代码")
-    timeout: int = Field(default=30, description="超时秒数（1-60）")
+    timeout: int = Field(default=30, description="超时秒数（1-60）。超过 60 秒的活请拆分，或改用 terminal 跑脚本文件")
 
 class ReadFileParams(BaseModel):
     path: str = Field(default="", description="文件路径；相对路径以 workspace/ 为基准，询问/完全访问模式下可用绝对路径读取项目内或磁盘文件。若同时给 file_id 则可省略")
     file_id: str = Field(default="", description="上传附件的 file_id：已解析文档返回解析全文；未解析附件（笔记附件）会【即时提取原文】返回；图片返回 base64(dataURL)。给 file_id 时优先于 path")
     as_base64: bool = Field(default=False, description="按 file_id 读取时是否强制返回 base64（图片默认即 base64）")
-    offset: int = Field(default=1, description="起始行号")
-    limit: int = Field(default=1000000, description="最多返回行数（文件内容做大不截断）")
+    offset: int = Field(default=1, description="起始行号（1 起）。path 与 file_id 两种读法含义相同，都可用于续读")
+    limit: int = Field(default=500, description=(
+        "最多返回多少行。注意返回内容还【按字符数封顶约 20000 字符】，行数没到上限也可能被截。"
+        "响应里的 has_more=true 表示没读完，用返回的 next_offset 作为 offset 再次调用即可续读；"
+        "读到 has_more=false 才算读完全文。"))
 
 class WriteFileParams(BaseModel):
     path: str = Field(description="文件路径；安全模式仅限 workspace/，询问模式可写 workspace/ 与 skills/，完全访问模式可写任意绝对路径")
@@ -271,10 +274,16 @@ tools_registry["list_outputs"] = StructuredTool.from_function(
 tools_registry["run_code"] = _make_async_tool(
     name="run_code",
     description=(
-        "在隔离沙箱中执行 Python 代码，返回 stdout。\n\n"
-        "WHEN to use: 用户要求计算、数据分析、统计、可视化、批量处理、脚本执行，或需要验证某段逻辑时。\n\n"
-        "HOW: 写完整可运行的代码（含必要的 import 和 print 输出）。代码在临时目录运行，有 30 秒超时。\n\n"
-        "Note: 沙箱禁止系统命令和网络副作用（os.system/subprocess 受控）；适合纯计算/数据分析。需要文件系统或系统操作时用 read_file/write_file。"
+        "在独立子进程中执行 Python 代码，返回 stdout/stderr/exit_code。\n\n"
+        "WHEN to use: 用户要求计算、数据分析、统计、可视化、批量处理，或需要验证某段逻辑时。\n\n"
+        "HOW: 写完整可运行的代码（含必要的 import 和 print 输出）。工作目录是你本人的产出区，"
+        "脚本写出的文件会留下来；超时默认 30 秒（可传 1-60）。\n\n"
+        "边界（如实说明，别再猜）: 用 AST 拦掉了 subprocess / os.system / os.remove 等起进程与"
+        "删改文件的调用，以及 eval / exec / compile / __import__ 动态执行；re.compile、"
+        "model.compile 这类正常写法不受影响。【不拦网络请求，也不限文件读写路径】，"
+        "所以它是「少一手危险操作」的执行环境，不是安全沙箱。第三方包能不能 import 取决于后端"
+        "所用的解释器（numpy/pandas/scipy 通常可用，matplotlib/sklearn 未必）——缺包时用 terminal"
+        "的 `uv pip install` 装进项目 venv，或直接改用 terminal 跑脚本。"
     ),
     args_schema=CodeParams,
     func=_run_python,
@@ -296,7 +305,7 @@ tools_registry["terminal"] = _make_async_tool(
     name="terminal",
     description=(
         "在项目环境中执行 shell 命令（git、build、test、uv/pip 装包、跑脚本等），返回 stdout/stderr/exit_code。\n\n"
-        "WHEN to use: 需要运行真实命令、装/升级第三方库（uv pip install / uv sync）、跑测试或脚本、查看 git 状态时。run_code 沙箱只跑 stdlib，需要第三方包时必须用 terminal。\n\n"
+        "WHEN to use: 需要运行真实命令、装/升级第三方库（uv pip install / uv sync）、跑测试或脚本、查看 git 状态时。run_code 也能 import 大部分已装的第三方包（numpy/pandas/scipy 实测可用），但【超时上限只有 60 秒】且不做进程隔离——要跑长任务、装包或执行脚本文件，用 terminal。\n\n"
         "HOW: 写完整 shell 命令。工作目录默认项目根；可用 workdir 指定（相对项目根）。\n\n"
         "安全: 受权限模式约束——safe 仅项目内且禁高危命令；ask 涉及外部会返回 need_confirm 需用户确认；full 任意执行。装包建议用 `uv pip install <包>` 装进项目 venv。"
     ),

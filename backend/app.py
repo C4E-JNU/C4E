@@ -1590,7 +1590,7 @@ async def agent_stream(req: AgentRunRequest, request: Request = None):
 
     async def event_generator():
         engine = (req.engine or "custom").lower()
-        max_rounds = req.max_rounds if req.max_rounds is not None else 8
+        max_rounds = req.max_rounds if req.max_rounds is not None else 20
         runner = stream_agent_lc if engine == "langchain" else stream_agent
         reset_generation_cancel()
         reset_immediate_answer()

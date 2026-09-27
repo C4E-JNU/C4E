@@ -2,12 +2,49 @@
 代码沙箱工具 — 在子进程中安全执行 Python 代码
 支持 numpy, pandas, matplotlib 等数据分析库
 """
+import ast
 import json
 import os
 import shutil
 import subprocess
 import tempfile
 import asyncio
+
+
+# 危险操作检查必须走 AST，不能靠字符串比对。
+# 历史教训：旧实现把代码 replace(" ", "") 去空格后，再与【含空格】的字面量
+# （"import subprocess"、"import os; os.system"）做 in 判断——去掉空格后永远
+# 匹配不上带空格的串，所以 subprocess 实际是【放行】的；反过来无空格的
+# "compile(" 会命中 re.compile(...) / model.compile(...)，把正常代码【误杀】，
+# 模型只收到一句莫名其妙的"包含被禁用的操作: compile("。
+_BANNED_BUILTINS = {"eval", "exec", "compile", "__import__"}
+_BANNED_MODULES = {"subprocess", "pty", "ctypes"}
+_BANNED_OS_CALLS = {"system", "popen", "fork", "kill", "remove", "rmdir",
+                    "unlink", "rename", "replace", "truncate"}
+
+
+def _danger_reason(tree):
+    """扫描 AST，返回被禁用操作的说明文字；没有则返回 None。"""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.split(".")[0] in _BANNED_MODULES:
+                    return "import %s（会启动外部进程或绕过类型检查）" % alias.name
+        elif isinstance(node, ast.ImportFrom):
+            root = (node.module or "").split(".")[0]
+            if root in _BANNED_MODULES:
+                return "from %s import ...（会启动外部进程或绕过类型检查）" % node.module
+        elif isinstance(node, ast.Call):
+            fn = node.func
+            if isinstance(fn, ast.Name) and fn.id in _BANNED_BUILTINS:
+                return "%s() 动态执行代码" % fn.id
+            if isinstance(fn, ast.Attribute) and isinstance(fn.value, ast.Name):
+                base = fn.value.id
+                attr = fn.attr
+                if base == "os" and (attr in _BANNED_OS_CALLS
+                                     or attr.startswith(("exec", "spawn"))):
+                    return "os.%s() 会起进程或改动文件系统" % attr
+    return None
 
 
 def _python_exe() -> str:
@@ -25,19 +62,22 @@ async def run_python(code: str, timeout: int = 30):
     if not code:
         return json.dumps({"error": "代码不能为空"})
 
-    # 安全检查：防止明显的危险操作
-    dangerous_patterns = [
-        "import os; os.system", "import subprocess",
-        "__import__('os')", "__import__('subprocess')",
-        "eval(", "exec(", "compile(",
-    ]
-    for pattern in dangerous_patterns:
-        if pattern in code.replace(" ", ""):
+    # 安全检查：AST 扫描（见上方 _danger_reason 的说明）
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        tree = None  # 语法错误让子进程去报真实行号，不在这里误判成"危险操作"
+    if tree is not None:
+        reason = _danger_reason(tree)
+        if reason:
             return json.dumps({
-                "error": f"代码包含被禁用的操作: {pattern}",
+                "error": "run_code 不接受这段代码：%s" % reason,
                 "stdout": "",
-                "stderr": "安全限制：不允许执行系统命令或动态代码执行"
-            })
+                "stderr": "",
+                "hint": ("run_code 定位为纯计算 / 数据分析 / 画图。需要跑系统命令、安装包、"
+                         "执行脚本或做文件增删改名时，改用 terminal 工具（同样受权限模式约束）。"
+                         "注意 re.compile()、model.compile() 这类是正常的，不在禁用范围。"),
+            }, ensure_ascii=False)
 
     timeout = min(max(1, timeout), 60)  # 1-60 秒
 
@@ -67,10 +107,12 @@ async def run_python(code: str, timeout: int = 30):
                     env={
                         **os.environ,
                         "PYTHONIOENCODING": "utf-8",
-                        # ⚠️ 原来这里注释写"禁止写文件到外部"，其实不准：PYTHONSAFEPATH 只影响
-                        # sys.path（不把脚本目录加进去），**管不住 open() 写文件**。
-                        # 真正拦住的只有上面 dangerous_patterns 那串字符串（挡 os.system/subprocess/
-                        # eval/exec/compile），裸的绝对路径写入仍可能发生。
+                        # ⚠️ PYTHONSAFEPATH 只影响 sys.path（不把脚本目录加进去），
+                        # 【管不住 open() 写文件】，也不限制网络。
+                        # 本工具的真实边界：AST 挡住起进程/删文件/动态执行这几类，
+                        # 文件读写路径与网络请求都不拦 —— 所以它不是安全沙箱，
+                        # 只是"少一手危险操作"的执行环境。role_policy 因此把
+                        # run_code 限定给主管理员（见 backend/role_policy.py 顶部说明）。
                         "PYTHONSAFEPATH": "1",
                     },
                 )

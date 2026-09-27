@@ -345,7 +345,7 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
             branch_id: state.currentBranchId || '',
             permission_mode: state.agentConfig?.permissionMode || 'safe',
             engine: state.agentConfig?.engine || 'custom',
-            max_rounds: (state.agentConfig?.maxRounds === 0 || state.agentConfig?.maxRounds) ? state.agentConfig.maxRounds : 8,
+            max_rounds: (state.agentConfig?.maxRounds === 0 || state.agentConfig?.maxRounds) ? state.agentConfig.maxRounds : 20,
             file_ids: refIds,
             full_file_ids: fullIds,
             note_refs: noteRefs,

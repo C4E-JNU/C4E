@@ -48,7 +48,7 @@
                 loadedSkills: ['self-modify'],
                 permissionMode: 'safe',
                 engine: 'custom',          // custom=裸API手写循环 / langchain=LangChain流式
-                maxRounds: 8,              // 工具循环步数，0=无限
+                maxRounds: 20,             // 工具循环步数，0=无限（原默认 8：多源文献对账常超 8 步）
             },
 
             // 模型设置

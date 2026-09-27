@@ -2,10 +2,12 @@
 联网工具 — web_search + web_extract
 用 duckduckgo_search 库替代前端爬 HTML 的方案
 """
+import ipaddress
 import json
 import re
 import html as _html
 import httpx
+import socket
 import urllib.request
 import urllib.parse
 import concurrent.futures as _cf
@@ -20,6 +22,7 @@ async def web_search(query: str, limit: int = 5):
         return json.dumps({"error": "搜索词不能为空"})
 
     limit = min(max(1, limit), 10)
+    errors = []
 
     # Bing 抓取（免费、无 key、服务器稳定）——带超时保护，避免卡住 agent 循环
     try:
@@ -31,9 +34,10 @@ async def web_search(query: str, limit: int = 5):
                 "count": len(results),
                 "results": results,
             }, ensure_ascii=False, indent=2)
+        errors.append("bing: 返回 0 条（可能被限流或页面结构变更）")
     except Exception as e:
         # Bing 失败（网络/超时/被限），记录后走 ddgs
-        _last_err = f"bing:{e}"
+        errors.append(f"bing: {e}")
 
     # 回退：ddgs（Hermes 同款包，走 Yahoo/DDG）
     try:
@@ -41,8 +45,26 @@ async def web_search(query: str, limit: int = 5):
         results = await asyncio.to_thread(_ddgs_search, query, limit)
         if results:
             return json.dumps({"source": "ddgs", "count": len(results), "results": results}, ensure_ascii=False, indent=2)
+        errors.append("ddgs: 返回 0 条")
     except Exception as e:
-        return json.dumps({"source": "none", "error": f"搜索失败: bing + ddgs 均不可用", "query": query})
+        errors.append(f"ddgs: {e}")
+
+    # 关键：绝不能隐式返回 None。模型收到 None 时分不清「没搜到」和「工具挂了」，
+    # 会开始无意义重试。这里显式区分「两个源都通了但都没结果」和「两个源都失败」。
+    if len(errors) == 2 and all("返回 0 条" in x for x in errors):
+        return json.dumps({
+            "source": "none", "query": query, "count": 0, "results": [],
+            "note": ("两个搜索引擎都正常响应但都没有命中，说明这个检索词确实搜不到东西，"
+                     "不是工具故障。请换检索词（减少限定词/换同义词/改用英文术语）重试，"
+                     "或改用 web_extract 直接访问已知的站点。"),
+            "diagnostics": errors,
+        }, ensure_ascii=False, indent=2)
+    return json.dumps({
+        "source": "none", "query": query, "count": 0, "results": [],
+        "error": "搜索工具本次不可用（不是没有结果）。不要按同一检索词重试。",
+        "diagnostics": errors,
+        "suggestion": "换用 web_extract 抓取已知 URL；或稍后再试。图谱/文献类问题优先用 graph_query 与本地已归档文件。",
+    }, ensure_ascii=False, indent=2)
 
 
 def _bing_search(query: str, limit: int) -> list:
@@ -138,6 +160,53 @@ def _ddgs_fallback(query: str, limit: int):
         return []
 
 
+_INTERNAL_HOST_SUFFIXES = (".localhost", ".local", ".internal", ".localdomain")
+
+
+def _ip_is_internal(host: str):
+    """IP 字面量是否属于内网/保留地址。是则返回说明文字，否则返回 None。"""
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return None  # 不是 IP 字面量，交给 DNS 解析那一步判断
+    if (ip.is_private or ip.is_loopback or ip.is_link_local
+            or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+        return f"地址 {host} 属于内网/保留段"
+    return None
+
+
+async def _internal_host_reason(host: str):
+    """判断目标主机是否内网。放行返回 None，拒绝返回原因字符串。
+
+    重要背景：旧实现是 `for b in ["10.", "172.16.", ...]: if b in url`，
+    即对**整个 URL 字符串**做子串匹配。这会把所有 DOI 链接
+    （https://doi.org/10.1021/xxx）以及任何路径里带 "10." 的正常网址
+    一律误判成内网地址，导致文献检索系统性瘫痪。
+    现在只对 host 部分判断，并且先按 IP 字面量、再按 DNS 解析结果判断。
+    """
+    if not host:
+        return "URL 无法解析出主机名"
+    host = host.strip().rstrip(".").lower()
+    if host == "localhost" or host.endswith(_INTERNAL_HOST_SUFFIXES):
+        return f"主机 {host} 是内部名称"
+    reason = _ip_is_internal(host)
+    if reason:
+        return reason
+    if ":" in host or re.fullmatch(r"\d+\.\d+\.\d+\.\d+", host):
+        return reason  # IP 字面量已在上一步判过，不是内网即放行
+    # 域名：解析后逐个 IP 检查，防「公网域名解析到内网」这型 SSRF
+    try:
+        import asyncio
+        infos = await asyncio.to_thread(socket.getaddrinfo, host, None)
+    except Exception:
+        return None  # 解析失败交给 httpx 报真实错误，不在这里误伤
+    for info in infos:
+        reason = _ip_is_internal(info[4][0])
+        if reason:
+            return f"主机 {host} 解析到内网地址（{reason}）"
+    return None
+
+
 async def web_extract(url: str):
     """抓取指定 URL 的网页内容并转为纯文本"""
     url = url.strip()
@@ -146,20 +215,37 @@ async def web_extract(url: str):
     if not url.startswith(("http://", "https://")):
         return json.dumps({"error": "URL 必须以 http:// 或 https:// 开头"})
 
-    # 安全限制：禁止内网
-    blocked = ["localhost", "127.0.0.1", "0.0.0.0", "10.", "192.168.", "172.16."]
-    for b in blocked:
-        if b in url:
-            return json.dumps({"error": "不允许访问内网地址"})
-
     try:
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-            resp = await client.get(
-                url,
-                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-            )
-            resp.raise_for_status()
-            html = resp.text
+        # 手动跟随重定向并逐跳做 SSRF 检查：若用 follow_redirects=True，
+        # 一个公网 URL 可以靠 302 把请求带进内网，绕过入口检查。
+        current = url
+        resp = None
+        too_many_hops = False
+        async with httpx.AsyncClient(timeout=15, follow_redirects=False) as client:
+            for _hop in range(6):
+                reason = await _internal_host_reason(
+                    urllib.parse.urlparse(current).hostname or "")
+                if reason:
+                    return json.dumps({"error": f"目标被安全策略拒绝：{reason}",
+                                       "url": current}, ensure_ascii=False)
+                resp = await client.get(
+                    current,
+                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+                )
+                if resp.status_code in (301, 302, 303, 307, 308):
+                    loc = resp.headers.get("location")
+                    if not loc:
+                        break
+                    current = urllib.parse.urljoin(current, loc)
+                    continue
+                break
+            else:
+                too_many_hops = True
+        if too_many_hops:
+            return json.dumps({"error": "重定向次数过多（>5 跳），已停止跟随",
+                               "url": url}, ensure_ascii=False)
+        resp.raise_for_status()
+        html = resp.text
 
         # 提取标题
         title = ""

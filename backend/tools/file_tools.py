@@ -157,18 +157,80 @@ def _resolve_safe_path(relative_path: str, write: bool = False) -> str:
     raise PermissionError("__NEED_FULL__ 该写操作超出 workspace 与 skills 目录，需要切换到完全访问模式才能执行")
 
 
+def _page_lines(lines, offset: int, limit: int, subject: str = "内容", extra_note: str = ""):
+    """按行取一段 + 字符封顶，并生成【与实现一致】的续读提示。返回 dict。
+
+    read_file 的 path 分支与 file_id 分支共用此函数，保证 `offset` 在两个分支里
+    始终是同一个含义（1-indexed 行号）。历史上出过两类"提示与实现不一致"的坑：
+    ① file_id 分支根本不分页，却提示模型「改用 offset/limit 分页读取」，模型照做
+       会永远拿回同样前 20000 字符，陷入无效重试；
+    ② 只判字符封顶，漏判「行数窗口没读到文件末尾」——此时返回 truncated=false 且
+       不给续读位置，模型误以为整个文件读完了（静默读到半截）。
+    提示语统一在这里生成，避免三处各写一份、各说各话。
+    """
+    total = len(lines)
+    start = max(0, offset - 1)
+    end = min(total, start + limit)
+    chunk = lines[start:end]
+    content = "".join(chunk)
+    total_chars = len("".join(lines))
+    truncated = len(content) > READ_FILE_MAX_CHARS
+    next_offset = None
+    warning = ""
+    if truncated:
+        # 定位截断发生在哪一行，据此给出续读行号
+        acc = 0
+        consumed = 0
+        for ln in chunk:
+            if acc + len(ln) > READ_FILE_MAX_CHARS:
+                break
+            acc += len(ln)
+            consumed += 1
+        content = content[:READ_FILE_MAX_CHARS]
+        if consumed > 0:
+            next_offset = start + consumed + 1
+        else:
+            # 第一行本身就把额度占满：按行号续读会拿回同一段，必须明说，
+            # 否则模型按 next_offset 重试就是死循环（超长单行的 JSON 正是这种形状）。
+            warning = (f"第 {start + 1} 行单行就有 {len(lines[start])} 字符，超过"
+                       f"{READ_FILE_MAX_CHARS} 上限，无法按行续读。"
+                       f"别反复调本工具，改用 run_code/terminal 对该行做字符切片读取，"
+                       f"或改读已清洗的正文文件。")
+    elif end < total:
+        # 字符没封顶，但窗口没读到文件末尾
+        next_offset = end + 1
+    has_more = next_offset is not None
+
+    note = ""
+    if truncated or warning:
+        note = (f"{subject}共约 {total_chars} 字符 / {total} 行，"
+                f"本段取自第 {start + 1} 行起、封顶 {READ_FILE_MAX_CHARS} 字符。")
+    if warning:
+        note += " " + warning
+    elif has_more:
+        note += f"未读完，请用 offset={next_offset} 继续调用本工具。"
+    elif not truncated and offset > 1:
+        note += "已读到末尾。"
+    if extra_note:
+        note = (note + " " + extra_note).strip()
+    return {"content": content, "truncated": truncated, "has_more": has_more,
+            "next_offset": next_offset, "total_chars": total_chars,
+            "total_lines": total, "note": note}
+
+
 async def read_file(path: str = "", file_id: str = "", as_base64: bool = False, offset: int = 1, limit: int = 500):
     """读取文件内容。统一入口：
     - 提供 file_id（上传附件 id）时，按附件读取：文档返回解析全文；图片在图像通道开启时返回【图像内容块】
       （[{"type":"text"...},{"type":"image_url"...}]），可直接看到像素；通道关闭时只回提示，不回吐 base64 文本
-    - 否则按 path 读取磁盘文件（原逻辑，行号分页）
+    - 否则按 path 读取磁盘文件（行号分页）
     Args:
         path: 相对于 workspace/ 的文件路径
         file_id: 上传附件的 file_id（优先于 path）
         as_base64: 当按 file_id 且是文档时，仍尝试返回原始字节 base64（图片默认返回 base64）
-        offset: 起始行号 (1-indexed)
+        offset: 起始行号 (1-indexed)。path 与 file_id 两个分支含义相同，均可分页续读
         limit: 最多返回多少行
     注意：单次返回【按字符数封顶】(READ_FILE_MAX_CHARS)，防止长行 JSON/大文档一次撑爆模型上下文。
+    被截断时返回体带 next_offset，按其值续读即可读完整个文件（附件与磁盘文件同样适用）。
     """
     # 附件模式：按 file_id 读上传的文件
     if (file_id or "").strip():
@@ -190,13 +252,15 @@ async def read_file(path: str = "", file_id: str = "", as_base64: bool = False, 
                                              "data_url_chars": len(data_url)})
         text = await get_upload_text(fid)
         if text:
-            clipped = text[:READ_FILE_MAX_CHARS]
-            truncated = len(text) > READ_FILE_MAX_CHARS
+            p = _page_lines(text.splitlines(keepends=True), offset, limit,
+                            subject="附件正文", extra_note="续读时 file_id 保持不变。")
             return json.dumps({"ok": True, "source": "attachment", "file_id": fid, "mode": "text",
-                               "truncated": truncated,
-                               "note": (f"文件正文 {len(text)} 字符，已截断至 {READ_FILE_MAX_CHARS} 字符；"
-                                        "如需后续内容请改用 offset/limit 分页读取，或告诉我需要的具体段落。") if truncated else "",
-                               "content": clipped}, ensure_ascii=False)
+                               "offset": offset, "limit": limit,
+                               "total_chars": p["total_chars"],
+                               "truncated": p["truncated"], "has_more": p["has_more"],
+                               "next_offset": p["next_offset"],
+                               "note": p["note"],
+                               "content": p["content"]}, ensure_ascii=False)
         # 无 text.txt：该附件是按「笔记附件」上传的（parse=False，只存原件不进索引）。
         # 用户 2026-09-25 定的分层设计：RAG 先命中笔记正文，需要细节时智能体按 file_id
         # 现读原件 —— 这里就在做「现读」：读原文即时提取，不落盘、不入索引。
@@ -233,11 +297,18 @@ async def read_file(path: str = "", file_id: str = "", as_base64: bool = False, 
                                        "error": f"附件 {fid} 未提取到文本（可能是扫描件；"
                                                 f"图片请用 read_image，扫描 PDF 可试 mineru_parse）"},
                                       ensure_ascii=False)
-                _clip = _txt[:READ_FILE_MAX_CHARS]
+                p = _page_lines(_txt.splitlines(keepends=True), offset, limit,
+                                subject="原件正文", extra_note="续读时 file_id 保持不变。")
+                _note = "该附件未预先解析（笔记附件），以上为本次即时提取的原文；未写入索引。"
+                if p["note"]:
+                    _note += " " + p["note"]
                 return json.dumps({"ok": True, "source": "attachment", "file_id": fid, "mode": "text",
-                                   "on_demand": True, "truncated": len(_txt) > READ_FILE_MAX_CHARS,
-                                   "note": "该附件未预先解析（笔记附件），以上为本次即时提取的原文；未写入索引。",
-                                   "content": _clip}, ensure_ascii=False)
+                                   "on_demand": True, "offset": offset, "limit": limit,
+                                   "total_chars": p["total_chars"],
+                                   "truncated": p["truncated"], "has_more": p["has_more"],
+                                   "next_offset": p["next_offset"],
+                                   "note": _note,
+                                   "content": p["content"]}, ensure_ascii=False)
             except Exception as e:
                 return json.dumps({"ok": False, "file_id": fid,
                                    "error": f"即时提取失败: {type(e).__name__}: {str(e)[:120]}"},
@@ -281,41 +352,21 @@ async def read_file(path: str = "", file_id: str = "", as_base64: bool = False, 
         with open(full_path, "r", encoding="utf-8", errors="replace") as f:
             lines = f.readlines()
 
-        total_lines = len(lines)
-        start = max(0, offset - 1)
-        end = min(total_lines, start + limit)
-
-        content = "".join(lines[start:end])
         # 字符封顶：即便命中行数少、但单行超长（如整份 JSON 一行），也不会一次吐出超大文本
-        total_chars = len("".join(lines))
-        clipped = content[:READ_FILE_MAX_CHARS]
-        truncated = len(content) > READ_FILE_MAX_CHARS
-        next_offset = None
-        note = ""
-        if truncated:
-            # 找到截断点所在行，告诉模型下次从哪行继续（分页续读）
-            acc = 0
-            consumed = 0
-            for ln in lines[start:end]:
-                if acc + len(ln) > READ_FILE_MAX_CHARS:
-                    break
-                acc += len(ln)
-                consumed += 1
-            next_offset = start + consumed + 1
-            note = (f"本段 {len(content)} 字符已截断至 {READ_FILE_MAX_CHARS}。"
-                    f"该文件共 {total_lines} 行 / {total_chars} 字符。"
-                    f"要继续读，请用 offset={next_offset} 再次调用（limit 建议 ≤500）。"
-                    "注意：勿整读巨型 JSON（layout.json / *_model.json / *_content_list_v2.json），正文用 00_full_cleaned.md。")
-
+        p = _page_lines(lines, offset, limit, subject="该文件", extra_note=(
+            "注意：勿整读巨型 JSON（layout.json / *_model.json / *_content_list_v2.json），"
+            "正文用 00_full_cleaned.md。"))
         return json.dumps({
             "path": path,
-            "total_lines": total_lines,
+            "total_lines": p["total_lines"],
+            "total_chars": p["total_chars"],
             "offset": offset,
             "limit": limit,
-            "truncated": truncated,
-            "next_offset": next_offset,
-            "note": note,
-            "content": clipped,
+            "truncated": p["truncated"],
+            "has_more": p["has_more"],
+            "next_offset": p["next_offset"],
+            "note": p["note"],
+            "content": p["content"],
         }, ensure_ascii=False)
 
     except PermissionError as e:
