@@ -29,7 +29,7 @@ START_CMD = ("cd ~/c4eai-hub && setsid nohup bash -c 'C4EAI_HOST=0.0.0.0 C4EAI_P
              "> ~/c4eai-hub.log 2>&1 < /dev/null &")
 # 永不同步的目录/文件（云端数据与环境，绝对保护）
 EXCLUDE_DIRS = {"workspace", "model_cache", "node_modules", ".git", "__pycache__", ".trash", "_syn"}
-EXCLUDE_EXT = {".zip", ".gguf", ".log", ".pyc", ".jsonl", ".json.bak", ".out"}
+EXCLUDE_EXT = {".zip", ".gguf", ".log", ".pyc", ".jsonl", ".json.bak", ".out", ".exe", ".msi"}  # 安装包是交付物，云端不需要（云端已有旧版本份）
 EXCLUDE_FILES = {"deploy_cloud.py", "run_translate.py", "run_translate_log.txt", "start.bat",
                  "test_sse.py", ".DS_Store"}
 
