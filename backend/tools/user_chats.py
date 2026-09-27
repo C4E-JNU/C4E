@@ -94,6 +94,7 @@ def save_user_chats(username: str, payload: dict) -> str:
     合并规则：
       · 传入的新对话：本地没有 → 收下；已有 → `updatedAt` 新的赢
       · 传入的墓碑：把该 id 删掉（若本地那份更旧），并记下墓碑
+      · 墓碑作废：该 id 的活副本比墓碑新 → 丢掉这条墓碑（它已无意义，留着会反复删数据）
       · 已有但本次没提到的对话：**保留**（那是另一台设备的，不是"被删了"）
       · branchOrder：并集去重（两边各自排过的都留着）
     """
@@ -141,6 +142,15 @@ def save_user_chats(username: str, payload: dict) -> str:
         for bid in inc_order:
             if bid not in order:
                 order.append(bid)
+
+    # ★ 墓碑作废：某 id 有活着的副本、且它比墓碑新 → 这条墓碑已经没有意义
+    #   （墓碑唯一的职责是挡住「更旧的副本复活」，副本更新它就作废）。
+    #   留着它，客户端会反复把这条墓碑推上来，把刚恢复/刚编辑过的对话再删一次
+    #   （2026-09-27 二次误删 7 个对话正是这个机制）。
+    for bid in list(deleted.keys()):
+        b = branches.get(bid)
+        if b is not None and _ts(b) > str(deleted.get(bid) or ""):
+            deleted.pop(bid, None)
 
     # 墓碑太多时按时间丢最旧的
     if len(deleted) > MAX_TOMBSTONES:

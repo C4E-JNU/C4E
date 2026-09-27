@@ -20,12 +20,17 @@
     window.identityKey = function (k) { return k + '::' + _id; };
     // 旧数据一次性归到 guest/guest 命名空间
     if (_id === 'guest') {
-        ['ai-branches', 'ai-current-branch', 'branchOrder', 'ai-expanded-groups', 'ai-database'].forEach(function (k) {
+        // 旧数据一次性归到 guest 命名空间；复制完把老键删掉（老键不再被任何代码读，
+        // 留着白占 localStorage 配额 —— 用户 2026-09-27 报「本地缓存空间不足」就是配额满了）。
+        ['ai-current-branch', 'branchOrder', 'ai-expanded-groups', 'ai-database'].forEach(function (k) {
             var nk = k + '::guest';
             if (localStorage.getItem(nk) == null && localStorage.getItem(k) != null) {
                 localStorage.setItem(nk, localStorage.getItem(k));
             }
+            localStorage.removeItem(k);
         });
+        // 对话缓存老键（`ai-branches`）：内容在本机后端，直接删（见 js/user_chats.js）
+        ['ai-branches', 'ai-branches-deleted'].forEach(function (k) { localStorage.removeItem(k); });
     }
 
     window.getAuthToken = function () { return localStorage.getItem(TOKEN_KEY) || ''; };

@@ -176,34 +176,27 @@
         }
 
         function loadBranches() {
-            const savedBranches = localStorage.getItem(window.identityKey('ai-branches'));
-            if (savedBranches) {
-                try {
-                    const parsedBranches = JSON.parse(savedBranches);
-                    for (const id in parsedBranches) {
-                        if (!parsedBranches[id].notes) {
-                            parsedBranches[id].notes = [];
-                        }
-                    }
-                    state.branches = parsedBranches;
-                    // 兼容清理：移除旧版本残留的“默认对话(main)”占位，彻底去掉该概念
-                    if (state.branches['main']) {
-                        delete state.branches['main'];
-                    }
-                    let maxCounter = 0;
-                    for (const branchId in state.branches) {
-                        if (branchId !== 'main' && branchId.startsWith('branch-')) {
-                            const num = parseInt(branchId.replace('branch-', ''));
-                            if (!isNaN(num) && num > maxCounter) {
-                                maxCounter = num;
-                            }
-                        }
-                    }
-                    state.branchCounter = maxCounter + 1;
-                } catch (e) {
-                    console.error('解析分支数据失败:', e);
+            // 对话数据由 hydrateUserChats()（在 init 里、本函数之**前**跑）从本机后端
+            // 灌进 state.branches —— 内存里就是全文。不再读 localStorage 副本：
+            // 那个副本会占满浏览器配额，还会跟真相打架（2026-09-27 撤掉）。
+            if (state.branches['main']) {
+                delete state.branches['main'];   // 兼容清理：旧版残留的“默认对话”占位
+            }
+            for (const id in state.branches) {
+                if (!state.branches[id].notes) {
+                    state.branches[id].notes = [];
                 }
             }
+            let maxCounter = 0;
+            for (const branchId in state.branches) {
+                if (branchId !== 'main' && branchId.startsWith('branch-')) {
+                    const num = parseInt(branchId.replace('branch-', ''));
+                    if (!isNaN(num) && num > maxCounter) {
+                        maxCounter = num;
+                    }
+                }
+            }
+            state.branchCounter = maxCounter + 1;
             // 恢复上次打开的对话（若存在且有效）；否则保持无对话(null)，让用户新建/选择
             const prevBranchId = localStorage.getItem(window.identityKey('ai-current-branch'));
             // 只恢复真实对话（branch-*），不创建任何“默认对话”占位
@@ -215,33 +208,16 @@
             }
         }
 
-             function saveBranches() {
-                // 保存所有对话，不再区分临时/永久
-                try {
-                    localStorage.setItem(window.identityKey('ai-branches'), JSON.stringify(state.branches));
-                } catch (e) {
-                    // 存储超限等原因：不抛出，否则调用方（addMessage 等）会中断、消息气泡不渲染
-                    console.error('保存对话到 localStorage 失败:', e);
-                    if (typeof showToast === 'function') {
-                        showToast('本地存储空间不足，最新对话可能未被保存；建议删除含大附件的旧对话', 'error');
-                    }
-                }
-                // 同时记住当前打开的是哪个对话，便于重启后恢复
+              function saveBranches() {
+                // 对话**只存本机后端**（workspace/users/<身份>/chats.json）。
+                // 不再写 localStorage 副本（用户 2026-09-27：浏览器配额只有几 MB，
+                // 装不下全部对话 → 报「本地缓存空间不足」；副本本身还会跟真相打架）。
+                // 记住当前打开的是哪个对话，便于重启后恢复
                 persistCurrentBranch();
                 // ★ 推到后端（用户 2026-09-26 定：对话必须存后端，换设备不能丢）。
                 // 节流 1.5s，这里 18 个调用点会合并成一次推送。
                 if (typeof setUserChats === 'function') setUserChats();
             }
-
-        // 记住当前打开的对话 id，下次打开应用时恢复（避免每次重启都回默认对话）
-        // main 是空占位：不持久化，防止它被当作“上次对话”而在刷新时永远回默认空对话
-        function persistCurrentBranch() {
-            if (state && state.currentBranchId && state.currentBranchId !== 'main') {
-                try { localStorage.setItem(window.identityKey('ai-current-branch'), state.currentBranchId); } catch (e) {}
-                // 切换对话也要同步（下次在别的设备打开时，停在同一个对话上）
-                if (typeof setUserChats === 'function') setUserChats();
-            }
-        }
 
         // ==================== 对话管理功能 ====================
         function openRenameBranchModal(e, branchId = null) {

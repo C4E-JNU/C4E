@@ -15,15 +15,19 @@
 //   · 空闲时零请求（轮询是每 N 秒问一次，用户明确不要）
 //   · 断线期间的事件必然漏掉 → 重连后用 /api/user/chats/version 对齐（见 events.js）
 //
-// 启动：hydrateUserChats() 把后端对话**合并**进 localStorage 缓存，
-//       branching.js 的 loadBranches() 照旧同步读缓存 —— 一行都不用改。
+// 启动：init() → hydrateUserChats() 从**本机后端**拉全量 → 合并进 state.branches（内存）
+//       → initAfterSettings() → loadBranches() 直接用它渲染。
+// ★ 对话**不写浏览器 localStorage**（2026-09-27 用户报「本地缓存空间不足」后去掉）：
+//   localStorage 每站点只有几 MB，全部对话全文（长回答/大表格/附件引用）会把它顶爆；
+//   而这里的「服务器」就是本机后端 —— 再存一份副本既无必要，又正是墓碑误删事件的温床。
+//   唯一真相 = workspace/users/<身份>/chats.json。
 //
 // 存储位置：workspace/users/<身份>/chats.json，见 backend/tools/user_chats.py
 
-var _UC_BRANCHES = 'ai-branches';            // 全部对话（含消息/分支笔记）
-var _UC_CURRENT = 'ai-current-branch';       // 上次打开的是哪个（★ 只本地，不参与同步）
-var _UC_ORDER = 'branchOrder';               // 侧栏排序
-var _UC_DELETED = 'ai-branches-deleted';     // 墓碑：id → 删除时间（本地镜像）
+var _UC_LEGACY_BRANCHES = 'ai-branches';        // 旧的全量缓存键（迁移一次后清除）
+var _UC_LEGACY_DELETED = 'ai-branches-deleted'; // 旧墓碑镜像键（同上）
+var _UC_CURRENT = 'ai-current-branch';          // 上次打开的是哪个（★ 只本地，不参与同步）
+var _UC_ORDER = 'branchOrder';                  // 侧栏排序（每台设备自己的视图）
 
 var _chatsPushTimer = null;
 var _chatsLastPush = '';                     // 上次成功推送的报文，用于「内容没变就别推」
@@ -90,6 +94,14 @@ function _mergeBranchSets(localBranches, localDeleted, remote) {
     // 本地有、后端没有 → 计数（用于决定是否要把本地的推上去）
     Object.keys(localBranches || {}).forEach(function (id) { if (!rb[id]) added++; });
 
+    // ★ 墓碑作废：某 id 有活着的副本、且它比墓碑新 → 这条墓碑已经没有意义
+    //   （墓碑的唯一职责是挡住「更旧的副本复活」，副本更新它就作废）。不删它，
+    //   它会被反复推给后端，把刚恢复/刚编辑过的对话再删一次。
+    Object.keys(dl).forEach(function (id) {
+        var b = br[id];
+        if (b && String(b.updatedAt || '') > String(dl[id] || '')) delete dl[id];
+    });
+
     return { branches: br, deleted: dl, added: added };
 }
 
@@ -103,22 +115,25 @@ function markBranchDeleted(branchId) {
 
 function _cacheKey(k) { return window.identityKey(k); }
 
-function _readCache() {
-    var br = {}, dl = {};
-    try { br = JSON.parse(localStorage.getItem(_cacheKey(_UC_BRANCHES)) || '{}') || {}; } catch (e) {}
-    try { dl = JSON.parse(localStorage.getItem(_cacheKey(_UC_DELETED)) || '{}') || {}; } catch (e) {}
-    return { branches: br, deleted: dl };
+/** 旧版把全部对话全文缓存在 localStorage（`ai-branches`）。这里只读它**一次**用于迁移：
+ *  「本地有、后端没有」的对话要推上去；推成功后立刻清掉，把配额还回来。 */
+function _readLegacyCache() {
+    try { return JSON.parse(localStorage.getItem(_cacheKey(_UC_LEGACY_BRANCHES)) || '{}') || {}; } catch (e) { return {}; }
 }
 
-function _writeCache(branches, deleted, order) {
+/** 清掉旧缓存（含墓碑镜像）。对话真相在本机后端；这两份副本只会占满配额，
+ *  而且浏览器里的旧墓碑会被反复推上来把刚恢复/刚编辑的对话再删一次
+ *  （2026-09-27 二次误删 7 个对话就是这么来的）。 */
+function _purgeLegacyCache() {
     try {
-        localStorage.setItem(_cacheKey(_UC_BRANCHES), JSON.stringify(branches || {}));
-        localStorage.setItem(_cacheKey(_UC_DELETED), JSON.stringify(deleted || {}));
-        if (order) localStorage.setItem(_cacheKey(_UC_ORDER), JSON.stringify(order));
-    } catch (e) {
-        // localStorage 配额满：后端数据仍在，只是这台机器缓存不下
-        if (typeof showToast === 'function') showToast('本地缓存空间不足，对话已存在服务器上', 'error');
-    }
+        localStorage.removeItem(_cacheKey(_UC_LEGACY_BRANCHES));
+        localStorage.removeItem(_cacheKey(_UC_LEGACY_DELETED));
+        // 命名空间以前的老键：auth.js 已把它复制到 guest 命名空间（复制过才删）
+        if (localStorage.getItem('ai-branches::guest') != null) {
+            localStorage.removeItem('ai-branches');
+            localStorage.removeItem('ai-branches-deleted');
+        }
+    } catch (e) {}
 }
 
 /** 把当前 state 的对话整成推送报文 */
@@ -140,19 +155,27 @@ async function hydrateUserChats() {
     var remote = null;
     try {
         var r = await fetch('/api/user/chats');
-        if (!r.ok) return false;
+        if (!r.ok) { _hydrateFailed(); return false; }
         remote = (await r.json()).chats || {};
     } catch (e) {
+        _hydrateFailed();
         return false;
     }
-    var local = _readCache();
-    var m = _mergeBranchSets(local.branches, local.deleted, remote);
+    // 旧缓存只作一次性迁移输入：本地有、后端没有的对话（本功能上线前聊的）→ 推上去
+    var legacy = _readLegacyCache();
+    var m = _mergeBranchSets(legacy, {}, remote);
+    state.branches = m.branches;
     _chatsDeleted = m.deleted;
-    Object.keys(m.branches).forEach(function (id) { _chatsMeta[id] = _branchFp(m.branches[id]); });
-    _writeCache(m.branches, m.deleted, (remote && remote.branchOrder) || null);
-    // 本地有、后端没有（本功能上线前聊的 / 上一台设备还没推上来的）→ 推一次
-    if (m.added > 0) setUserChats();
+    Object.keys(state.branches).forEach(function (id) { _chatsMeta[id] = _branchFp(state.branches[id]); });
+    var pushed = true;
+    if (m.added > 0) pushed = await pushUserChats();   // 推成功才清旧缓存，避免本地独有的对话丢掉
+    if (pushed) _purgeLegacyCache();
     return true;
+}
+
+/** 后端读不到 → 如实报错（不假装有数据、也不退到旧缓存）。 */
+function _hydrateFailed() {
+    if (typeof showToast === 'function') showToast('读不到对话列表：本机后端没起来？', 'error');
 }
 
 // ── 线上同步（收到 SSE 推送后调用）───────────────
@@ -176,7 +199,6 @@ async function syncChatsFromServer() {
     state.branches = m.branches;
     _chatsDeleted = m.deleted;
     Object.keys(state.branches).forEach(function (id) { _chatsMeta[id] = _branchFp(state.branches[id]); });
-    _writeCache(state.branches, _chatsDeleted, remote.branchOrder || null);
     // 当前打开的对话被别的设备删了 → 回到空态
     if (cur && !state.branches[cur]) {
         state.currentBranchId = null;
@@ -204,10 +226,11 @@ async function pushUserChats() {
             headers: { 'Content-Type': 'application/json' },
             body: body
         });
-        if (r.ok) _chatsLastPush = body;            // 只有成功才记，失败下次重推
+        if (r.ok) { _chatsLastPush = body; return true; }   // 只有成功才记，失败下次重推
     } catch (e) {
-        // 后端不可达：本地缓存仍在，下次写入会再推
+        // 后端不可达：数据仍在内存里，下次写入会再推
     }
+    return false;
 }
 
 // ── 离开页面前把最后一笔推掉 ────────────────────

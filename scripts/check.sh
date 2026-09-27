@@ -93,10 +93,20 @@ chk backend/app.py 'UC.load_user_chats(user' '对话 owner 从登录身份推导
 chk js/user_chats.js 'function hydrateUserChats' '对话启动时从后端灌回缓存'
 chk js/user_chats.js 'function setUserChats' '对话写入后节流推后端'
 chk js/user_chats.js 'function syncChatsFromServer' '收到推送后拉全量并合并'
-chk js/user_chats.js "ai-branches-deleted" '★删除留墓碑（否则别处的旧副本会把删掉的复活）'
+# ★ 对话**不写浏览器 localStorage 副本**（2026-09-27 用户报「本地缓存空间不足」后撤掉）：
+#   localStorage 每站点只有几 MB，装不下全部对话；而「服务器」就是本机后端，再存一份副本
+#   既无必要，又正是墓碑误删事件的温床。唯一真相 = workspace/users/<身份>/chats.json。
+if grep -q "identityKey('ai-branches'" js/branching.js js/user_chats.js 2>/dev/null; then
+    bad '仍在写 localStorage 对话副本（已改为只存本机后端）'
+else
+    ok '对话不写 localStorage 副本（唯一真相=本机后端 chats.json）'
+fi
+chk js/user_chats.js 'function _purgeLegacyCache' '旧对话缓存一次性清理（把配额还回来）'
+chk js/user_chats.js 'function markBranchDeleted' '★墓碑只由显式删除写（看不见≠被删）'
+chk js/user_chats.js '墓碑作废' '★墓碑作废：活副本更新→丢墓碑（防反复删数据）'
+chk backend/tools/user_chats.py '墓碑作废' '★后端同样墓碑作废（防旧墓碑再删一次）'
 chk js/user_chats.js 'function _mergeBranchSets' '按对话 id 合并（多设备同时在线的基础）'
 chk js/branching.js "if (typeof setUserChats === 'function') setUserChats();" 'saveBranches 挂钩推后端'
-chk js/branching.js "identityKey('ai-branches')" '对话仍按身份隔离存缓存'
 # 并发模型：允许两边同时登录（用户 2026-09-26 收回单点登录）
 _chk_kick="$(grep -c 'for _old, _rec in list(_sessions.items())' backend/auth.py 2>/dev/null | head -1)"
 _chk_kick="${_chk_kick:-0}"
