@@ -8,7 +8,9 @@ GitHub 只读工具 — 仓库信息 / 目录列举 / 读文件 / 仓库搜索 /
 - 仓库信息 / 目录列举 / 搜索仓库 → api.github.com（未认证：core 60 次/小时，search 10 次/分钟）
 - 读文件正文 → raw.githubusercontent.com（无限流）
 - 代码搜索 → 官方 api.github.com/search/code 未认证直接 401「Requires authentication」，
-  所以改走 grep.app（公开、无需 key；但对非浏览器 UA 会立刻 429 Vercel 质询）
+  所以改走 grep.app（公开、无需 key）。实测：必须用浏览器 UA（否则立刻 429 Vercel 质询），
+  且**短暂连发会被 Vercel 质询锁住数十分钟**（同机浏览器带 JS/cookie 却能过）——
+  所以失败时要如实报「没搜到」并改走 gh_download_tarball + 本地 search_files。
 - 下载压缩包 → codeload.github.com（ref 用 HEAD 即默认分支，无需先查仓库信息）
 
 设计约定：不做兜底/猜测。请求失败就把 HTTP 状态与响应正文原样报出，让调用方知道真相。
@@ -17,6 +19,7 @@ import json
 import os
 import re
 import html
+import base64
 import zipfile
 import httpx
 
@@ -73,6 +76,27 @@ def _dump(obj) -> str:
     return json.dumps(obj, ensure_ascii=False, indent=2)
 
 
+def _net_error(err: str, url: str) -> str:
+    """网络层异常（超时/DNS/TLS 中断）如实报出——这是「工具没跑成」，不是「没结果」。"""
+    return _dump({
+        "error": f"网络层失败: {err}",
+        "url": url,
+        "note": "请求根本没到达/没读完（超时或连接中断），绝不等于没有结果。稍后重试；持续如此说明本机出网不稳。",
+    })
+
+
+async def _fetch(client: httpx.AsyncClient, url: str, **kwargs):
+    """统一的 GET 包装：把 httpx 网络层异常转成 (None, 错误文本)，让各工具如实返回。
+
+    返回 (resp, None) 或 (None, err)。
+    """
+    try:
+        return await client.get(url, **kwargs), None
+    except httpx.HTTPError as e:
+        return None, f"{type(e).__name__}: {e}"
+
+
+
 # ── 1. 仓库信息 ──────────────────────────────────────────
 
 async def gh_repo_info(repo: str) -> str:
@@ -86,7 +110,9 @@ async def gh_repo_info(repo: str) -> str:
 
     url = f"https://api.github.com/repos/{full}"
     async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=True) as client:
-        resp = await client.get(url, headers=_github_headers())
+        resp, err = await _fetch(client, url, headers=_github_headers())
+    if err:
+        return _net_error(err, url)
     if resp.status_code != 200:
         return _http_error(resp.status_code, resp.text, url, resp)
 
@@ -125,7 +151,9 @@ async def gh_list_dir(repo: str, path: str = "", ref: str = None) -> str:
     url = f"https://api.github.com/repos/{full}/contents/{p}"
     params = {"ref": ref} if ref else None
     async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=True) as client:
-        resp = await client.get(url, headers=_github_headers(), params=params)
+        resp, err = await _fetch(client, url, headers=_github_headers(), params=params)
+    if err:
+        return _net_error(err, url)
     if resp.status_code != 200:
         return _http_error(resp.status_code, resp.text, url, resp)
 
@@ -151,7 +179,9 @@ async def gh_list_dir(repo: str, path: str = "", ref: str = None) -> str:
 # ── 3. 读文件 ────────────────────────────────────────────
 
 async def gh_read_file(repo: str, path: str, ref: str = None, max_chars: int = 40000) -> str:
-    """读仓库内单个文件的正文，走 raw.githubusercontent.com（不限流）。
+    """读仓库内单个文件的正文。优先 raw.githubusercontent.com（不限流）；
+    本机实测 raw 会整段连不上时，自动改用官方 contents 端点（base64，未认证 60 次/小时），
+    并在结果里用 source / raw_fail 如实标出用的是哪个来源。
 
     repo: 'owner/name'；path: 文件路径；ref: 分支/tag/commit，留空用 HEAD（默认分支）；
     max_chars: 返回字符上限，超出会截断并在结果里显式说明总字符数。
@@ -165,25 +195,56 @@ async def gh_read_file(repo: str, path: str, ref: str = None, max_chars: int = 4
     use_ref = ref.strip() if isinstance(ref, str) and ref.strip() else "HEAD"
     url = f"https://raw.githubusercontent.com/{full}/{use_ref}/{p}"
 
+    raw_fail = None
+    text = None
     async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=True) as client:
-        resp = await client.get(url, headers=_github_headers("text/plain"))
-    if resp.status_code != 200:
-        # raw 的 404 有两种可能：文件不存在，或 path 其实是个目录（raw 不列目录）
-        return _dump({
-            "error": f"HTTP {resp.status_code}",
-            "url": url,
-            "body": resp.text[:300],
-            "hint": ("404 可能是该路径不存在，也可能是它其实是目录（raw 不能列目录，"
-                     "请改用 gh_list_dir）或 ref/分支名写错。"),
-        })
+        resp, err = await _fetch(client, url, headers=_github_headers("text/plain"))
+    if err:
+        raw_fail = err
+    elif resp.status_code == 200:
+        text = resp.text
+    else:
+        raw_fail = f"HTTP {resp.status_code}"
 
-    text = resp.text
+    # 次选来源：官方 contents 端点（同一份文件，base64 返回）。
+    # 实测本机 raw.githubusercontent.com 会整段连不上（curl HTTP 000 / ConnectError，约 21s 超时），
+    # 而 api.github.com 仍通；此时若不换源，读文件在这个网络下等于完全不可用。
+    # 输出里会明确写出 source 与 raw_fail，不掩盖降级事实（contents 未认证 60 次/小时）。
+    source = "raw.githubusercontent.com"
+    if text is None:
+        curl_ = f"https://api.github.com/repos/{full}/contents/{p}"
+        c_params = {"ref": use_ref} if use_ref != "HEAD" else None
+        async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=True) as client:
+            c_resp, c_err = await _fetch(client, curl_, headers=_github_headers(), params=c_params)
+        if c_err:
+            return _dump({
+                "error": f"两个来源都失败 — raw: {raw_fail}；contents: {c_err}",
+                "urls": [url, curl_],
+                "hint": "本机取 GitHub 内容失败（网络层）。稍后重试；持续如此说明出网被拦。",
+            })
+        if c_resp.status_code != 200:
+            return _dump({
+                "error": f"raw 失败（{raw_fail}）且 contents HTTP {c_resp.status_code}",
+                "urls": [url, curl_],
+                "body": c_resp.text[:300],
+                "hint": ("404 可能是该路径确实不存在，也可能是它其实是目录（读文件接口不列目录，"
+                         "请改用 gh_list_dir）或 ref/分支名写错。"),
+            })
+        data = c_resp.json()
+        if isinstance(data, list):
+            return _dump({"error": "该 path 是目录，不是文件", "path": p, "raw_fail": raw_fail,
+                          "hint": "请改用 gh_list_dir 列举该目录。"})
+        text = base64.b64decode(data.get("content") or "").decode("utf-8", "ignore")
+        source = "api.github.com/contents（未认证 60 次/小时）"
+
     total = len(text)
     truncated = total > max_chars
     body = text[:max_chars] if truncated else text
     out = {
         "repo": full, "path": p, "ref": use_ref,
         "url": url,
+        "source": source,
+        "raw_fail": raw_fail,
         "total_chars": total,
         "returned_chars": len(body),
         "truncated": truncated,
@@ -214,7 +275,9 @@ async def gh_search_repos(query: str, limit: int = 5, sort: str = "stars") -> st
     url = "https://api.github.com/search/repositories"
 
     async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=True) as client:
-        resp = await client.get(url, headers=_github_headers(), params=params)
+        resp, err = await _fetch(client, url, headers=_github_headers(), params=params)
+    if err:
+        return _net_error(err, url)
     if resp.status_code != 200:
         return _http_error(resp.status_code, resp.text, url, resp)
 
@@ -261,8 +324,10 @@ async def gh_search_code(query: str, limit: int = 10, lang: str = None) -> str:
     if token:
         qq = q + ((" language:%s" % lang) if lang else "")
         async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=True) as client:
-            resp = await client.get("https://api.github.com/search/code",
-                                    headers=_github_headers(), params={"q": qq, "per_page": limit})
+            resp, err = await _fetch(client, "https://api.github.com/search/code",
+                                     headers=_github_headers(), params={"q": qq, "per_page": limit})
+        if err:
+            return _net_error(err, "https://api.github.com/search/code")
         if resp.status_code == 200:
             d = resp.json()
             return _dump({"query": q, "source": "api.github.com/search/code",
@@ -279,11 +344,13 @@ async def gh_search_code(query: str, limit: int = 10, lang: str = None) -> str:
     if lang:
         params["filter[lang][0]"] = lang
     async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=True) as client:
-        resp = await client.get(url, headers={
+        resp, err = await _fetch(client, url, headers={
             "User-Agent": _BROWSER_UA,
             "Accept": "application/json",
             "Referer": "https://grep.app/",
         }, params=params)
+    if err:
+        return _net_error(err, url)
 
     if resp.status_code != 200:
         body = resp.text[:600]
@@ -321,7 +388,7 @@ async def gh_search_code(query: str, limit: int = 10, lang: str = None) -> str:
 # ── 6. 下载仓库压缩包 ────────────────────────────────────
 
 async def gh_download_tarball(repo: str, ref: str = None, dest_dir: str = None) -> str:
-    """下载整仓 zip 到本地，返回落地绝对路径（让 agent 拿到一份可读的完整代码）。
+    """下载整仓 zip 到本地并解压，返回**解压后目录**的绝对路径（让 agent 拿到一份可读的完整代码）。
 
     repo: 'owner/name'；ref: 分支/tag/commit，留空用 HEAD（= 默认分支，codeload 支持）；
     dest_dir: 落地目录，留空则用 workspace/_github_tmp/。
@@ -338,17 +405,25 @@ async def gh_download_tarball(repo: str, ref: str = None, dest_dir: str = None) 
     dest = os.path.join(base, f"{owner}__{name}__{safe_ref}.zip")
 
     url = f"https://codeload.github.com/{full}/zip/{safe_ref}"
-    async with httpx.AsyncClient(timeout=300.0, follow_redirects=True) as client:
-        async with client.stream("GET", url, headers=_github_headers("application/zip")) as resp:
-            if resp.status_code != 200:
-                body = (await resp.aread()).decode("utf-8", "ignore")
-                return _dump({"error": f"HTTP {resp.status_code}", "url": url, "body": body[:300],
-                              "hint": "404 通常是 repo 或 ref 写错（ref=HEAD 表示默认分支）。"})
-            size = 0
-            with open(dest, "wb") as f:
-                async for chunk in resp.aiter_bytes(65536):
-                    f.write(chunk)
-                    size += len(chunk)
+    try:
+        async with httpx.AsyncClient(timeout=300.0, follow_redirects=True) as client:
+            async with client.stream("GET", url, headers=_github_headers("application/zip")) as resp:
+                if resp.status_code != 200:
+                    body = (await resp.aread()).decode("utf-8", "ignore")
+                    return _dump({"error": f"HTTP {resp.status_code}", "url": url, "body": body[:300],
+                                  "hint": "404 通常是 repo 或 ref 写错（ref=HEAD 表示默认分支）。"})
+                size = 0
+                with open(dest, "wb") as f:
+                    async for chunk in resp.aiter_bytes(65536):
+                        f.write(chunk)
+                        size += len(chunk)
+    except httpx.HTTPError as e:
+        # 下载中断：磁盘上可能留了半个 zip，清掉再如实报错（半包解压会得到残缺代码）
+        try:
+            os.remove(dest)
+        except OSError:
+            pass
+        return _net_error(f"{type(e).__name__}: {e}", url)
 
     top = []
     try:
@@ -380,5 +455,6 @@ async def gh_download_tarball(repo: str, ref: str = None, dest_dir: str = None) 
         "bytes": size, "zip_file_count": file_count,
         "zip_root_dir": root,
         "top_entries": top[:30],
-        "note": "这是 zip 整包；解压后所有路径都带 zip_root_dir 前缀。可直接用本地文件工具读取。",
+        "note": ("已解压为目录（zip 已删除）；目录内所有路径都带 zip_root_dir 前缀。"
+                 "可直接用本地文件工具与 search_files 读取、检索。"),
     })
