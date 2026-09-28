@@ -202,11 +202,6 @@ def tool_denied(user: dict, tool: str) -> bool:
     return lv == L_GUEST                             # 其余工具类：游客一律拒
 
 
-def mineru_write_allowed(user: dict) -> bool:
-    """矿工(MinerU) token 写操作：仅主管理员。"""
-    return (not HUB) or is_super(user)
-
-
 # ── 本地千问用量 ──
 
 def _load_usage() -> dict:

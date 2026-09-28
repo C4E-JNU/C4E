@@ -55,6 +55,13 @@
                     { id: 'qwen3-local', name: 'Qwen3.6 35B（本地）', desc: '实验室服务器本地推理，免费不限量，已内置无需配置', modelParam: 'Qwen3.6-35B-A3B-Q4_K_M.gguf', enableReasoning: false }
                 ]
             },
+            'kimi': {
+                id: 'kimi', name: 'Kimi（月之暗面）',
+                defaultEndpoint: 'https://api.moonshot.cn/v1',
+                apiKeyHeader: 'Authorization', apiKeyPrefix: 'Bearer ',
+                desc: 'Moonshot Kimi 官方 API（国内站）｜长上下文与 Agent 能力强；国际站为 https://api.moonshot.ai/v1，Kimi 编程套餐 key 用 https://api.kimi.com/coding',
+                models: []
+            },
             'hermes': {
                 id: 'hermes', name: 'Hermes', type: 'openai',
                 defaultEndpoint: '',

@@ -566,6 +566,28 @@
             .catch(function (e) { showToast('❌ 上传数据库失败：' + (e && e.message ? e.message : '网络错误'), 'error'); });
         }
 
+        // ==================== 对话条目状态标记（2026-09-28）====================
+        // 用户等回答时切到别的对话，回来能一眼看出「哪条还在跑」「哪条已经答完还没看」。
+        // 只在内存里（刷新即清）；打开该对话 = 已看过 = 标记消失。
+        function chatMarkHtml(branchId) {
+            var m = state.chatMarks[branchId] || '';
+            return '<span class="chat-mark' + (m ? ' ' + m : '') + '"></span>';
+        }
+        function markChatRunning(branchId) {
+            if (!branchId) return;
+            state.chatMarks[branchId] = 'running';
+            updateHistoryList();
+        }
+        function markChatDone(branchId) {
+            if (!branchId) return;
+            if (branchId === state.currentBranchId) { delete state.chatMarks[branchId]; }  // 人正在看 = 不用提醒
+            else { state.chatMarks[branchId] = 'done'; }
+            updateHistoryList();
+        }
+        function clearChatMark(branchId) {
+            if (branchId && state.chatMarks[branchId] !== undefined) delete state.chatMarks[branchId];
+        }
+
         // ==================== 更新历史列表函数 ====================
         function updateHistoryList() {
             if (state.historyMode === 'single') {
@@ -773,6 +795,7 @@
 
                 groupEl.innerHTML = `
                     <div class="group-header" onclick="handleBranchClick('${branchId}')">
+                        ${chatMarkHtml(branchId)}
                         <div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 10px;">
                             ${group.branchName}
                             
@@ -1094,6 +1117,7 @@
             state.documentUpload.pendingAttachments = []; state.documentUpload._errorFiles = [];
             renderMessages();
             updateTokenDisplay();
+            clearChatMark(branchId);   // 打开即视为已看过
             updateHistoryList();
             updateSelectedFilesList();
             hideUploadPanel();

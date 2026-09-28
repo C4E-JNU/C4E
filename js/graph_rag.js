@@ -72,6 +72,8 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
     noteRefs = (noteRefs || []).map(function (r) { return { id: r.id, scope: r.scope || 'notes', title: r.title || '' }; });
     // 生成开始：按钮切成「⚡立即回答」（用户 2026-09-27 定：不硬中断、不丢已探索内容，只催它马上出答案）
     state.isGenerating = true;
+    state._runBranchId = state.currentBranchId;   // 记住这次回答属于哪条对话（中途切走也不会标错）
+    if (typeof markChatRunning === 'function') markChatRunning(state._runBranchId);
     state.userHasScrolledUp = false;   // 刚发出去 = 人在看底部，允许贴底
     if (typeof sendBtn !== 'undefined' && sendBtn) { sendBtn.innerHTML = '⚡'; sendBtn.classList.add('stop'); sendBtn.title = '立即回答'; }
     if (typeof updateSendButtonState === 'function') updateSendButtonState();
@@ -479,7 +481,9 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
 
     updateHistoryList();
     updateTokenDisplay();
-    // 生成结束：恢复发送态
+    // 生成结束：恢复发送态；人没在看这条对话 → 留绿点提醒
+    if (typeof markChatDone === 'function') markChatDone(state._runBranchId);
+    state._runBranchId = null;
     state.isGenerating = false;
     if (typeof sendBtn !== 'undefined' && sendBtn) { sendBtn.innerHTML = '➤'; sendBtn.classList.remove('stop'); sendBtn.title = '发送'; }
     if (typeof updateSendButtonState === 'function') updateSendButtonState();

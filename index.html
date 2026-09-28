@@ -32,7 +32,7 @@
     <link rel="stylesheet" href="css/variables.css?v=5">
     <link rel="stylesheet" href="css/reset.css?v=4">
     <link rel="stylesheet" href="css/layout.css?v=23">
-    <link rel="stylesheet" href="css/sidebar.css?v=7">
+    <link rel="stylesheet" href="css/sidebar.css?v=8">
     <link rel="stylesheet" href="css/messages.css?v=2">
     <link rel="stylesheet" href="css/input.css?v=8">
     <link rel="stylesheet" href="css/modals.css?v=4">
@@ -594,15 +594,15 @@
                                     </label>
                                     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem .6rem;">
                                         <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">轮次/个（0=无限）
-                                            <input type="number" id="subagent-rounds" min="0" step="1" value="4" title="每个子智能体的工具循环上限；0 = 无限（用户 2026-09-27：不要锁死）"
+                                            <input type="number" id="subagent-rounds" min="0" step="1" value="0" title="每个子智能体的工具循环上限；0 = 无限（用户 2026-09-27：不要锁死）"
                                                    class="neo4j-input" style="width:100%;box-sizing:border-box;">
                                         </label>
                                         <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">并发上限
-                                            <input type="number" id="subagent-parallel" min="1" max="8" step="1" value="2"
+                                            <input type="number" id="subagent-parallel" min="1" max="8" step="1" value="8"
                                                    class="neo4j-input" style="width:100%;box-sizing:border-box;">
                                         </label>
                                         <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">最多子任务
-                                            <input type="number" id="subagent-maxtasks" min="1" max="8" step="1" value="4"
+                                            <input type="number" id="subagent-maxtasks" min="1" max="8" step="1" value="8"
                                                    class="neo4j-input" style="width:100%;box-sizing:border-box;">
                                         </label>
                                     </div>
@@ -613,15 +613,15 @@
                                     </div>
                                     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem .6rem;margin-top:.6rem;">
                                         <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">催促(秒)
-                                            <input type="number" id="subagent-nudge" min="0" max="3600" step="10" value="60"
+                                            <input type="number" id="subagent-nudge" min="0" max="604800" step="10" value="0"
                                                    class="neo4j-input" style="width:100%;box-sizing:border-box;">
                                         </label>
                                         <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">警告(秒)
-                                            <input type="number" id="subagent-warn" min="0" max="3600" step="10" value="150"
+                                            <input type="number" id="subagent-warn" min="0" max="604800" step="10" value="0"
                                                    class="neo4j-input" style="width:100%;box-sizing:border-box;">
                                         </label>
                                         <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">终止(秒)
-                                            <input type="number" id="subagent-abort" min="30" max="3600" step="10" value="300"
+                                            <input type="number" id="subagent-abort" min="0" max="604800" step="10" value="86400"
                                                    class="neo4j-input" style="width:100%;box-sizing:border-box;">
                                         </label>
                                     </div>
@@ -634,15 +634,15 @@
                                     <div class="config-section-title">⏱️ 超时保护（主智能体）</div>
                                     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem .6rem;">
                                         <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">催促(秒)
-                                            <input type="number" id="timeout-nudge" min="0" max="3600" step="10" value="120"
+                                            <input type="number" id="timeout-nudge" min="0" max="604800" step="10" value="0"
                                                    class="neo4j-input" style="width:100%;box-sizing:border-box;">
                                         </label>
                                         <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">警告(秒)
-                                            <input type="number" id="timeout-warn" min="0" max="3600" step="10" value="240"
+                                            <input type="number" id="timeout-warn" min="0" max="604800" step="10" value="0"
                                                    class="neo4j-input" style="width:100%;box-sizing:border-box;">
                                         </label>
                                         <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">终止(秒)
-                                            <input type="number" id="timeout-abort" min="0" max="7200" step="10" value="420"
+                                            <input type="number" id="timeout-abort" min="0" max="604800" step="10" value="86400"
                                                    class="neo4j-input" style="width:100%;box-sizing:border-box;">
                                         </label>
                                     </div>
@@ -670,9 +670,9 @@
                                 <div class="config-section">
                                     <div class="config-section-title">🔗 Neo4j 连接</div>
                                     <div class="neo4j-connect-form">
-                                        <input type="text" class="neo4j-input" id="panel-neo4j-uri" placeholder="neo4j+s://..." value="neo4j+s://7d99a1d8.databases.neo4j.io">
+                                        <input type="text" class="neo4j-input" id="panel-neo4j-uri" placeholder="neo4j+s://..." value="">
                                         <div class="neo4j-row">
-                                            <input type="text" class="neo4j-input" id="panel-neo4j-user" placeholder="用户名" value="7d99a1d8">
+                                            <input type="text" class="neo4j-input" id="panel-neo4j-user" placeholder="用户名" value="">
                                             <input type="password" class="neo4j-input" id="panel-neo4j-pass" placeholder="密码">
                                         </div>
                                         <button class="neo4j-connect-btn" id="panel-neo4j-connect">🔌 连接</button>
@@ -772,31 +772,31 @@
 
 
     <!-- 脚本文件 (按依赖顺序) -->
-    <script src="js/state.js?v=13"></script>
+    <script src="js/state.js?v=14"></script>
     <!-- 个人设置后端存储（必须在其它模块之前：hydrate 要把后端设置灌回缓存） -->
-    <script src="js/user_settings.js?v=1"></script>
+    <script src="js/user_settings.js?v=2"></script>
     <script src="js/user_chats.js?v=4"></script>
     <script src="js/events.js?v=1"></script>
     <script src="js/dom.js?v=4"></script>
-    <script src="js/settings.js?v=10"></script>
+    <script src="js/settings.js?v=11"></script>
     <script src="js/image_tools.js?v=3"></script>
     <script src="js/file_preview.js?v=12"></script>
     <script src="js/auth.js?v=21"></script>
     <script src="js/api.js?v=12"></script>
     <script src="js/database.js?v=21"></script>
-    <script src="js/sidebar.js?v=16"></script>
+    <script src="js/sidebar.js?v=17"></script>
     <script src="js/branching.js?v=15"></script>
     <script src="js/provider.js?v=9"></script>
     <script src="js/messages.js?v=9"></script>
     <script src="js/editing.js?v=3"></script>
     <script src="js/formatting.js?v=6"></script>
     <script src="js/tools.js?v=4"></script>
-    <script src="js/graph_rag.js?v=16"></script>
+    <script src="js/graph_rag.js?v=17"></script>
     <script src="js/note_refs.js?v=2"></script>
     <script src="js/subagent_view.js?v=3"></script>
     <!-- 前端工具注册表已删除（工具全部由后端提供） -->
     <script src="js/skill_system.js?v=3"></script>
-    <script src="js/agent_config.js?v=12"></script>
+    <script src="js/agent_config.js?v=13"></script>
     <script src="js/ui.js?v=6"></script>
     <script src="js/bubbles.js?v=5"></script>
     <script src="js/bubble_actions.js?v=3"></script>

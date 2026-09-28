@@ -506,17 +506,13 @@ class MinerUConfigRequest(BaseModel):
 
 @app.get("/api/config/mineru")
 async def mineru_config_get(request: Request):
-    """读取 MinerU 配置。云端非主管理员：只返回是否已配置，不回显 token 明文。"""
+    """读取本人的 MinerU 配置（每人各自保存，互不可见）。"""
     token = _mineru_load_token()
-    if _RP.HUB and not _RP.mineru_write_allowed(_cur_user(request)):
-        return {"configured": bool(token), "token": ""}
     return {"configured": bool(token), "token": token if token else ""}
 
 @app.post("/api/config/mineru")
 async def mineru_config_set(req: MinerUConfigRequest, request: Request):
-    """保存 MinerU API Token。云端：仅主管理员可改服务器全局 token。"""
-    if _RP.HUB and not _RP.mineru_write_allowed(_cur_user(request)):
-        return JSONResponse({"error": "云端 MinerU Token 仅主管理员可修改；请在本地实例填你自己的 Token。"}, status_code=403)
+    """保存本人的 MinerU API Token（写进本人数据目录）。"""
     if not req.token or not req.token.strip():
         _mineru_save_token("")
         return {"success": True, "configured": False}

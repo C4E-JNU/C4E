@@ -302,6 +302,7 @@ function saveAgentConfig() {
     const roundSel = document.getElementById('agent-max-rounds');
     const rounds = roundSel ? parseInt(roundSel.value, 10) : 8;
     state.agentConfig.maxRounds = isNaN(rounds) ? 20 : rounds;
+    state.agentConfig.settingsRev = 2;   // 用户手动保存过 = 迁移不再覆盖他的选择
     saveAgentConfigToLocal();
 
     // 子智能体设置（写入 state.settings.*，独立持久化到 ai-settings）
@@ -337,14 +338,28 @@ function loadAgentConfigFromLocal() {
             if (Array.isArray(parsed.loadedSkills)) {
                 state.agentConfig.loadedSkills = parsed.loadedSkills;
             }
+            // 一次性放开（2026-09-28 用户定）：除访问权限外全部放开、轮次无限、超时保护只留「一天硬停」。
+            // 用 settingsRev 守卫，只对旧存档生效一次；此后用户改什么就是什么。
+            if (parsed.settingsRev !== 2) {
+                state.agentConfig.enabledTools = TOOL_GROUPS.flatMap(g => g.tools);
+                state.agentConfig.loadedSkills = ['self-modify', 'mineru-agent-parse', 'literature-translate',
+                    'literature-contradiction', 'literature-search', 'code-search', 'document-entry'];
+                state.agentConfig.maxRounds = 0;
+                state.agentConfig.settingsRev = 2;
+                state.settings.timeoutNudge = 0; state.settings.timeoutWarn = 0; state.settings.timeoutAbort = 86400;
+                state.settings.subagentMaxRounds = 0; state.settings.subagentMaxParallel = 8; state.settings.subagentMaxTasks = 8;
+                state.settings.subagentNudge = 0; state.settings.subagentWarn = 0; state.settings.subagentAbort = 86400;
+                saveAgentConfigToLocal();
+                try { setUserSetting('ai-settings', JSON.stringify(state.settings)); } catch (e) { /* ignore */ }
+            }
         }
     } catch (e) { /* ignore */ }
 }
 
 // ── Neo4j 连接（面板内） ──────────────────────────
 function syncNeo4jConfigToPanel() {
-    if (panelNeo4jUri) panelNeo4jUri.value = state.neo4j.uri || 'neo4j+s://7d99a1d8.databases.neo4j.io';
-    if (panelNeo4jUser) panelNeo4jUser.value = state.neo4j.user || '7d99a1d8';
+    if (panelNeo4jUri) panelNeo4jUri.value = state.neo4j.uri || '';
+    if (panelNeo4jUser) panelNeo4jUser.value = state.neo4j.user || '';
     updateNeo4jStatusUI(state.neo4j.connected);
     if (panelNeo4jConnect) {
         panelNeo4jConnect.textContent = state.neo4j.connected ? '✅ 已连接' : '🔌 连接';
@@ -353,8 +368,8 @@ function syncNeo4jConfigToPanel() {
 
 if (panelNeo4jConnect) {
     panelNeo4jConnect.addEventListener('click', async function() {
-        const uri = (panelNeo4jUri ? panelNeo4jUri.value.trim() : '') || state.neo4j.uri;
-        const user = (panelNeo4jUser ? panelNeo4jUser.value.trim() : '') || state.neo4j.user;
+        const uri = (panelNeo4jUri ? panelNeo4jUri.value.trim() : '') || state.neo4j.uri || '';
+        const user = (panelNeo4jUser ? panelNeo4jUser.value.trim() : '') || state.neo4j.user || '';
         const pass = panelNeo4jPass ? panelNeo4jPass.value : '';
 
         if (!pass && !neo4jConnector.isConnected()) {

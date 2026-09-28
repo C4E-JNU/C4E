@@ -36,7 +36,7 @@
 
             // Neo4j 配置
             neo4j: {
-                uri: 'neo4j+s://7d99a1d8.databases.neo4j.io',
+                uri: '',                   // 由用户自填，不预置任何实例
                 user: '7d99a1d8',
                 password: '',
                 connected: false
@@ -44,11 +44,12 @@
 
             // 智能体配置
             agentConfig: {
-                enabledTools: ['graph_query', 'shared_search', 'shared_upload', 'search_history', 'conversation_notes', 'skill_list', 'skill_view', 'skill_write', 'web_search', 'web_extract', 'todo', 'mineru_parse', 'read_file', 'write_file', 'list_files', 'list_outputs', 'search_files', 'find_files', 'edit_file', 'run_code', 'terminal', 'delegate_task'],
-                loadedSkills: ['self-modify'],
+                enabledTools: ['graph_query', 'shared_search', 'shared_upload', 'web_search', 'web_extract', 'skill_list', 'skill_view', 'skill_write', 'read_file', 'write_file', 'list_files', 'list_outputs', 'search_files', 'find_files', 'edit_file', 'run_code', 'terminal', 'crossref_lookup', 'arxiv_search', 'semantic_scholar_search', 'gh_repo_info', 'gh_list_dir', 'gh_read_file', 'gh_search_repos', 'gh_search_code', 'gh_download_tarball', 'search_history', 'conversation_notes', 'todo', 'delegate_task', 'mineru_parse'],   // 默认全开（用户 2026-09-28：除访问权限外一律放开）
+                loadedSkills: ['self-modify', 'mineru-agent-parse', 'literature-translate', 'literature-contradiction', 'literature-search', 'code-search', 'document-entry'],
                 permissionMode: 'safe',
                 engine: 'custom',          // custom=裸API手写循环 / langchain=LangChain流式
-                maxRounds: 20,             // 工具循环步数，0=无限（原默认 8：多源文献对账常超 8 步）
+                maxRounds: 0,              // 0=无限轮次（用户 2026-09-28 定）
+                chatMarks: {},             // 对话条目状态：{branchId: 'running'|'done'}（用户 2026-09-28）
             },
 
             // 模型设置
@@ -71,17 +72,17 @@
                     fontSizePopup: 0.85,        // 小浮层字号 (rem)
                     fontSizeToast: 0.85,        // 微提示/轻提示字号 (rem)
                     // 超时保护（秒，0=关闭该级）
-                    timeoutNudge: 120,          // 催促：注入「尽快收尾」提示
-                    timeoutWarn: 240,           // 警告：注入「立即作答」提示
-                    timeoutAbort: 420,          // 终止：强制结束并返回超时说明
+                timeoutNudge: 0,            // 0=关闭该级（用户 2026-09-28：超时保护只留一天硬停）
+                timeoutWarn: 0,
+                timeoutAbort: 86400,        // 一天
                     // 子智能体（delegate_task）
                     subagentEnabled: true,
-                    subagentMaxRounds: 4,       // 每个子智能体的工具循环轮次上限
-                    subagentMaxParallel: 2,     // 并发上限（1-8，可自由调节）
-                    subagentMaxTasks: 4,        // 单次最多派发子任务数（1-8）
-                    subagentNudge: 60,          // 子智能体三级超时：催促
-                    subagentWarn: 150,          // 子智能体三级超时：警告
-                    subagentAbort: 300,         // 子智能体三级超时：终止
+                subagentMaxRounds: 0,       // 0=无限
+                subagentMaxParallel: 8,
+                subagentMaxTasks: 8,
+                subagentNudge: 0,
+                subagentWarn: 0,
+                subagentAbort: 86400,       // 一天
                      },
 
             // 侧边栏状态
@@ -105,6 +106,7 @@
             // 运行状态
             isGenerating: false,
             abortController: null,
+            _runBranchId: null,          // 本次回答归属的对话（中途切走也不标错）
             userHasScrolledUp: false,
             tableTheme: localStorage.getItem('ragagent-table-theme') || '', // 全局表格皮肤（本机偏好，不同步）
             // 已启用的模型：这里留空 —— 本对象的字面量在**脚本解析时**求值，

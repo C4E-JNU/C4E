@@ -25,31 +25,44 @@ POLL_INTERVAL = 10
 UPLOAD_TIMEOUT = 120
 HTTP_TIMEOUT = 30
 
-CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "workspace", "mineru_config.json")
-_ALT_CONFIG = [os.path.join(os.path.dirname(os.path.abspath(__file__)), "mineru_config.json"),
-               os.path.join(os.path.dirname(os.path.abspath(__file__)), "workspace", "mineru_config.json")]
+# 产品数据根 workspace/（打包时整体排除，不会随出货外泄）
+CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                           "workspace", "mineru_config.json")
+
+
+def _config_path():
+    """MinerU token 归用户本人：云端存本人数据目录，本地实例存 workspace/。
+
+    用户 2026-09-28：token 由用户自己输入、存在自己的数据里，不做服务端全局共享。
+    """
+    from tools.file_tools import get_user_scope, _user_dir
+    scope = get_user_scope()
+    if scope and scope.get("user"):
+        return os.path.join(_user_dir(scope["user"]), "mineru_config.json")
+    return CONFIG_PATH
 
 
 def load_token():
-    """从后端配置读取 MinerU API token。"""
-    for path in [CONFIG_PATH] + _ALT_CONFIG:
-        if os.path.exists(path):
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    cfg = json.load(f)
-                if cfg.get("token"):
-                    return cfg["token"].strip()
-            except Exception:
-                pass
-    return os.environ.get("MINERU_TOKEN") or os.environ.get("MINERU_API_KEY")
+    """读取当前用户的 MinerU API token。"""
+    path = _config_path()
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+            if cfg.get("token"):
+                return cfg["token"].strip()
+        except Exception:
+            pass
+    return ""
 
 
 def save_token(token):
-    """把 token 写入后端配置。"""
-    os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+    """把 token 写进当前用户自己的配置。"""
+    path = _config_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
         json.dump({"token": token.strip() if token else ""}, f, ensure_ascii=False, indent=2)
-    return CONFIG_PATH
+    return path
 
 
 def _headers(token):

@@ -38,12 +38,12 @@ def get_current_model_config() -> dict:
 
 
 # ── 超时三级（催促 / 警告 / 终止）默认值，可被请求参数覆盖 ──
-DEFAULT_TIMEOUTS = {"nudge": 120, "warn": 240, "abort": 420}
+DEFAULT_TIMEOUTS = {"nudge": 0, "warn": 0, "abort": 86400}   # 用户 2026-09-28：只剩「一天硬停」
 
 # 子智能体选项（前端设置传入）：轮次 / 并发上限 / 最大子任务数 / 三级超时
-_subagent_options = {"max_rounds": 4, "timeout": 300, "enabled": True,
-                     "max_parallel": 2, "max_tasks": 4,
-                     "nudge": 60, "warn": 150, "abort": 300}
+_subagent_options = {"max_rounds": 0, "timeout": 86400, "enabled": True,
+                     "max_parallel": 8, "max_tasks": 8,
+                     "nudge": 0, "warn": 0, "abort": 86400}
 
 
 def set_subagent_options(opts: dict = None):
@@ -54,12 +54,12 @@ def set_subagent_options(opts: dict = None):
         if opts and opts.get(k) is not None:
             o[k] = opts[k]
     try:
-        o["max_rounds"] = max(0, int(o.get("max_rounds", 4)))   # 0 = 无限（用户 2026-09-27：不要锁死 20）
-        o["max_parallel"] = max(1, min(8, int(o.get("max_parallel", 2))))     # 并发上限（自由调节 1-8）
-        o["max_tasks"] = max(1, min(8, int(o.get("max_tasks", 4))))           # 单次最多子任务数
-        o["nudge"] = max(0, min(3600, int(o.get("nudge", 60))))
-        o["warn"] = max(0, min(3600, int(o.get("warn", 150))))
-        o["abort"] = max(30, min(3600, int(o.get("abort", 300))))
+        o["max_rounds"] = max(0, int(o.get("max_rounds", 0)))   # 0 = 无限（用户 2026-09-27：不要锁死 20）
+        o["max_parallel"] = max(1, min(8, int(o.get("max_parallel", 8))))     # 并发上限（自由调节 1-8）
+        o["max_tasks"] = max(1, min(8, int(o.get("max_tasks", 8))))           # 单次最多子任务数
+        o["nudge"] = max(0, min(604800, int(o.get("nudge", 0))))     # 0=关闭该级；上限 7 天
+        o["warn"] = max(0, min(604800, int(o.get("warn", 0))))
+        o["abort"] = max(0, min(604800, int(o.get("abort", 86400))))  # 用户 2026-09-28：超时保护 = 一天
         o["timeout"] = o["abort"]                                             # 旧字段与新终止级保持一致
         o["enabled"] = bool(o.get("enabled", True))
     except Exception:

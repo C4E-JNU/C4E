@@ -1208,3 +1208,24 @@
             margin-bottom: 0;
             border-bottom: none;
         }
+
+
+/* ── 对话条目状态标记（2026-09-28）：运行中转圈 / 答完未读绿点 ── */
+.chat-mark {
+    flex: 0 0 11px;
+    width: 11px;
+    height: 11px;
+    margin-right: 7px;
+    border-radius: 50%;
+    box-sizing: border-box;
+}
+.chat-mark.running {
+    border: 2px solid var(--primary);
+    border-top-color: transparent;
+    animation: chat-mark-spin 0.7s linear infinite;
+}
+.chat-mark.done {
+    background: #22c55e;
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.18);
+}
+@keyframes chat-mark-spin { to { transform: rotate(360deg); } }
