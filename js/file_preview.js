@@ -258,22 +258,22 @@
         var id = _cur.fileId, ext = _extOf(_cur.name);
 
         if (IMG_EXT.indexOf(ext) >= 0) {
-            _renderLoading('正在加载图片…');
-            _fetchFileBlob(id).then(function (blob) {
-                b.innerHTML = '<div class="file-preview-center"><img class="file-preview-img" src="' +
-                    URL.createObjectURL(blob) + '" alt="' + _esc(_cur.name) + '"></div>';
-            }).catch(function () {
-                _renderText('', '图片加载失败（本实例与共享库均未找到该文件）。');
-            });
+            // 直接指向内联端点，不走 fetch+blob：
+            // blob 路径要把整个文件读进内存再 createObjectURL，大文件实测读不出来
+            // （2026-09-28 用户报「智能体加的附件点开小窗加载不出来」：12.5MB PDF 卡在 r.blob()）。
+            // /api/file/<id> 本身是 inline，且本地实例会自动带会话代理到共享库，云端文件同样能显示。
+            b.innerHTML = '<div class="file-preview-center"><img class="file-preview-img" alt="' +
+                _esc(_cur.name) + '"></div>';
+            var _im = b.querySelector('img');
+            _im.onerror = function () { _renderText('', '图片加载失败（本实例与共享库均未找到该文件）。'); };
+            _im.src = '/api/file/' + encodeURIComponent(id);
             return;
         }
         if (PDF_EXT.indexOf(ext) >= 0) {
-            _renderLoading('正在加载 PDF…');
-            _fetchFileBlob(id).then(function (blob) {
-                b.innerHTML = '<iframe class="file-preview-frame" src="' + URL.createObjectURL(blob) + '"></iframe>';
-            }).catch(function () {
-                _renderText('', 'PDF 加载失败（本实例与共享库均未找到该文件）。');
-            });
+            // 同上：交给浏览器自带 PDF 阅读器，不再经过 blob（大文件会卡）。
+            b.innerHTML = '<iframe class="file-preview-frame"></iframe>';
+            var _fr = b.querySelector('iframe');
+            _fr.src = '/api/file/' + encodeURIComponent(id);
             return;
         }
         if (OFFICE_EXT.indexOf(ext) >= 0) {

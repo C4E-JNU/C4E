@@ -22,13 +22,13 @@
     },
     {
       "name": "literature-search",
-      "description": "查文献的正确顺序：先用 crossref_lookup/arxiv_search/semantic_scholar_search 拿到题名/期刊/年份/DOI，再用 web_extract 抓原文。含收敛策略：什么时候换词、什么时候停。",
-      "version": "1.0.0"
+      "description": "当要查文献、补全题名/期刊/年份/DOI/引用数，或拿到 DOI 抓原文时用。含三接口分工、S2 限流的实战退路与「换词最多两次」的收敛策略。",
+      "version": "1.1"
     },
     {
       "name": "code-search",
-      "description": "在代码/文件里定位与修改的正确姿势：search_files 三态收敛（先 files_with_matches 定位 → 再 content 看命中 → count 判断策略）、find_files 按名找、edit_file 唯一匹配改一处，以及不花 token 读 GitHub 仓库。",
-      "version": "1.0.0"
+      "description": "当要在代码/文件里定位、读、改一处，或要看 GitHub 开源项目实现时用。先确认三大本地检索工具是否启用（缺则走 cmd findstr 退路），远端用 gh_* 系列。",
+      "version": "1.1"
     },
     {
       "name": "document-entry",
