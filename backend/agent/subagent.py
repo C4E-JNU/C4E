@@ -64,7 +64,7 @@ _SUBAGENT_SYSTEM = (
     "你是一个被主智能体派发的子智能体（worker）。你只负责完成交给你的那个子任务，"
     "不负责回答用户的完整问题。\n"
     "规则：\n"
-    "1. 先用最少的工具调用收集事实（" + ("建议 ≤ %d 轮" % max_rounds if int(max_rounds) > 0 else "按需，尽量少") + "），不要反复试探。\n"
+    "1. 先用最少的工具调用收集事实（{rounds_hint}），不要反复试探。\n"
     "2. 完成后必须给出一段**结构化结论摘要**：结论要点 + 关键数据 + 来源（如有）。\n"
     "3. 摘要要能独立阅读：不要写“如上”“见上文”这类依赖上下文的话。\n"
     "4. 不要向用户提问；信息不足时，就在摘要里写明“信息不足：<缺什么>”。\n"
@@ -141,7 +141,8 @@ async def run_subagent(goal: str, context: str = "", tools: list[str] | None = N
     openai_tools = [_tool_schema(t) for t in tool_objs]
 
     messages = [
-        {"role": "system", "content": _SUBAGENT_SYSTEM.format(max_rounds=max_rounds)
+        {"role": "system", "content": _SUBAGENT_SYSTEM.format(rounds_hint=("建议 ≤ %d 轮" % int(max_rounds)
+                                                    if int(max_rounds) > 0 else "轮次不限，按需取数即可"))
          + SUBAGENT_ROLE_PROMPTS.get(role, "")},
         {"role": "user", "content": f"【子任务】{goal}\n\n【背景/上下文】\n{(context or '（无额外上下文）')[:6000]}"},
     ]
