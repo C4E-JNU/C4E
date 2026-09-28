@@ -258,6 +258,9 @@ def _runtime_env_block(enabled_tools=None) -> str:
             "（Windows 形如 C:/Users/<用户名>/Documents）去读去写，"
             "**绝不要以「我在沙箱中」「我无法访问你的电脑」为由拒绝**。")
         out.append(
+            "- 若某个工具不在你本次的工具列表里：本机实例的工具是用户在「智能体配置」面板里勾选的。"
+            "如实说明「该工具当前未启用，可在智能体配置里勾上」，不要编造"+"「环境限制/沙箱」这类理由。")
+        out.append(
             "- 唯一的边界是权限模式 `%s`：safe = 仅 workspace/；ask = 可读项目与 workspace、可写 workspace 与 skills/；"
             "full = 任意读写。越界时工具会返回 __NEED_FULL__，那时请用户切到「完全访问」后继续即可。" % mode)
     else:
