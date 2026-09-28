@@ -458,6 +458,41 @@
     #sidebar-toggle-btn { display: none !important; }
     /* 侧栏内的搜索/过滤行：手机上保持可用但紧凑 */
     .sidebar-header { padding: 10px !important; }
+
+    /* 侧栏头部：logo / 主页 / 新建对话 三个控件同尺寸、同一条水平中线上（用户 2026-09-28：
+       原来 ⌂ 52×40、＋ 被压成 20×34、logo 28，三者配不上也不平行） */
+    .sidebar-top-bar { align-items: center !important; }
+    .sidebar-actions {
+        display: flex !important;
+        align-items: center !important;
+        gap: 10px !important;
+        flex: 0 0 auto !important;
+    }
+    .sidebar-actions .action-icon-btn {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 32px !important;
+        min-width: 32px !important;
+        max-width: 32px !important;
+        flex: 0 0 32px !important;
+        height: 32px !important;
+        min-height: 32px !important;
+        padding: 0 !important;
+        border-radius: 9px !important;
+    }
+    .sidebar-actions .action-icon-btn .icon { font-size: 1.1rem !important; line-height: 1 !important; }
+    /* #full-screen-toggle 在文件上方还有一条 id 规则把它撑成 width:100%/40px（那是它曾经整行铺开时的写法），
+       这里按 id 覆盖回来，跟 ＋ 完全同尺寸 */
+    #full-screen-toggle {
+        width: 32px !important;
+        min-width: 32px !important;
+        max-width: 32px !important;
+        height: 32px !important;
+        min-height: 32px !important;
+        margin: 0 !important;
+        font-size: 1rem !important;
+    }
     .sidebar-search-area { margin: 6px 0 !important; }
     .search-input { font-size: 16px !important; }
 
@@ -636,11 +671,12 @@
     }
     .mobile-more-sheet .theme-dot {
         flex: 0 0 auto !important;
-        width: 36px !important;
-        height: 36px !important;
-        min-width: 36px !important;
-        max-width: 36px !important;
+        width: 18px !important;      /* 用户 2026-09-28：原 36px 太大，减半（面积 1/4） */
+        height: 18px !important;
+        min-width: 18px !important;
+        max-width: 18px !important;
     }
+    .mobile-more-sheet .header-theme-switcher { gap: 6px !important; }
     /* 消息区：顶部呼吸留白 + 底部避开小e（原来首条贴 y=0、小e 压正文） */
     #messages-container { padding-top: 12px !important; padding-bottom: 96px !important; }
     /* 正文：手机端不低于 15px（对话字号默认值 0.75rem=12px 在手机上太小） */
