@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from fastapi import FastAPI, UploadFile, File, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 import asyncio
 from pydantic import BaseModel
 from typing import Optional, Any, Dict
@@ -1661,8 +1661,17 @@ _PROJECT_ROOT = Path(__file__).parent.parent
 if (_PROJECT_ROOT / "index.html").exists():
     # 品牌路径：http://<IP>:8088/c4eai/  与 http://<IP>:8088/ 指向同一应用（组员零配置）
     # 必须先于 "/" 挂载注册（路由按注册顺序匹配，"/" 会兜底吃掉一切）
-    app.mount("/c4eai", StaticFiles(directory=str(_PROJECT_ROOT), html=True), name="frontend-brand")
-    app.mount("/", StaticFiles(directory=str(_PROJECT_ROOT), html=True), name="frontend")
+    # 只发布前端自己的文件。原来把整个项目根当静态目录 —— 校园网内任何人直接 GET 就能拿到
+    # /workspace/users/<身份>/chats.json（全部对话）、/backend/app.py 等（2026-09-28 实测 200）。
+    for _sub in ("js", "css", "assets"):
+        _p = _PROJECT_ROOT / _sub
+        if _p.is_dir():
+            app.mount("/" + _sub, StaticFiles(directory=str(_p)), name="static-" + _sub)
+
+    @app.get("/", include_in_schema=False)
+    @app.get("/c4eai", include_in_schema=False)
+    async def _frontend_page():
+        return FileResponse(str(_PROJECT_ROOT / "index.html"))
 
 if __name__ == "__main__":
     import asyncio
