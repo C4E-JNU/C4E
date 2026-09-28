@@ -132,11 +132,14 @@ def filter_tools(user: dict, requested: list) -> list:
     if lv == L_GUEST:
         # 游客：受限工具集，且不含数据库工具
         return sorted((t & GUEST_TOOLS) - DB_TOOLS)
-    if is_super(user) or lv >= L_RED:
-        # 主管理员 / L4红 / L5金：全部工具（用户 2026-09-22 定：红色以上给全部工具）
+    if is_super(user):
+        # 主管理员 / L5金：全部工具。
+        # 2026-09-28 收紧：L4红**不再**给执行类。云端是多人共用的服务器，
+        # terminal/run_code 是"在别人的机器上跑 shell"（能读全盘、能停服务），
+        # 只应给本人账号（L5/admin）；L4 想要执行能力请在自己电脑上跑本机实例。
         return sorted(t)
     if lv >= L_BLUE:
-        return sorted(t - EXEC_TOOLS)                       # L1-L3：除执行类
+        return sorted(t - EXEC_TOOLS)                       # L1-L4：除执行类
     return sorted(t & GUEST_TOOLS)
 
 
@@ -161,8 +164,10 @@ def user_sandbox(user: dict) -> dict | None:
     """
     if not HUB:
         return None
-    if is_super(user) or level_of(user) >= L_RED:
+    if is_super(user):
         return None
+    # 2026-09-28 收紧：L4 与 L0-L3 一样锁到本人目录 + pool。
+    # 原来 L4 无锁 = 云端网页上能读所有人 workspace/users/*/chats.json。
     return {"user": user.get("username") or "guest"}
 
 
@@ -185,13 +190,15 @@ def cypher_denied(user: dict, cypher: str) -> bool:
 def tool_denied(user: dict, tool: str) -> bool:
     """直接面向前端的 /api/tool/* 端点的等级闸门。tool∈code/read-file/cypher/fetch/schema。
 
-    用户 2026-09-22 定：红色 L4 及以上可用全部工具（含执行类），须与 filter_tools 口径一致。
+    2026-09-28 收紧：执行类（code）只给 L5金/主管理员，与 filter_tools 口径一致。
+    原因：云端是多人共用的服务器，执行类工具等于"在服务器上跑代码"；
+    L4红 也是普通成员（可能只是被放宽了 token 限额），不应具备该能力。
     """
     if not HUB:
         return False
     lv = level_of(user)
     if tool == "code":
-        return not (is_super(user) or lv >= L_RED)   # 执行类：L4红/L5金/admin
+        return not is_super(user)                    # 执行类：仅 L5金/主管理员
     return lv == L_GUEST                             # 其余工具类：游客一律拒
 
 
