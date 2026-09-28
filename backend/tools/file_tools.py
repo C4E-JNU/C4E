@@ -89,6 +89,14 @@ def set_user_scope(scope):
     global _USER_SCOPE
     _USER_SCOPE = scope if isinstance(scope, dict) else None
 
+def get_permission_mode() -> str:
+    """当前生效的权限模式（供系统提示词如实交代运行环境）。"""
+    return _PERMISSION_MODE
+
+def get_user_scope():
+    """当前生效的账号级文件作用域；None = 无额外限制。"""
+    return _USER_SCOPE
+
 # 当前请求的登录身份（产出区/附件登记要判断"这个文件属于谁"）。
 # 与 _PERMISSION_MODE 同机制：每个请求入口设置一次。
 _CURRENT_USER = ""

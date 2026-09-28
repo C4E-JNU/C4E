@@ -236,6 +236,43 @@ def _trigger_vector_index():
             print(f"[Vector] Index error: {e}")
     threading.Thread(target=_do_index, daemon=True).start()
 
+def _runtime_env_block(enabled_tools=None) -> str:
+    """如实交代运行环境：是不是沙箱、能碰哪些路径、哪些工具因账号等级没开。
+
+    判据取客观事实 —— file_tools 里**当前生效**的权限模式与账号作用域，
+    以及本次实际下发的工具集；不写死文案，也不含糊其辞。
+    （起因：模型曾在没有沙箱的本地实例上自称"我在沙箱里"，于是拒绝操作用户的文件。）
+    """
+    try:
+        from tools.file_tools import get_permission_mode, get_user_scope
+        mode, scope = get_permission_mode(), get_user_scope()
+    except Exception:
+        mode, scope = "safe", None
+    tools = set(enabled_tools or [])
+    out = ["## 运行环境（事实，照此回答，别猜、别推辞）"]
+    if not scope:
+        out.append(
+            "- 你直接跑在用户自己的这台电脑上，**不是容器、不是沙箱、没有隔离环境**："
+            "read_file / write_file / list_files / search_files / find_files / edit_file / run_code / terminal "
+            "操作的就是这台机器真实的文件系统。用户提到自己电脑上的文件时，直接用系统绝对路径"
+            "（Windows 形如 C:/Users/<用户名>/Documents）去读去写，"
+            "**绝不要以「我在沙箱中」「我无法访问你的电脑」为由拒绝**。")
+        out.append(
+            "- 唯一的边界是权限模式 `%s`：safe = 仅 workspace/；ask = 可读项目与 workspace、可写 workspace 与 skills/；"
+            "full = 任意读写。越界时工具会返回 __NEED_FULL__，那时请用户切到「完全访问」后继续即可。" % mode)
+    else:
+        who = scope.get("user") or "guest"
+        out.append(
+            "- 你跑在组内共享服务器上（多用户服务，不是个人电脑）：本账号（%s）可访问的范围 = "
+            "workspace/users/%s/ 与共享库 workspace/pool/。这是**账号级数据隔离**，"
+            "不等于「你无法访问任何文件」。" % (who, who))
+        if not ({"terminal", "run_code"} & tools):
+            out.append(
+                "- 本账号等级尚未开放执行类工具（terminal / run_code）。用户要求执行命令时，"
+                "**如实说明是账号等级限制**，不要说「我在沙箱里无法执行」，也不要假装执行过。")
+    return "\n".join(out)
+
+
 async def _build_system_prompt(enabled_tools: list[str], loaded_skills: list[str]) -> str:
     """Hermes 式系统提示词：不列出工具清单（工具能力靠 OpenAI tools schema），技能只简列 name+desc。
 
@@ -255,6 +292,8 @@ async def _build_system_prompt(enabled_tools: list[str], loaded_skills: list[str
         "⑧ 联网搜索与文件处理：web_search、read/write_file。",
         "被问候或问「你是谁/能做什么」时：简短自我介绍，并按用户已启用的工具从上面列举核心能力（一行一项，不超过 8 项），不要空泛客套。",
         "",
+        "",
+        _runtime_env_block(enabled_tools),
         "## 规则",
         "- 用中文回答，保留专业英文术语",
         "- 需要哪些能力时，直接使用对应工具（工具的能力与用法由各工具的接口说明给出）。",
