@@ -94,8 +94,15 @@ async def terminal(command: str, workdir: str = "."):
         need_ask = False
 
     # 3. 执行（Windows：用 cmd /c 经 bash 不行，直接 subprocess.run with shell）
+    # ⚠️ 必须丢进线程（to_thread），不能在事件循环里直接 subprocess.run：
+    #   本函数是 async，直接调用阻塞 API 会把**整个事件循环**钉死 —— 期间服务器不处理任何请求
+    #   （/api/health 也不响应，表现为"服务卡死"）。2026-09-28 实测就是这么自锁的：
+    #   agent 用 terminal 起了个子进程，子进程又回头调本服务器 → 服务器等子进程、子进程等服务器，永久死锁。
+    #   丢进线程后循环照常服务，这类回调链自然解开。
+    #   （不用 asyncio.create_subprocess_exec：Windows 本地实例跑 Selector 循环，它不支持子进程。）
     try:
-        proc = subprocess.run(
+        proc = await asyncio.to_thread(
+            subprocess.run,
             command,
             cwd=wd,
             shell=True,
