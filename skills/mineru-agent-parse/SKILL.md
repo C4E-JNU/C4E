@@ -55,12 +55,25 @@ python skills/mineru-agent-parse/scripts/mineru_archive.py "<zip>" "workspace/mi
 
 > 为什么不用单张 caption 抽号：MinerU 常把一张多子图拆成多个 image 项、每项 caption 只有"a/b/C"单字母甚至为空——只靠它会把 Fig.2 的 a–h 打散成 Figure2…Figure9。故改用 full.md 顺序聚类，**保证同一图号的子图进同一个 `FigureN/`**。
 
-### 第 3 步：核验
+### 第 3 步：核验（**先跑校验脚本，别靠肉眼**）
 
-脚本 stdout 是 JSON，逐篇确认：
+用 **terminal** 在项目根执行（脚本：`skills/mineru-agent-parse/scripts/verify_note.py`，纯标准库）：
+
+```bash
+# 校验一个归档目录（推荐；也可传 00_images_map.json 或中文笔记 .md）
+python skills/mineru-agent-parse/scripts/verify_note.py "workspace/mineru_output/<论文名>"
+# 机器可读：
+python skills/mineru-agent-parse/scripts/verify_note.py "workspace/mineru_output/<论文名>" --json
+```
+
+脚本逐项检查并给**行号/文件名**：① 破图（清单与 Markdown 引用的图片是否存在）；② 图注/子图数（`panel_count` vs `panels[]` vs `layout_html` 的 `<img>`/`<div>` vs `images/FigureN/` 实际图片数 vs `FigureN.txt` 记录的 `面板数`）；③ 正文截断（`$$`/代码块/`div` 未闭合、末行表格未收尾、`00_full_cleaned.md` 与 `full.md` 长度比）；④ 图片重复引用、图注编号跳号/重号。
+**退出码：0 = 通过（可能带 warning）；1 = 有 error；2 = 用法/读文件失败。** 有 error 必须修好再继续（重跑归档脚本即可幂等修复）。
+
+脚本通过后，再人工看**脚本判不了**的这几项（脚本 stdout 的 JSON 与清单抽样）：
 - `ok:true`；`stats` 里 `figure/table/other` 合理，`unknown` 很少（若几乎全 `unknown` → 该 zip 的 content_list 取错或 images 命名对不上，检查 json）；
 - `cleaned.ok:true` 且 `chars>0`；
-- `workspace/mineru_output/<名>/` 下有 `images/FigureN/…`、`00_full_cleaned.md`、`00_images_map.json`。
+- `workspace/mineru_output/<名>/` 下有 `images/FigureN/…`、`00_full_cleaned.md`、`00_images_map.json`；
+- 脚本报的 warning（如"图注字母数与 panel 数不符""子图缺 sub 标号"）需人判断是 MinerU 拆分问题还是要补图注。
 
 ## 产物结构
 
@@ -117,4 +130,4 @@ workspace/mineru_output/<论文名>/
 
 ## 关联
 
-归档完成后：要翻译并图文写笔记 → 用技能 **literature-translate**；要做图文互证/实体挖掘 → 用本清单与 `00_full_cleaned.md` 作为输入。
+归档完成后：先跑 `skills/mineru-agent-parse/scripts/verify_note.py "<归档目录>"` 校验（破图/图注子图数/正文截断/编号跳号，退出码非 0 即有错）；要翻译并图文写笔记 → 用技能 **literature-translate**；要做图文互证/实体挖掘 → 用本清单与 `00_full_cleaned.md` 作为输入。
