@@ -29,11 +29,12 @@ START_CMD = ("cd ~/c4eai-hub && setsid nohup bash -c 'C4EAI_HOST=0.0.0.0 C4EAI_P
              "> ~/c4eai-hub.log 2>&1 < /dev/null &")
 # 永不同步的目录/文件（云端数据与环境，绝对保护）
 EXCLUDE_DIRS = {"workspace", "model_cache", "node_modules", ".git", "__pycache__", ".trash", "_syn",
-                "开发中间产物", "dist"}   # 开发中间产物/dist = 本地研发与交付物，云端只要产品代码
+                "开发中间产物", "dist", "_backup", "outputs", "parse_out"}   # 研发/备份/agent 中间产物不同步
                                            # （云端本来就有旧副本，不同步 = 只留不再更新，不影响运行）
 EXCLUDE_EXT = {".zip", ".gguf", ".log", ".pyc", ".jsonl", ".json.bak", ".out", ".exe", ".msi"}  # 安装包是交付物，云端不需要（云端已有旧版本份）
 EXCLUDE_FILES = {"deploy_cloud.py", "run_translate.py", "run_translate_log.txt", "start.bat",
-                 "test_sse.py", ".DS_Store"}
+                 "test_sse.py", ".DS_Store", "plan.json"}
+EXCLUDE_PREFIX = ("plan_batch", "HANDOFF-")   # 一次性计划/交接文档，不进云端
 
 
 def make_tar():
@@ -45,7 +46,7 @@ def make_tar():
         for dirpath, dirnames, filenames in os.walk(root):
             dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS]
             for fn in filenames:
-                if fn in EXCLUDE_FILES or os.path.splitext(fn)[1] in EXCLUDE_EXT:
+                if fn in EXCLUDE_FILES or os.path.splitext(fn)[1] in EXCLUDE_EXT or fn.startswith(EXCLUDE_PREFIX):
                     continue
                 full = os.path.join(dirpath, fn)
                 rel = os.path.relpath(full, root).replace("\\", "/")
