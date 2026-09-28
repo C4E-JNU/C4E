@@ -809,7 +809,7 @@ from tools.github_tools import (gh_repo_info as _gh_repo_info, gh_list_dir as _g
 
 class SearchFilesParams(BaseModel):
     pattern: str = Field(description="正则表达式（Python re 语法）")
-    path: str = Field(default=".", description="搜索起点（文件或目录）。相对路径以 workspace/ 为基准（与 read_file 一致）；非安全模式下可传绝对路径，如 <PROJECT-DIR>/backend")
+    path: str = Field(default=".", description="搜索起点（文件或目录）。相对路径以 workspace/ 为基准（与 read_file 一致）；非安全模式下也可传本机绝对路径（Windows 形如 C:/Users/<用户名>/Documents，用你这台机器上的真实路径）")
     file_glob: str = Field(default=None, description="只搜匹配该 glob 的文件，如 *.py / *.md")
     output_mode: str = Field(default="files_with_matches",
                              description="files_with_matches=只列文件名（先用它定位）/ content=带行号与上下文 / count=每文件命中数（判断有没有戏）")
@@ -891,7 +891,7 @@ tools_registry["search_files"] = _make_async_tool(
     description=(
         "在本地文件里搜**内容**（正则）。给 LLM 用的 grep，带三态输出与分页。\n\n"
         "WHEN: 用户问「X 在哪里实现/哪个文件里有 X」、改代码前要定位、要在项目里找某个函数名或字符串。\n"
-        "路径基准：相对路径以 workspace/ 为基准（与 read_file 一致）——搜项目代码要传绝对路径（如 D:/…/<PROJECT-NAME>/backend）。\\n"
+        "路径基准：相对路径以 workspace/ 为基准（与 read_file 一致）——搜项目代码要传本机绝对路径（Windows 形如 C:/Users/<用户名>/项目名/backend）。\\n"
         "HOW（按顺序，1~2 次就该收敛）: 1) 先用 output_mode=files_with_matches 只问「在哪些文件」；"
         "2) 文件不多时对某个文件用 output_mode=content + context=3 看命中上下文；"
         "3) 命中太多就加 file_glob（如 *.py）或收紧正则，**不要改成整篇 read_file**；"
