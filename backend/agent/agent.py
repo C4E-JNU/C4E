@@ -263,6 +263,10 @@ def _runtime_env_block(enabled_tools=None) -> str:
         out.append(
             "- 唯一的边界是权限模式 `%s`：safe = 仅 workspace/；ask = 可读项目与 workspace、可写 workspace 与 skills/；"
             "full = 任意读写。越界时工具会返回 __NEED_FULL__，那时请用户切到「完全访问」后继续即可。" % mode)
+        out.append(
+            "- **不要预判自己的边界，也别说「我无法访问你的电脑」这种话**：用户让你读/写某个路径，"
+            "**先直接调工具去试**——能读就读、能写就写；真被拦住时，工具会告诉你具体原因（如 __NEED_FULL__），"
+            "那时再如实转述并给出下一步（切「完全访问」）。凭旧印象宣称自己受限是错误行为。")
     else:
         who = scope.get("user") or "guest"
         out.append(
