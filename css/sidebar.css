@@ -1212,6 +1212,8 @@
 
 /* ── 对话条目状态标记（2026-09-28）：运行中转圈 / 答完未读绿点 ── */
 .chat-mark {
+    display: inline-block;      /* span 行内元素，不设 display 宽高会失效 */
+    vertical-align: middle;
     flex: 0 0 11px;
     width: 11px;
     height: 11px;

@@ -37,7 +37,7 @@
             // Neo4j 配置
             neo4j: {
                 uri: '',                   // 由用户自填，不预置任何实例
-                user: '7d99a1d8',
+                user: '',                  // 由用户自填，不预置任何实例
                 password: '',
                 connected: false
             },
@@ -49,7 +49,6 @@
                 permissionMode: 'safe',
                 engine: 'custom',          // custom=裸API手写循环 / langchain=LangChain流式
                 maxRounds: 0,              // 0=无限轮次（用户 2026-09-28 定）
-                chatMarks: {},             // 对话条目状态：{branchId: 'running'|'done'}（用户 2026-09-28）
             },
 
             // 模型设置
@@ -102,6 +101,9 @@
                 messages: [],
                 hasContent: false
             },
+
+            // 对话条目状态（内存态：运行时转圈 / 答完未读绿点）
+            chatMarks: {},
 
             // 运行状态
             isGenerating: false,
