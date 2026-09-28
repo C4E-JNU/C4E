@@ -208,6 +208,24 @@
             }
         }
 
+              // 记住"当前打开的是哪个对话" —— 只写这一个 id（不是对话副本，不受配额影响）。
+              // 读的那半在 loadBranches()：localStorage.getItem(identityKey('ai-current-branch'))。
+              // 本函数原来只有 3 处调用、没有任何定义（删 localStorage 对话副本时把写的那半
+              // 一起删了，但读的那半还在）→ saveBranches 每次都抛 ReferenceError，
+              // 连带 createNewConversation / addMessage 整条发消息链路断掉。
+              function persistCurrentBranch() {
+                  try {
+                      if (state.currentBranchId) {
+                          localStorage.setItem(window.identityKey('ai-current-branch'), state.currentBranchId);
+                      } else {
+                          localStorage.removeItem(window.identityKey('ai-current-branch'));
+                      }
+                  } catch (e) {
+                      // 配额满/隐身模式：只是"记不住上次打开哪个对话"，绝不能因此中断发消息。
+                      // （用户 2026-09-27 正是被 localStorage 配额坑过，才撤掉对话副本机制。）
+                  }
+              }
+
               function saveBranches() {
                 // 对话**只存本机后端**（workspace/users/<身份>/chats.json）。
                 // 不再写 localStorage 副本（用户 2026-09-27：浏览器配额只有几 MB，

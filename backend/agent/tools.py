@@ -358,8 +358,41 @@ def _note_too_long(content: str) -> str:
     return ""
 
 def _get_todo_path():
-    os.makedirs(_WORKSPACE, exist_ok=True)
-    return os.path.join(_WORKSPACE, "_todos.json")
+    """待办按 **身份 + 对话分支** 分文件。
+
+    旧实现是全局 workspace/_todos.json：换个人、换个对话都看到同一份待办
+    （共享库/多用户下等于互相看见私事），也无法按对话恢复上下文。
+    """
+    from agent.agent import _current_user, _current_branch_id
+    owner = _current_user or "guest"
+    d = os.path.join(_WORKSPACE, "users", owner, "todos")
+    os.makedirs(d, exist_ok=True)
+    branch = str(_current_branch_id or "default")
+    for ch in '/\\:*?"<>|':
+        branch = branch.replace(ch, "_")
+    return os.path.join(d, branch + ".json")
+
+
+def todo_context_block() -> str:
+    """把当前身份+分支的待办回灌进系统提示。
+
+    旧实现只有 add/complete/list 三个动作，写进去的待办**从不出现在上下文里** ——
+    模型看不到自己的清单，等于白记（用户问"为什么它不记得自己列过什么"）。
+    没有未完成项时返回空串（不占上下文）。
+    """
+    try:
+        todos = _read_todos()
+    except Exception:
+        return ""
+    pending = [x for x in todos if isinstance(x, dict) and not x.get("done")]
+    if not pending:
+        return ""
+    lines = ["[当前任务清单]（你自己用 todo 工具记的，未完成 %d 项；完成一项就 complete 掉）" % len(pending)]
+    for x in pending[:20]:
+        lines.append("- #%s %s" % (x.get("id"), str(x.get("content", ""))[:160]))
+    if len(pending) > 20:
+        lines.append("…还有 %d 项" % (len(pending) - 20))
+    return "\n".join(lines)
 
 def _read_todos():
     path = _get_todo_path()

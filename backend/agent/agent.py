@@ -18,6 +18,10 @@ from agent.context_engine import (cap_tool_result, prune_tool_results_only,
 # 前端可在 model.context_window 里显式覆盖；这里只是没有该字段时的取值。
 DEFAULT_CONTEXT_WINDOW = 262144
 
+# 跨轮压缩（A1 简单版）：滑窗之外的早期轮次压成要点
+EARLY_MSG_CHARS = 220        # 早期每条消息摘多少字
+EARLY_DIGEST_MAX_CHARS = 6000  # 要点总预算
+
 # ── 当前对话上下文（供工具读取）────────────────────
 _current_branch_id = ""
 _current_user = ""          # 当前请求身份（""=旧版全局；guest/用户名=按身份分文件）
@@ -293,6 +297,12 @@ async def _build_system_prompt(enabled_tools: list[str], loaded_skills: list[str
                 "</available_skills>",
                 "",
             ]
+    # 当前任务清单（A5）：todo 工具写下的未完成项回灌进系统提示。
+    # 放这里而不是三个引擎各自拼 —— 三处调用点行为一致，也避免同一段写三遍。
+    from agent.tools import todo_context_block
+    _td = todo_context_block()
+    if _td:
+        lines += [_td, ""]
     return "\n".join(lines)
 
 
@@ -321,16 +331,41 @@ def _build_context(history: list[dict], user_input: str, context_length: int):
         elif role == "assistant":
             hist.add_ai_message(content)
     msgs = list(hist.messages)
+    # ── 跨轮压缩（简单版）：滑窗之外的消息**不再静默丢弃**，而是压成"早期对话要点" ──
+    # 旧实现直接从最早的丢：早期文献事实（第 5 轮说的数据/路径/结论）到第 28 轮就没了，
+    # 模型只能反悔式重问。这里改为：最近 context_length 轮保留原文，
+    # 更早的压成每条一行（角色 + 前 EARLY_MSG_CHARS 字），整体 ≤ EARLY_DIGEST_MAX_CHARS。
+    # 纯机械抽取，不再调一次模型 —— 确定、零成本、不引入新失败面。
+    digest = ""
     if context_length and context_length > 0:
         keep_n = context_length * 2
         if len(msgs) > keep_n:
+            early = msgs[:-keep_n]
             msgs = msgs[-keep_n:]
+            lines, used = [], 0
+            for m in reversed(early):                      # 从近到远取，预算不够就先丢最早
+                txt = " ".join(str(m.content).split())
+                if not txt:
+                    continue
+                who = "用户" if m.__class__.__name__ == "HumanMessage" else "助手"
+                line = "- [%s] %s" % (who, txt[:EARLY_MSG_CHARS])
+                if used + len(line) > EARLY_DIGEST_MAX_CHARS:
+                    break
+                lines.append(line)
+                used += len(line)
+            if lines:
+                lines.reverse()
+                digest = ("[系统·早期对话要点]（早于最近 %d 轮的原文已省略，以下是逐条摘录，"
+                          "其中的事实/数值/路径仍有效，可直接引用；不要因为看不到原文就说「没有」）\n%s"
+                          % (context_length, "\n".join(lines)))
     # 总量兜底：从最早的开始丢，保证历史字符数在预算内（保留当前 user_input）
-    total = sum(len(str(m.content)) for m in msgs) + len(user_input or "")
+    total = sum(len(str(m.content)) for m in msgs) + len(user_input or "") + (len(digest) if digest else 0)
     while msgs and total > HISTORY_TOTAL_MAX_CHARS:
         dropped = msgs.pop(0)
         total -= len(str(dropped.content))
     msgs = msgs + [HumanMessage(content=user_input)]
+    if digest:
+        msgs = msgs[:0] + [HumanMessage(content=digest)] + msgs   # 要点放最前（稳定前缀）
     return msgs
 
 
