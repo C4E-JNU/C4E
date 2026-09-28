@@ -2,7 +2,7 @@
   "skills": [
     {
       "name": "self-modify",
-      "description": "自我修改指南 — 如何用 skill_write 创建/更新技能（含子文件），以及在完全访问模式下如何修改项目代码。加速定位与修改。",
+      "description": "自我修改指南 — 如何用 skill_write 创建/更新技能（含 references/templates/scripts 子文件），以及在完全访问模式下如何修改项目代码。加速定位与修改。",
       "version": "1.0.0"
     },
     {
@@ -13,7 +13,7 @@
     {
       "name": "literature-translate",
       "description": "文献全文中译写入笔记，多子图按 layout_html 网格排版并配中文图注。需先用 mineru-agent-parse 归档。",
-      "version": "1.3.0"
+      "version": "1.2.0"
     },
     {
       "name": "literature-contradiction",
@@ -27,12 +27,12 @@
     },
     {
       "name": "code-search",
-      "description": "在代码/文件里定位与修改的正确姿势：search_files 三态收敛、find_files 按名找、edit_file 唯一匹配改一处，以及不花 token 读 GitHub 仓库。",
+      "description": "在代码/文件里定位与修改的正确姿势：search_files 三态收敛（先 files_with_matches 定位 → 再 content 看命中 → count 判断策略）、find_files 按名找、edit_file 唯一匹配改一处，以及不花 token 读 GitHub 仓库。",
       "version": "1.0.0"
     },
     {
       "name": "document-entry",
-      "description": "把文献或任意文档做成 C4EAI 条目：原件气泡（file_id）+ 总结笔记，支持批量（子智能体分任务并行读，父 agent 一次写入）。",
+      "description": "把文献/文档做成 C4EAI 条目 — 原件气泡 + 总结笔记，支持批量（子智能体分任务并行读）",
       "version": "1.0.0",
       "tags": [
         "c4eai",

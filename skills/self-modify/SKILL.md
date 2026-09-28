@@ -26,6 +26,23 @@ tags: [self-modify, skills, tools, code]
      ```
    - `file_path`：默认 `SKILL.md`；需挂子文件时填 `references/xx.md`、`templates/xx`、`scripts/xx.py`。
 3. 写 SKILL.md 后 `skills/index.json` 会自动更新，无需手动编辑索引。
+   ⚠️ **这条只在走 `skill_write` 时成立**。直接手改（或由外部脚本/编辑器改）`skills/<name>/SKILL.md`
+   不会动索引 —— 前端技能列表读的就是 `skills/index.json`，此时会看到
+   **版本号/描述与 SKILL.md 不一致（版本漂移）**，甚至整个技能不显示。手改之后必须把索引补齐：
+   ```python
+   # 把 SKILL.md 的 frontmatter 同步回索引（name/description/version/tags）
+   import json, re, os
+   IP = "skills/index.json"; d = json.load(open(IP, encoding="utf-8"))
+   for s in d["skills"]:
+       p = os.path.join("skills", s["name"], "SKILL.md")
+       if not os.path.isfile(p): continue
+       fm = dict(re.findall(r"^(\w+):\s*(.+)$", re.match(r"---\n(.*?)\n---",
+                  open(p, encoding="utf-8").read(), re.S).group(1), re.M))
+       for k in ("version", "description"):
+           if fm.get(k): s[k] = fm[k].strip().strip('"')
+   json.dump(d, open(IP, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+   ```
+   新增技能则必须同时**建目录、写 SKILL.md、往索引加一条**（三件事缺一前端就看不到）。
 
 **技能目录结构规范**：
 - `SKILL.md` — frontmatter（name/description/version/tags）+ 正文
