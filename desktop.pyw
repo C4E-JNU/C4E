@@ -202,6 +202,37 @@ class _WinAPI:
             w.destroy()
 
 
+def _fit_on_screen(h) -> None:
+    """把窗口收进屏幕可用区 —— Windows 会记住上次的窗口位置，可能开在屏幕外面。
+
+    ★ 桌面端最要命的"看不见"就是这个：窗口底边落到屏幕外，底部的对话输入区就再也够不着
+    （720p 的屏 + 记住的位置，实测少掉 70 多像素）。这里只做一件事：四边都不许出可用区。
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    class RECT(ctypes.Structure):
+        _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
+                    ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+
+    u = ctypes.windll.user32
+    u.SystemParametersInfoW(0x0030, 0, ctypes.byref(RECT()), 0)   # SPI_GETWORKAREA（见下）
+    u.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(RECT)]
+    u.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int,
+                               ctypes.c_int, ctypes.c_int, ctypes.c_uint]
+    work, cur = RECT(), RECT()
+    u.SystemParametersInfoW(0x0030, 0, ctypes.byref(work), 0)
+    u.GetWindowRect(h, ctypes.byref(cur))
+    avail_w, avail_h = work.right - work.left, work.bottom - work.top
+    w, hgt = min(cur.right - cur.left, avail_w), min(cur.bottom - cur.top, avail_h)
+    x = min(max(cur.left, work.left), max(work.left, work.right - w))
+    y = min(max(cur.top, work.top), max(work.top, work.bottom - hgt))
+    if (x, y, w, hgt) == (cur.left, cur.top, cur.right - cur.left, cur.bottom - cur.top):
+        return
+    u.SetWindowPos(h, 0, x, y, w, hgt, 0x0004 | 0x0010)           # SWP_NOZORDER|SWP_NOACTIVATE
+    log("窗口原先超出屏幕可用区，已收回 %d,%d %dx%d" % (x, y, w, hgt))
+
+
 def _set_window_icon(h) -> None:
     """把窗口图标设成 C4EAI 的图标（任务栏 / Alt+Tab 都用它）。
 
@@ -314,6 +345,7 @@ def _add_resize_frame() -> None:
 
         _set_window_icon(h)
         _set_frame_color(h)
+        _fit_on_screen(h)
         log("已加回可调整边框（四边一样细 + 圆角，四边/四角可拖拽改大小）")
     except Exception:
         log("加窗口边框失败：\n" + traceback.format_exc())
