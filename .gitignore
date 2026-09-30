@@ -86,6 +86,5 @@ HANDOFF-*.md
 # 隧道用的 frp 二进制（打包时下载，不入库）
 frp/frpc.exe
 frp/frpc
-frp/LICENSE
 workspace/frpc.run.toml
 workspace/frpc.log
