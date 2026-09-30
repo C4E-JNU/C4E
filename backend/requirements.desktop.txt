@@ -1,0 +1,7 @@
+# 桌面版（原生窗口）额外依赖 —— 只在打包便携版/安装包时需要
+# 服务端部署不需要装这些：它们只是把网页装进 Windows 自带的 WebView2 窗口里。
+#
+# pywebview 在 Windows 上通过 pythonnet 调用系统 WebView2 运行时（Win11 自带、
+# 新版 Win10 也自带）；不需要像 Electron 那样自带一整个 Chromium。
+pywebview>=6.0
+pythonnet>=3.0

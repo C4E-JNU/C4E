@@ -1,0 +1,121 @@
+/* 大屏右下角「远程控制」：把本机的固定访问地址给手机/其他电脑
+   隧道实现在项目根 tunnel.py（本机主动连出到服务器，地址固定、不受动态 IP 影响） */
+
+.remote-ctrl-btn {
+    position: fixed;
+    right: 22px;
+    bottom: 22px;
+    z-index: 3400;
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    padding: .5rem .95rem;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: var(--card-bg);
+    color: var(--primary);
+    font-size: var(--font-size-popup);
+    cursor: pointer;
+    box-shadow: 0 4px 14px var(--primary-glow);
+    transition: transform .18s ease, box-shadow .18s ease;
+}
+
+.remote-ctrl-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px var(--primary-glow);
+}
+
+.remote-ctrl-btn .remote-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--gray);
+}
+
+.remote-ctrl-btn.on .remote-dot {
+    background: #22c55e;
+}
+
+.remote-ctrl-panel {
+    position: fixed;
+    right: 22px;
+    bottom: 72px;
+    z-index: 3401;
+    width: 268px;
+    padding: 14px 16px 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    background: var(--card-bg);
+    box-shadow: 0 12px 32px var(--primary-glow);
+    text-align: left;
+}
+
+.remote-ctrl-panel h4 {
+    margin: 0 0 .35rem;
+    font-size: var(--font-size-popup);
+    color: var(--primary);
+}
+
+.remote-ctrl-panel .remote-tip {
+    margin: 0 0 .7rem;
+    font-size: .78rem;
+    color: var(--gray);
+    line-height: 1.5;
+}
+
+.remote-ctrl-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.remote-ctrl-row input {
+    flex: 1;
+    min-width: 0;
+    padding: .35rem .5rem;
+    font-size: .8rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--assistant-bg);
+    color: inherit;
+}
+
+.remote-ctrl-row button {
+    padding: .35rem .6rem;
+    font-size: .78rem;
+    cursor: pointer;
+    border: 1px solid var(--primary);
+    border-radius: 8px;
+    background: var(--primary);
+    color: #fff;
+}
+
+.remote-ctrl-qr {
+    display: flex;
+    justify-content: center;
+    margin: .75rem 0 .5rem;
+    min-height: 132px;
+}
+
+.remote-ctrl-qr canvas,
+.remote-ctrl-qr img {
+    border-radius: 6px;
+}
+
+.remote-ctrl-status {
+    font-size: .78rem;
+    color: var(--gray);
+    text-align: center;
+}
+
+.remote-ctrl-status.on {
+    color: #16a34a;
+}
+
+/* 手机端不显示：手机上打开的本来就是被远程访问的那一端 */
+@media (max-width: 768px) {
+    .remote-ctrl-btn,
+    .remote-ctrl-panel {
+        display: none;
+    }
+}

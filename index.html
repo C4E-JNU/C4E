@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>C4EAI · Shared Wiki</title>
+    <title>C4EAI Quine Agent</title>
     <!-- 站点图标（标签页 / 书签 / 手机主屏）= C4E 字标，源图：C4E-mark-透明底.png
          字标是浅蓝渐变，在浅色标签栏上对比不足（16px 几乎看不见）→ 统一用加深 30% 的版本生成。
          ?v=2 是必需的：浏览器对 favicon 的缓存极顽固，换图不破缓存会一直显示旧图标。 -->
@@ -38,6 +38,7 @@
     <link rel="stylesheet" href="css/modals.css?v=4">
     <link rel="stylesheet" href="css/xiaoe.css?v=7">
     <link rel="stylesheet" href="css/mobile.css?v=28">
+    <link rel="stylesheet" href="css/remote.css?v=1">
     <link rel="stylesheet" href="css/components.css?v=7">
     <link rel="stylesheet" href="css/agent.css?v=5">
 
@@ -211,15 +212,45 @@
 
                 <div class="setting-item">
                      <label class="setting-label">
-                         最大Token数
-                         <span class="setting-value" id="max-tokens-value">2000</span>
+                         最大输出 Token 数
+                         <span class="setting-value" id="max-tokens-value">8192</span>
                      </label>
-                     <input type="number" min="100" max="8000" step="100" value="2000" class="number-input"
+                     <input type="number" min="100" max="1000000" step="100" value="8192" class="number-input"
                          id="max-tokens">
                      <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
-                        单次生成的最大令牌数
-                    </div>
-                </div>
+                         每次请求发给模型的 max_tokens：单次回答最多生成多少 token，超了会被服务端截断。<br>
+                         ⚠️ 不要超过模型服务端的真实输出上限（常见 8K~64K）。填 30 万这类大值不会让回答变长，反而可能被服务端直接报 400 拒收。<br>
+                         该值还参与「清理触发线」计算（用来预留输出空间）。回答被截断且正夹着工具调用时，本轮会中止并提示调大它。
+                     </div>
+                 </div>
+
+                <div class="setting-item">
+                     <label class="setting-label">
+                         模型上下文窗口 context window
+                         <span class="setting-value" id="context-window-value">262144</span>
+                     </label>
+                     <input type="number" min="1024" max="2000000" step="1000" value="262144" class="number-input"
+                         id="context-window">
+                     <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
+                         模型一次最多能接收的 token 数（hard limit，由模型本身决定，如 256K / 1M）。<br>
+                         它只用于计算「什么时候开始清理旧工具结果」，本机不会因为超过此值而报错、截断或中断对话；真的超过模型能力时，只由模型服务端报错（那才是真的超上下文）。<br>
+                         👉 填真实值最稳：填小 → 更早开始清理（保守，不报错）；填大 → 更晚清理，超了交给服务端。
+                     </div>
+                 </div>
+
+                <div class="setting-item">
+                     <label class="setting-label">
+                         清理触发线 context budget
+                         <span class="setting-value" id="context-budget-value">0（自动）</span>
+                     </label>
+                     <input type="number" min="0" max="2000000" step="1000" value="0" class="number-input"
+                         id="context-budget">
+                     <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
+                         发送给模型的 token 估算量（或 API 真实用量）达到此值时，开始把较早的工具结果替换成占位符——只动工具结果，你和 AI 的正文、技能正文永不清。<br>
+                         0 = 自动：(上下文窗口 − 输出预留) × 75%，并保底 ≥ 1024。<br>
+                         ⚠️ 设得过大＝几乎不清理，上下文会一路涨到模型窗口，最终由服务端报错；设得过小＝频繁清理（可能每轮都在清旧工具结果）。
+                     </div>
+                 </div>
 
                 <div class="setting-item">
                      <label class="setting-label">
@@ -388,9 +419,28 @@
         <section class="hero">
             <div style="text-align:center;">
                 <img src="assets/icons/c4e-logo.png" alt="C4EAI" class="hero-logo">
-                <div style="text-align:center;font-size:1.35rem;letter-spacing:.22em;text-transform:uppercase;opacity:.75;margin-top:.3rem;">Shared Wiki AI Agent</div>
+                <div style="text-align:center;font-size:1.6rem;font-weight:600;letter-spacing:.1em;margin-top:.35rem;">Quine</div>
+                <div style="text-align:center;font-size:1.35rem;letter-spacing:.22em;text-transform:uppercase;opacity:.75;margin-top:.3rem;">Literature Management &amp; Shared Wiki AI Agent</div>
             </div>
             <div><button id="start-experience" class="cta-button" style="margin-top:2.2rem;">立即开始探索 →</button></div>
+
+            <!-- 远程控制：手机/其他电脑用固定地址打开这台电脑的 C4EAI（隧道见项目根 tunnel.py） -->
+            <button id="remote-ctrl-btn" class="remote-ctrl-btn" type="button" title="手机/其他电脑远程访问这台电脑">
+                <span class="remote-dot"></span>远程控制
+            </button>
+            <div id="remote-ctrl-panel" class="remote-ctrl-panel" hidden>
+                <h4>📱 远程控制</h4>
+                <p class="remote-tip">手机或其他电脑打开下面这个地址，就能用这台电脑上的 C4EAI。地址是固定的，本机 IP 变了也照样能开。</p>
+                <div class="remote-ctrl-row">
+                    <input id="remote-ctrl-url" type="text" readonly value="—">
+                    <button id="remote-ctrl-copy" type="button">复制</button>
+                </div>
+                <div class="remote-ctrl-qr" id="remote-ctrl-qr"></div>
+                <div class="remote-ctrl-status" id="remote-ctrl-status">读取中…</div>
+                <div class="remote-ctrl-row" style="margin-top:.6rem;">
+                    <button id="remote-ctrl-toggle" type="button" style="flex:1;" hidden>开启隧道</button>
+                </div>
+            </div>
         </section>
 
 
@@ -451,7 +501,7 @@
                     <div class="sidebar-top-bar">
                         <div class="sidebar-top-bar-title" onclick="toggleSidebarHeader()" style="display: flex; align-items: center; cursor: pointer; flex:1; user-select:none;">
                             <div class="c4e-sidebar-art-logo"><img src="assets/icons/c4e-logo.png" alt="C4E"></div>
-                            <h3 class="sidebar-title" style="margin: 0;">对话管理</h3>
+                            <h3 class="sidebar-title" style="margin: 0;">Quine</h3>
                         </div>
                         <div class="sidebar-actions">
                             <button class="action-icon-btn icon-only" id="full-screen-toggle" title="返回主页" style="font-size:1rem;line-height:1;">
@@ -524,7 +574,7 @@
                     <div class="messages-container" id="messages-container">
                         <div class="message assistant" data-id="welcome">
                             <div class="message-content">
-                                您好！我是 <b>C4EAI · Shared Wiki</b> —— 实验室协作知识与文献智能体。<br>
+                                您好！我是 <b>Quine</b>（C4EAI Quine Agent）—— 实验室通用智能体，文献管理与共享 wiki 方向。<br>
                                 我能帮您：<b>① GraphRAG 图谱检索</b>（Neo4j 协作知识图谱）｜<b>② 多智能体协作</b>（专有子智能体并行处理）｜<b>③ 数据分析与代码执行</b>｜<b>④ 组内共享数据库</b>（文献/笔记上传与语义检索）｜<b>⑤ RAG 知识检索</b>｜<b>⑥ 高阶文献翻译</b>（MinerU 解析归档→图文并茂中文全译）｜<b>⑦ 文献内容审查</b>（图/表/段落三轨对账·矛盾裁决）｜<b>⑧ 联网搜索与文件处理</b>。<br>
                                 直接提问即可；点输入框左侧 📎 上传文献。模型默认「本地千问」，免费不限量。
                             </div>
@@ -772,26 +822,26 @@
 
 
     <!-- 脚本文件 (按依赖顺序) -->
-    <script src="js/state.js?v=15"></script>
+    <script src="js/state.js?v=17"></script>
     <!-- 个人设置后端存储（必须在其它模块之前：hydrate 要把后端设置灌回缓存） -->
     <script src="js/user_settings.js?v=2"></script>
-    <script src="js/user_chats.js?v=4"></script>
+    <script src="js/user_chats.js?v=6"></script>
     <script src="js/events.js?v=1"></script>
-    <script src="js/dom.js?v=4"></script>
+    <script src="js/dom.js?v=5"></script>
     <script src="js/settings.js?v=11"></script>
     <script src="js/image_tools.js?v=3"></script>
     <script src="js/file_preview.js?v=12"></script>
     <script src="js/auth.js?v=21"></script>
-    <script src="js/api.js?v=12"></script>
+    <script src="js/api.js?v=14"></script>
     <script src="js/database.js?v=21"></script>
-    <script src="js/sidebar.js?v=17"></script>
-    <script src="js/branching.js?v=15"></script>
+    <script src="js/sidebar.js?v=18"></script>
+    <script src="js/branching.js?v=18"></script>
     <script src="js/provider.js?v=9"></script>
-    <script src="js/messages.js?v=9"></script>
+    <script src="js/messages.js?v=10"></script>
     <script src="js/editing.js?v=3"></script>
     <script src="js/formatting.js?v=6"></script>
     <script src="js/tools.js?v=4"></script>
-    <script src="js/graph_rag.js?v=17"></script>
+    <script src="js/graph_rag.js?v=18"></script>
     <script src="js/note_refs.js?v=2"></script>
     <script src="js/subagent_view.js?v=3"></script>
     <!-- 前端工具注册表已删除（工具全部由后端提供） -->
@@ -804,6 +854,8 @@
     <script src="js/main.js?v=6"></script>
     <script src="js/xiaoe.js?v=8"></script>
     <script src="js/mobile.js?v=5"></script>
+    <script src="js/vendor/qrcode.min.js"></script>
+    <script src="js/remote.js?v=1"></script>
 
     <div class="popup-panel bubble-context-menu" id="bubble-context-menu">
         <button class="menu-item" data-action="open-file">📂 打开文件</button>

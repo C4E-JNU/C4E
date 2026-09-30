@@ -70,3 +70,22 @@ parse_out/
 plan*.json
 _backup/
 HANDOFF-*.md
+
+# ── 根目录散件（agent 会话残留 / 一次性脚本 / 中间数据）──
+# 用户 2026-09-29：根目录只放「自身代码 + GitHub 文件 + 一键打包程序」，
+# 一切 agent 产出走 开发中间产物/ 或 outputs/，禁止再散落在根目录。
+/*.json
+/tmp_*.py
+/scratch_*.py
+/make_*.py
+/merge_*.py
+/peek*.py
+/digest*.md
+/entry.log
+
+# 隧道用的 frp 二进制（打包时下载，不入库）
+frp/frpc.exe
+frp/frpc
+frp/LICENSE
+workspace/frpc.run.toml
+workspace/frpc.log

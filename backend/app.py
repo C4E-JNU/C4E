@@ -1271,15 +1271,27 @@ async def api_xiaoe_ask(req: XiaoeAskReq, request: Request):
         # 太小会导致 content 为空、被误判成"答不出"。小e 只答短句，但需给思考留余地。
         "max_tokens": 2048,
         "stream": False,
-        # 关闭思考链：桌宠问答要快（同主对话的关 thinking 策略）
+        # 关闭思考链：桌宠问答要快（同主对话的关 thinking 策略）。
+        # 实测（2026-09，两套后端各 4 组对照）：
+        #   ① chat_template_kwargs.enable_thinking：本地 llama.cpp/vLLM 的 Qwen3 模板级开关，有效；
+        #      但云端 DeepSeek 会【静默忽略】它（HTTP 200 不报错）→ 思考照跑、白等 1~3 秒。
+        #   ② thinking.type=disabled：云端 DeepSeek 唯一有效的关闭开关（reasoning_tokens=None）。
+        # 两者同传不报错、各自生效 → 一起传，覆盖云端 + 本地。
         "chat_template_kwargs": {"enable_thinking": False},
+        "thinking": {"type": "disabled"},
     }
+    # 个别后端可能不认上述参数 → 按其报错点名的参数逐个剥离重试（兼容优先）
+    _STRIP_KEYS = ("chat_template_kwargs", "thinking")
     try:
         async with _httpx.AsyncClient(timeout=_httpx.Timeout(connect=15, read=180, write=30, pool=15)) as cli:
             r = await cli.post(endpoint, json=payload, headers=headers)
-            if r.status_code != 200 and "chat_template_kwargs" in r.text:
-                # 个别后端不认该参数 → 去掉重试一次（保证兼容）
-                payload.pop("chat_template_kwargs", None)
+            for _ in range(len(_STRIP_KEYS)):
+                if r.status_code == 200:
+                    break
+                _bad = next((k for k in _STRIP_KEYS if k in payload and k in r.text), None)
+                if not _bad:
+                    break
+                payload.pop(_bad, None)
                 r = await cli.post(endpoint, json=payload, headers=headers)
         if r.status_code != 200:
             return JSONResponse({"error": f"模型接口 {r.status_code}: {r.text[:150]}"}, status_code=200)
@@ -1649,6 +1661,27 @@ async def agent_stream(req: AgentRunRequest, request: Request = None):
 async def api_platform():
     # hub=共享库地址（本地实例前端据此拼接共享池文件链接；共享库自身为空=同源）
     return {"platform": sys.platform, "os": os.name, "hub": _hub_base()}
+
+
+@app.get("/api/remote/info")
+async def api_remote_info():
+    """远程访问隧道状态：本机 C4EAI 经服务器固定地址对外（配置与实现见项目根 tunnel.py）。"""
+    _root = str(Path(__file__).parent.parent)
+    if _root not in sys.path:
+        sys.path.insert(0, _root)
+    import tunnel
+    return tunnel.status()
+
+
+@app.post("/api/remote/start")
+async def api_remote_start():
+    """开启远程访问隧道（本机连出到服务器）。"""
+    _root = str(Path(__file__).parent.parent)
+    if _root not in sys.path:
+        sys.path.insert(0, _root)
+    import tunnel
+    tunnel.start()
+    return tunnel.status()
 
 
 # ── 静态文件 ──────────────────────────────────────
