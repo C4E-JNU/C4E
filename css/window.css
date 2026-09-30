@@ -1,47 +1,36 @@
 /* 桌面版（pywebview）窗口按钮 —— 与顶栏的主题圆点、🗄️数据库按钮同一条顶栏。
 
    浏览器打开时永远不显示：body 上没有 .desktop-app 时整块隐藏（见 js/window_controls.js）。
-   三个点是「可爱」路线：平时只显三个彩色圆点，鼠标移到这一块才显出图标。 */
+   ★ 样式对齐主流软件（Windows 11 / VS Code / Codex）：三枚**线条图标**按钮 ——
+     ─ 最小化、□ 最大化（/重叠双框 = 还原）、✕ 关闭，平时无底色、悬停才出淡淡的方块。
+     早先做过 macOS 那种黄/绿/红三个圆点，不属于本平台的观感，已弃用。 */
 
 .win-controls { display: none; }
 
 body.desktop-app .win-controls {
     display: flex;
     align-items: center;
-    gap: 9px;
-    margin-left: 12px;
-    padding-left: 12px;
-    border-left: 1px solid var(--border-color, rgba(0, 0, 0, .08));
+    gap: 2px;
+    margin-left: 6px;
 }
 
 body.desktop-app .win-btn {
-    width: 15px;
-    height: 15px;
+    width: 40px;
+    height: 30px;
     padding: 0;
     border: none;
-    border-radius: 50%;
-    cursor: pointer;
-    font-size: 9px;
-    line-height: 15px;
-    text-align: center;
-    color: transparent;                 /* 平时不显字形，只显颜色 */
-    transition: transform .12s ease, filter .12s ease;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--foreground, #2b2b2b);
+    opacity: .6;
+    cursor: default;
 }
 
-body.desktop-app #win-min   { background: #ffbd2e; }
-body.desktop-app #win-max   { background: #28c840; }
-body.desktop-app #win-close { background: #ff5f57; }
-body.desktop-app #win-max[data-state="max"] { background: #3aa0ff; }   /* 已最大化时换色 */
+/* 0.18 的中性灰在浅色和深色主题下都能看见（不跟主题变量走，省得两套都要维护） */
+body.desktop-app .win-btn:hover { background: rgba(127, 127, 127, .18); opacity: 1; }
+body.desktop-app .win-btn:active { background: rgba(127, 127, 127, .3); }
 
-body.desktop-app .win-controls:hover .win-btn {
-    color: rgba(0, 0, 0, .55);
-    font-weight: 700;
-}
-
-body.desktop-app .win-btn:hover {
-    transform: scale(1.18);
-    filter: brightness(1.05);
-}
+body.desktop-app .win-btn svg { display: block; }
 
 /* 顶栏空处拖动窗口：类名是 pywebview 的固定约定（DRAG_REGION_SELECTOR）。
    配合 desktop.pyw 里 settings['DRAG_REGION_DIRECT_TARGET_ONLY']=True，

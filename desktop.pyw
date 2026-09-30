@@ -12,6 +12,7 @@
 本地实例仍然只监听 127.0.0.1；手机/其他电脑走隧道（见 tunnel.py），互不影响。
 """
 
+import ctypes
 import os
 import subprocess
 import sys
@@ -77,17 +78,8 @@ def _win_size() -> "tuple[int, int]":
     """
     import ctypes
 
-    class RECT(ctypes.Structure):
-        _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
-                    ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
-
-    work = RECT()
-    # SPI_GETWORKAREA = 0x0030：桌面工作区（已扣掉任务栏）
-    if not ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(work), 0):
-        work.right = ctypes.windll.user32.GetSystemMetrics(0)
-        work.bottom = ctypes.windll.user32.GetSystemMetrics(1)
-    avail_w, avail_h = work.right - work.left, work.bottom - work.top
-    return (min(1380, int(avail_w * 0.92)), min(900, int(avail_h * 0.94)))
+    left, top, right, bottom = _work_area()
+    return (min(1380, int((right - left) * 0.92)), min(900, int((bottom - top) * 0.94)))
 
 
 def backend_alive() -> bool:
@@ -201,6 +193,137 @@ class _WinAPI:
         if w:
             w.destroy()
 
+    def start_drag(self):
+        """顶栏按下：记下「光标 - 窗口左上角」的偏移。
+
+        ★ 为什么不用 pywebview 的 drag-region，也不用 WM_NCLBUTTONDOWN：前者在 Windows
+        后端对"后加类名的容器"不生效（顶栏拖不动）；后者会进入系统的模态移动循环，
+        拖动期间的鼠标消息不再回给页面（测试和自绘都不可控）。这里由页面报告"鼠标动了"，
+        后端用 GetCursorPos 自己算窗口位置 —— 完全可控，也不吃消息循环。
+        """
+        h = _win_holder.get("h")
+        if not h:
+            return
+        u = ctypes.windll.user32
+        pt, r = _POINT(), _RECT()
+        u.GetCursorPos(ctypes.byref(pt))
+        u.GetWindowRect(h, ctypes.byref(r))      # argtypes 绑的是模块级 _RECT，别用局部类
+        _win_holder["drag_offset"] = (pt.x - r.left, pt.y - r.top)
+
+    def drag_move(self):
+        """拖动中：把窗口摆到「光标 - 偏移」的位置（尺寸不变、不抢焦点）。"""
+        h, off = _win_holder.get("h"), _win_holder.get("drag_offset")
+        if not (h and off):
+            return
+        u = ctypes.windll.user32
+        pt = _POINT()
+        u.GetCursorPos(ctypes.byref(pt))
+        u.SetWindowPos(h, 0, pt.x - off[0], pt.y - off[1], 0, 0, 0x0001 | 0x0004 | 0x0010)
+
+    def end_drag(self):
+        _win_holder.pop("drag_offset", None)
+
+
+class _RECT(ctypes.Structure):                       # noqa: N801 —— 与 Win32 RECT 同名对齐
+    _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
+                ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+
+
+class _POINT(ctypes.Structure):
+    _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+
+class _MONITORINFO(ctypes.Structure):
+    _fields_ = [("cbSize", ctypes.c_ulong), ("rcMonitor", _RECT),
+                ("rcWork", _RECT), ("dwFlags", ctypes.c_ulong)]
+
+
+def _work_area(h=None) -> "tuple[int, int, int, int]":
+    """可用区 (left, top, right, bottom) —— 窗口所在显示器的 rcWork（任务栏已扣掉）。
+
+    ★ 别用 SPI_GETWORKAREA：多显示器下它给的是整个虚拟桌面（本机实测 1895 宽，
+    而真实主屏只有 1280），拿它算窗口尺寸会把窗口开得比屏幕还大。
+    """
+    import ctypes
+
+    u = ctypes.windll.user32
+    u.GetMonitorInfoW.argtypes = [ctypes.c_void_p, ctypes.POINTER(_MONITORINFO)]
+    u.MonitorFromWindow.argtypes = [ctypes.c_void_p, ctypes.c_uint]
+    u.MonitorFromWindow.restype = ctypes.c_void_p
+    # h=None 时 MonitorFromWindow(NULL, MONITOR_DEFAULTTOPRIMARY) 就是主显示器
+    mon = u.MonitorFromWindow(h or 0, 2 if h else 1)
+    mi = _MONITORINFO()
+    mi.cbSize = ctypes.sizeof(_MONITORINFO)
+    u.GetMonitorInfoW(mon, ctypes.byref(mi))
+    r = mi.rcWork
+    return (r.left, r.top, r.right, r.bottom)
+
+
+_win_holders: "list" = []      # ★ 必须留着回调引用：WNDPROC 被 GC 回收会直接崩进程
+
+
+def _install_frame_proc(h) -> None:
+    """接管窗口过程：客户区铺满整个窗口，四边/四角自己给拖拽热区。
+
+    ★ 为什么必须这么干（上一版只加 WS_THICKFRAME 是不够的）：
+      只把样式位加回去，Windows 会把顶部当成"活动标题栏区域"整条上色 —— 顶带比左右下
+      明显粗，四边不等厚。Hermes / Codex / VS Code 的做法是接管 WM_NCCALCSIZE：返回时
+      客户区 = 整个窗口（不留标题栏高度），顶部那条粗带就没有了；DWM 依然按 WS_THICKFRAME
+      画细边、圆角、阴影。非客户区没了，拖拽热区就得自己在 WM_NCHITTEST 里给。
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    GWLP_WNDPROC = -4
+    WM_NCCALCSIZE, WM_NCHITTEST = 0x0083, 0x0084
+    (HTCLIENT, HTLEFT, HTRIGHT, HTTOP, HTTOPLEFT, HTTOPRIGHT,
+     HTBOTTOM, HTBOTTOMLEFT, HTBOTTOMRIGHT) = 1, 10, 11, 12, 13, 14, 15, 16, 17
+    BORDER = 6
+    LRESULT, WPARAM, LPARAM = ctypes.c_ssize_t, ctypes.c_size_t, ctypes.c_ssize_t
+
+    class NCCALCSIZE_PARAMS(ctypes.Structure):
+        _fields_ = [("rgrc", _RECT * 3), ("lppos", ctypes.c_void_p)]
+
+    u = ctypes.windll.user32
+    u.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(_RECT)]
+    u.SetWindowLongPtrW.restype = ctypes.c_void_p
+    u.SetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_void_p]
+    u.CallWindowProcW.restype = LRESULT
+    u.CallWindowProcW.argtypes = [ctypes.c_void_p, wintypes.HWND, ctypes.c_uint, WPARAM, LPARAM]
+
+    def proc(hwnd, msg, wparam, lparam):
+        if msg == WM_NCCALCSIZE and wparam:
+            # ★ 顶部那条粗带的根源就在这里：默认算法会把"标题栏高度"算进顶部非客户区。
+            #   这里自己给客户区：四边各留 1px 做 DWM 的细边，其余全给内容 —— 四边就等厚了。
+            if u.IsZoomed(hwnd):
+                return 0                 # 最大化时不留边（否则四周露出 1px 缝）
+            params = ctypes.cast(lparam, ctypes.POINTER(NCCALCSIZE_PARAMS)).contents
+            params.rgrc[0].left += 1
+            params.rgrc[0].top += 1
+            params.rgrc[0].right -= 1
+            params.rgrc[0].bottom -= 1
+            return 0
+        if msg == WM_NCHITTEST:
+            x = ctypes.c_short(lparam & 0xFFFF).value
+            y = ctypes.c_short((lparam >> 16) & 0xFFFF).value
+            r = _RECT()
+            u.GetWindowRect(hwnd, ctypes.byref(r))
+            dl, dr, dt, db = x - r.left, r.right - x, y - r.top, r.bottom - y
+            if dl < BORDER or dr < BORDER or dt < BORDER or db < BORDER:
+                side = HTLEFT if dl < BORDER else (HTRIGHT if dr < BORDER else None)
+                edge = HTTOP if dt < BORDER else (HTBOTTOM if db < BORDER else None)
+                if side and edge:
+                    return {(HTLEFT, HTTOP): HTTOPLEFT, (HTLEFT, HTBOTTOM): HTBOTTOMLEFT,
+                            (HTRIGHT, HTTOP): HTTOPRIGHT, (HTRIGHT, HTBOTTOM): HTBOTTOMRIGHT}[(side, edge)]
+                return side or edge or HTCLIENT
+        return u.CallWindowProcW(old_proc, hwnd, msg, wparam, lparam)
+
+    cb = ctypes.WINFUNCTYPE(LRESULT, wintypes.HWND, ctypes.c_uint, WPARAM, LPARAM)(proc)
+    old_proc = u.SetWindowLongPtrW(h, GWLP_WNDPROC, ctypes.cast(cb, ctypes.c_void_p))
+    _win_holders.append(cb)
+    _win_holder["h"] = int(h)
+    log("已接管窗口过程（四边等厚 + 四边/四角拖拽热区）")
+
 
 def _fit_on_screen(h) -> None:
     """把窗口收进屏幕可用区 —— Windows 会记住上次的窗口位置，可能开在屏幕外面。
@@ -211,22 +334,17 @@ def _fit_on_screen(h) -> None:
     import ctypes
     from ctypes import wintypes
 
-    class RECT(ctypes.Structure):
-        _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
-                    ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
-
     u = ctypes.windll.user32
-    u.SystemParametersInfoW(0x0030, 0, ctypes.byref(RECT()), 0)   # SPI_GETWORKAREA（见下）
-    u.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(RECT)]
+    u.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(_RECT)]
     u.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int,
                                ctypes.c_int, ctypes.c_int, ctypes.c_uint]
-    work, cur = RECT(), RECT()
-    u.SystemParametersInfoW(0x0030, 0, ctypes.byref(work), 0)
+    cur = _RECT()
     u.GetWindowRect(h, ctypes.byref(cur))
-    avail_w, avail_h = work.right - work.left, work.bottom - work.top
+    wl, wt, wr, wb = _work_area(h)
+    avail_w, avail_h = wr - wl, wb - wt
     w, hgt = min(cur.right - cur.left, avail_w), min(cur.bottom - cur.top, avail_h)
-    x = min(max(cur.left, work.left), max(work.left, work.right - w))
-    y = min(max(cur.top, work.top), max(work.top, work.bottom - hgt))
+    x = min(max(cur.left, wl), max(wl, wr - w))
+    y = min(max(cur.top, wt), max(wt, wb - hgt))
     if (x, y, w, hgt) == (cur.left, cur.top, cur.right - cur.left, cur.bottom - cur.top):
         return
     u.SetWindowPos(h, 0, x, y, w, hgt, 0x0004 | 0x0010)           # SWP_NOZORDER|SWP_NOACTIVATE
@@ -343,6 +461,7 @@ def _add_resize_frame() -> None:
         u.SetWindowLongW(h, GWL_STYLE, (style | WS_THICKFRAME | WS_BORDER) & ~WS_CAPTION)
         u.SetWindowPos(h, 0, 0, 0, 0, 0, SWP)
 
+        _install_frame_proc(h)
         _set_window_icon(h)
         _set_frame_color(h)
         _fit_on_screen(h)

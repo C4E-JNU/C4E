@@ -30,13 +30,20 @@
                window.outerHeight >= screen.availHeight - 8;
     }
 
+    // 图标对齐主流软件：□ = 最大化，重叠双框 = 还原（线条图标，不用彩色圆点）
+    var ICON_MAX = '<svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">' +
+                   '<rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1"/></svg>';
+    var ICON_RESTORE = '<svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">' +
+                       '<rect x="0.5" y="2.5" width="7" height="7" fill="none" stroke="currentColor" stroke-width="1"/>' +
+                       '<path d="M2.5 2.5V0.5h7v7h-2" fill="none" stroke="currentColor" stroke-width="1"/></svg>';
+
     function syncMaxButton() {
         var b = document.getElementById('win-max');
         if (!b) return;
         var m = isMaximized();
         b.dataset.state = m ? 'max' : 'restore';
         b.title = m ? '还原' : '最大化';
-        b.textContent = m ? '\u2750' : '\u25A2';
+        b.innerHTML = m ? ICON_RESTORE : ICON_MAX;
     }
 
     function init() {
@@ -47,6 +54,25 @@
 
         var header = document.querySelector('header');
         if (header) header.classList.add('pywebview-drag-region');
+
+        // ★ 拖动自己实现，不用 pywebview 的 drag-region：那套在 Windows 后端对"后加类名的
+        //   容器"不生效（顶栏空处命中的是 .container 这类子元素，整条顶栏都拖不动）。
+        //   这里在 header 上监听 mousedown，只要不是点在控件上就让 desktop.pyw 走系统拖动。
+        if (header) {
+            var dragging = false;
+            header.addEventListener('mousedown', function (e) {
+                if (e.button !== 0) return;
+                if (e.target.closest && e.target.closest('button, a, input, select, textarea, .theme-dot, .win-controls')) return;
+                dragging = call('start_drag');
+                e.preventDefault();
+            });
+            document.addEventListener('mousemove', function () {
+                if (dragging) call('drag_move');
+            });
+            document.addEventListener('mouseup', function () {
+                if (dragging) { dragging = false; call('end_drag'); }
+            });
+        }
 
         var minBtn = document.getElementById('win-min');
         var maxBtn = document.getElementById('win-max');
