@@ -202,6 +202,36 @@ class _WinAPI:
             w.destroy()
 
 
+def _set_window_icon(h) -> None:
+    """把窗口图标设成 C4EAI 的图标（任务栏 / Alt+Tab 都用它）。
+
+    ★ 为什么不用 pywebview 的 start(icon=...)：它在 Windows 后端靠 Pillow 读 .ico，
+    本机没装 Pillow 时**静默跳过**（实测窗口图标句柄是 0 → 任务栏显示 pythonw 的图标）。
+    这里直接调 Win32，绕开这个依赖。
+    ★ 必须声明 argtypes：不声明时 ctypes 把 HWND 按 32 位传，句柄一截断就静默失效。
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    try:
+        u = ctypes.windll.user32
+        u.LoadImageW.restype = wintypes.HANDLE
+        u.LoadImageW.argtypes = [wintypes.HINSTANCE, wintypes.LPCWSTR, wintypes.UINT,
+                                 ctypes.c_int, ctypes.c_int, wintypes.UINT]
+        u.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+        IMAGE_ICON, LR_LOADFROMFILE, LR_DEFAULTSIZE, WM_SETICON = 1, 0x0010, 0x0040, 0x0080
+        big = u.LoadImageW(None, ICO, IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE)
+        small = u.LoadImageW(None, ICO, IMAGE_ICON, 16, 16, LR_LOADFROMFILE)
+        if not (big or small):
+            log("加载图标失败（文件在不在？）：%s" % ICO)
+            return
+        u.SendMessageW(h, WM_SETICON, 1, big or small)      # ICON_BIG
+        u.SendMessageW(h, WM_SETICON, 0, small or big)      # ICON_SMALL
+        log("窗口图标已设置")
+    except Exception:
+        log("设置窗口图标异常：\n" + traceback.format_exc())
+
+
 def _set_frame_color(h) -> None:
     """把窗口边框/标题栏的颜色改成和界面一致的浅色。
 
@@ -282,6 +312,7 @@ def _add_resize_frame() -> None:
         u.SetWindowLongW(h, GWL_STYLE, (style | WS_THICKFRAME | WS_BORDER) & ~WS_CAPTION)
         u.SetWindowPos(h, 0, 0, 0, 0, 0, SWP)
 
+        _set_window_icon(h)
         _set_frame_color(h)
         log("已加回可调整边框（四边一样细 + 圆角，四边/四角可拖拽改大小）")
     except Exception:
@@ -355,8 +386,8 @@ def main() -> None:
                                 frameless=True, js_api=_WinAPI())
     _win_holder["w"] = win
     kw = {"private_mode": False, "storage_path": PROFILE_DIR}
-    if os.path.isfile(ICO):
-        kw["icon"] = ICO
+    # 图标不走 pywebview 的 icon= —— Windows 后端靠 Pillow 读 ico，没装 Pillow 就静默跳过。
+    # 统一由 _set_window_icon() 用 Win32 设（见那里的说明）。
     try:
         # 第一个参数是 GUI 起来后运行的函数（独立线程）→ 用它把可调整边框加回来
         webview.start(_add_resize_frame, **kw)
