@@ -172,6 +172,61 @@ class _WinAPI:
             w.destroy()
 
 
+def _add_resize_frame() -> None:
+    """★ 给无边框窗口加回「可调整边框」（WS_THICKFRAME）。
+
+    pywebview 的 frameless 是把整个边框（FormBorderStyle=None）拿掉，代价是拖边缘改大小
+    和 DWM 画的细边框/圆角一起没了 —— 看起来就像个没有边的方块。Codex / VS Code 这类
+    Electron 应用并不是真无边框：它们去掉的是标题栏，保留 thickFrame（Electron 默认
+    thickFrame=true，即 WS_THICKFRAME 还在）。所以这里照同样做法补回样式位：
+    加 WS_THICKFRAME|WS_BORDER，但绝不加 WS_CAPTION（加了白色标题栏就回来了）。
+
+    窗口是启动后几秒才出现的，所以这里按「本进程 PID + 标题 C4EAI」等它出现。
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        u = ctypes.windll.user32
+        pid = os.getpid()
+        GWL_STYLE = -16
+        WS_THICKFRAME, WS_BORDER, WS_CAPTION = 0x00040000, 0x00800000, 0x00C00000
+        SWP = 0x0002 | 0x0001 | 0x0004 | 0x0020          # NOMOVE|NOSIZE|NOZORDER|FRAMECHANGED
+
+        def my_window():
+            found = []
+
+            @ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+            def cb(h, _):
+                p = wintypes.DWORD()
+                u.GetWindowThreadProcessId(h, ctypes.byref(p))
+                if p.value == pid and u.IsWindowVisible(h):
+                    n = ctypes.create_unicode_buffer(256)
+                    u.GetWindowTextW(h, n, 256)
+                    if n.value == "C4EAI":
+                        found.append(h)
+                return True
+
+            u.EnumWindows(cb, 0)
+            return found[0] if found else 0
+
+        h = 0
+        for _ in range(60):                              # 最多等 30 秒
+            h = my_window()
+            if h:
+                break
+            time.sleep(0.5)
+        if not h:
+            log("加窗口边框：没等到窗口，跳过")
+            return
+        style = u.GetWindowLongW(h, GWL_STYLE)
+        u.SetWindowLongW(h, GWL_STYLE, (style | WS_THICKFRAME | WS_BORDER) & ~WS_CAPTION)
+        u.SetWindowPos(h, 0, 0, 0, 0, 0, SWP)
+        log("已加回可调整边框（四边/四角可拖拽改大小）")
+    except Exception:
+        log("加窗口边框失败：\n" + traceback.format_exc())
+
+
 def main() -> None:
     _ensure_streams()                 # pythonw 无控制台 → 先接好 stdout/stderr，否则 uvicorn 必崩
     started_here = False
@@ -227,7 +282,8 @@ def main() -> None:
     if os.path.isfile(ICO):
         kw["icon"] = ICO
     try:
-        webview.start(**kw)
+        # 第一个参数是 GUI 起来后运行的函数（独立线程）→ 用它把可调整边框加回来
+        webview.start(_add_resize_frame, **kw)
     except TypeError:
         # 老版本 pywebview 不认某些参数时，退回最小参数集（存储目录仍是默认值）
         webview.start()
