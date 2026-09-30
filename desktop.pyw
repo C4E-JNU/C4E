@@ -129,6 +129,23 @@ def _fatal(msg: str) -> None:
     ctypes.windll.user32.MessageBoxW(None, f"{msg}\n\n详情见日志：\n{LOG}", "C4EAI 启动失败", 0x10)
 
 
+def watch_backend() -> None:
+    """后端掉线时在日志里留一行。
+
+    ★ 为什么要有它：窗口里的页面是 WebView2 自己渲染的，后端要是中途不响应，用户看到的
+    就是浏览器那句"无法访问"，而日志里空白一片 —— 事后完全无从判断（这次就是这样）。
+    每 15 秒探一次健康接口，只在"从有到无"那一次记一行，避免刷屏。
+    """
+    while True:
+        time.sleep(15)
+        if backend_alive():
+            continue
+        log("后端失去响应（页面会显示「无法访问」，可直接关掉窗口重开）")
+        while not backend_alive():
+            time.sleep(15)
+        log("后端恢复响应")
+
+
 def start_tunnel() -> None:
     """远程访问隧道（放后台：它连不连得上都不该拖慢窗口出现）。"""
     try:
@@ -268,6 +285,7 @@ def main() -> None:
         return
 
     threading.Thread(target=start_tunnel, daemon=True, name="c4eai-tunnel").start()
+    threading.Thread(target=watch_backend, daemon=True, name="c4eai-watch").start()
 
     import webview
 
