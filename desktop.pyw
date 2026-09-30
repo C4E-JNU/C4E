@@ -141,6 +141,37 @@ def start_tunnel() -> None:
         log("隧道启动异常：\n" + traceback.format_exc())
 
 
+_win_holder = {}             # 窗口对象（_WinAPI 要用；窗口要先创建、API 再引用它）
+
+
+class _WinAPI:
+    """暴露给网页的窗口控制 —— js/window_controls.js 里的三个圆点调这三个方法。
+
+    走我们自己的 js_api，而不是 pywebview 未公开的内置方法，行为可预期。
+    """
+
+    def minimize(self):
+        w = _win_holder.get("w")
+        if w:
+            w.minimize()
+
+    def maximize(self):
+        w = _win_holder.get("w")
+        if w:
+            w.maximize()
+
+    def restore(self):
+        w = _win_holder.get("w")
+        if w:
+            w.restore()
+
+    def close(self):
+        """关窗口 = 退出整个应用（隧道在 webview.start 返回后收掉）。"""
+        w = _win_holder.get("w")
+        if w:
+            w.destroy()
+
+
 def main() -> None:
     _ensure_streams()                 # pythonw 无控制台 → 先接好 stdout/stderr，否则 uvicorn 必崩
     started_here = False
@@ -185,8 +216,13 @@ def main() -> None:
 
     import webview
 
+    # 顶栏（header）当窗口拖拽区：只有点在顶栏本身才拖动，里面的按钮/主题圆点照常可点
+    webview.settings['DRAG_REGION_DIRECT_TARGET_ONLY'] = True
     _w, _h = _win_size()
-    webview.create_window("C4EAI", URL, width=_w, height=_h, min_size=(980, 640))
+    # frameless：去掉系统那条白色标题栏 —— 顶栏就是应用自己的 header（logo/主题/数据库/窗口按钮同一条）
+    win = webview.create_window("C4EAI", URL, width=_w, height=_h, min_size=(980, 640),
+                                frameless=True, js_api=_WinAPI())
+    _win_holder["w"] = win
     kw = {"private_mode": False, "storage_path": PROFILE_DIR}
     if os.path.isfile(ICO):
         kw["icon"] = ICO

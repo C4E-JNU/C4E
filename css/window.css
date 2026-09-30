@@ -1,0 +1,56 @@
+/* 桌面版（pywebview）窗口按钮 —— 与顶栏的主题圆点、🗄️数据库按钮同一条顶栏。
+
+   浏览器打开时永远不显示：body 上没有 .desktop-app 时整块隐藏（见 js/window_controls.js）。
+   三个点是「可爱」路线：平时只显三个彩色圆点，鼠标移到这一块才显出图标。 */
+
+.win-controls { display: none; }
+
+body.desktop-app .win-controls {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-left: 12px;
+    padding-left: 12px;
+    border-left: 1px solid var(--border-color, rgba(0, 0, 0, .08));
+}
+
+body.desktop-app .win-btn {
+    width: 15px;
+    height: 15px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 9px;
+    line-height: 15px;
+    text-align: center;
+    color: transparent;                 /* 平时不显字形，只显颜色 */
+    transition: transform .12s ease, filter .12s ease;
+}
+
+body.desktop-app #win-min   { background: #ffbd2e; }
+body.desktop-app #win-max   { background: #28c840; }
+body.desktop-app #win-close { background: #ff5f57; }
+body.desktop-app #win-max[data-state="max"] { background: #3aa0ff; }   /* 已最大化时换色 */
+
+body.desktop-app .win-controls:hover .win-btn {
+    color: rgba(0, 0, 0, .55);
+    font-weight: 700;
+}
+
+body.desktop-app .win-btn:hover {
+    transform: scale(1.18);
+    filter: brightness(1.05);
+}
+
+/* 顶栏空处拖动窗口：类名是 pywebview 的固定约定（DRAG_REGION_SELECTOR）。
+   配合 desktop.pyw 里 settings['DRAG_REGION_DIRECT_TARGET_ONLY']=True，
+   只有点在顶栏本身（不是里面的按钮/圆点）才拖动。 */
+body.desktop-app header.pywebview-drag-region {
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+@media (max-width: 768px) {
+    body.desktop-app .win-controls { display: none; }   /* 手机端不显示 */
+}

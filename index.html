@@ -39,6 +39,7 @@
     <link rel="stylesheet" href="css/xiaoe.css?v=7">
     <link rel="stylesheet" href="css/mobile.css?v=28">
     <link rel="stylesheet" href="css/remote.css?v=1">
+    <link rel="stylesheet" href="css/window.css?v=1">
     <link rel="stylesheet" href="css/components.css?v=7">
     <link rel="stylesheet" href="css/agent.css?v=5">
 
@@ -85,6 +86,13 @@
                 </button>
                 <!-- 登录/账号芯片插槽（auth.js 渲染） -->
                 <span id="auth-chip-slot" style="display:inline-flex;align-items:center;"></span>
+
+                <!-- 桌面版窗口按钮：和上面那排控件同一条顶栏（浏览器打开时整块隐藏，见 js/window_controls.js） -->
+                <div class="win-controls" id="win-controls">
+                    <button class="win-btn" id="win-min" type="button" title="最小化" aria-label="最小化"></button>
+                    <button class="win-btn" id="win-max" type="button" title="最大化" aria-label="最大化"></button>
+                    <button class="win-btn win-close" id="win-close" type="button" title="关闭" aria-label="关闭"></button>
+                </div>
             </div>
             <!-- 手机端「⋯」：把桌面顶栏那组控件（主题/数据库/登录）整块搬进来（见 js/mobile.js） -->
             <button class="mobile-more-btn" id="mobile-more-btn" aria-label="更多" title="更多">⋯</button>
@@ -856,6 +864,7 @@
     <script src="js/mobile.js?v=5"></script>
     <script src="js/vendor/qrcode.min.js"></script>
     <script src="js/remote.js?v=2"></script>
+    <script src="js/window_controls.js?v=2"></script>
 
     <div class="popup-panel bubble-context-menu" id="bubble-context-menu">
         <button class="menu-item" data-action="open-file">📂 打开文件</button>
