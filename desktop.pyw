@@ -68,13 +68,26 @@ def log(msg: str) -> None:
 
 
 def _win_size() -> "tuple[int, int]":
-    """窗口尺寸跟着屏幕走：1080p 用 1380×900，小屏按比例缩，最小 980×640。"""
+    """窗口尺寸跟着「屏幕可用区」走 —— 必须减掉任务栏，否则窗口会高过可用区。
+
+    ★ 曾经用 GetSystemMetrics 拿整屏高度（720p 机器 = 720），按 0.88 算出来 633，
+    再被 min_size 抬到 640：可用区其实只有约 672，窗口一旦被往下拖，底部的对话输入区
+    就落到屏幕外面 —— 用户看到的就是"缩小窗口后对话区域消失"。这里改用
+    SystemParametersInfo(SPI_GETWORKAREA) 取真正的可用区，四边都保证在屏幕里。
+    """
     import ctypes
 
-    screen_w = ctypes.windll.user32.GetSystemMetrics(0)
-    screen_h = ctypes.windll.user32.GetSystemMetrics(1)
-    return (max(980, min(1380, int(screen_w * 0.86))),
-            max(640, min(900, int(screen_h * 0.88))))
+    class RECT(ctypes.Structure):
+        _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
+                    ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+
+    work = RECT()
+    # SPI_GETWORKAREA = 0x0030：桌面工作区（已扣掉任务栏）
+    if not ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(work), 0):
+        work.right = ctypes.windll.user32.GetSystemMetrics(0)
+        work.bottom = ctypes.windll.user32.GetSystemMetrics(1)
+    avail_w, avail_h = work.right - work.left, work.bottom - work.top
+    return (min(1380, int(avail_w * 0.92)), min(900, int(avail_h * 0.94)))
 
 
 def backend_alive() -> bool:
@@ -189,6 +202,35 @@ class _WinAPI:
             w.destroy()
 
 
+def _set_frame_color(h) -> None:
+    """把窗口边框/标题栏的颜色改成和界面一致的浅色。
+
+    ★ 为什么：加了可调整边框之后，Windows 会把自己那套「强调色」（用户机器上是青蓝）
+    画上去 —— 顶部那条特别显眼，因为顶部被当成活动标题栏区域按整条上色，左右下只有
+    很细一条。这个厚度改不掉（除非自己画非客户区），但颜色可以指定：设成和界面同色，
+    那条蓝条就看不见了。
+
+    ★ 必须声明 argtypes：不声明的话 ctypes 把 HWND 按 32 位传，DwmSetWindowAttribute
+    收到截断的句柄会直接失败（返回非 0，什么都不做，且不抛异常）。
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    try:
+        dwm = ctypes.windll.dwmapi
+        dwm.DwmSetWindowAttribute.argtypes = [wintypes.HWND, ctypes.c_uint,
+                                              ctypes.c_void_p, ctypes.c_uint]
+        dwm.DwmSetWindowAttribute.restype = ctypes.c_long
+        DWMWA_BORDER_COLOR, DWMWA_CAPTION_COLOR = 34, 35
+        light = ctypes.c_uint(0x00F2F2F2)          # COLORREF = 0x00BBGGRR → 浅灰（贴合浅色界面）
+        for attr in (DWMWA_BORDER_COLOR, DWMWA_CAPTION_COLOR):
+            hr = dwm.DwmSetWindowAttribute(h, attr, ctypes.byref(light), 4)
+            if hr != 0:
+                log("设置窗口边框色失败：属性 %d 返回 0x%08X" % (attr, hr & 0xFFFFFFFF))
+    except Exception:
+        log("设置窗口边框色异常：\n" + traceback.format_exc())
+
+
 def _add_resize_frame() -> None:
     """★ 给无边框窗口加回「可调整边框」（WS_THICKFRAME）。
 
@@ -239,13 +281,28 @@ def _add_resize_frame() -> None:
         style = u.GetWindowLongW(h, GWL_STYLE)
         u.SetWindowLongW(h, GWL_STYLE, (style | WS_THICKFRAME | WS_BORDER) & ~WS_CAPTION)
         u.SetWindowPos(h, 0, 0, 0, 0, 0, SWP)
-        log("已加回可调整边框（四边/四角可拖拽改大小）")
+
+        _set_frame_color(h)
+        log("已加回可调整边框（四边一样细 + 圆角，四边/四角可拖拽改大小）")
     except Exception:
         log("加窗口边框失败：\n" + traceback.format_exc())
 
 
+APP_ID = "C4EAI.Researchers.JNU.C4EAI"     # 任务栏身份：不设的话窗口会被归到 pythonw.exe 名下
+
+
+def _set_app_id() -> None:
+    """告诉 Windows 这是独立应用（任务栏图标/分组才不会用 python 的）。"""
+    try:
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
+    except Exception:
+        pass
+
+
 def main() -> None:
-    _ensure_streams()                 # pythonw 无控制台 → 先接好 stdout/stderr，否则 uvicorn 必崩
+    _ensure_streams()
+    _set_app_id()                 # pythonw 无控制台 → 先接好 stdout/stderr，否则 uvicorn 必崩
     started_here = False
     if backend_alive():
         log("已有后端在 %d 端口服务，直接开窗口" % PORT)
@@ -291,9 +348,10 @@ def main() -> None:
 
     # 顶栏（header）当窗口拖拽区：只有点在顶栏本身才拖动，里面的按钮/主题圆点照常可点
     webview.settings['DRAG_REGION_DIRECT_TARGET_ONLY'] = True
+    # 最小尺寸要放得进 720p 屏的可用区，别让窗口只能开到屏幕外面去
     _w, _h = _win_size()
     # frameless：去掉系统那条白色标题栏 —— 顶栏就是应用自己的 header（logo/主题/数据库/窗口按钮同一条）
-    win = webview.create_window("C4EAI", URL, width=_w, height=_h, min_size=(980, 640),
+    win = webview.create_window("C4EAI", URL, width=_w, height=_h, min_size=(900, 520),
                                 frameless=True, js_api=_WinAPI())
     _win_holder["w"] = win
     kw = {"private_mode": False, "storage_path": PROFILE_DIR}
