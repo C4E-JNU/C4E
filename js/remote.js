@@ -30,7 +30,8 @@
         copyBtn.disabled = !info.url;
 
         qrBox.innerHTML = '';
-        if (info.url && typeof QRCode !== 'undefined') {
+        // 只在隧道真的在跑时才出二维码：没开隧道时扫码打不开，不如让用户先点「开启隧道」
+        if (info.running && info.url && typeof QRCode !== 'undefined') {
             new QRCode(qrBox, {
                 text: info.url, width: 132, height: 132,
                 correctLevel: QRCode.CorrectLevel.M,
