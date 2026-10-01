@@ -313,7 +313,7 @@ def _install_frame_proc(h) -> None:
     from ctypes import wintypes
 
     GWLP_WNDPROC = -4
-    WM_NCCALCSIZE, WM_NCHITTEST = 0x0083, 0x0084
+    WM_NCCALCSIZE, WM_NCHITTEST, WM_SIZE = 0x0083, 0x0084, 0x0005
     (HTCLIENT, HTLEFT, HTRIGHT, HTTOP, HTTOPLEFT, HTTOPRIGHT,
      HTBOTTOM, HTBOTTOMLEFT, HTBOTTOMRIGHT) = 1, 10, 11, 12, 13, 14, 15, 16, 17
     # ★ 用户报「四个角的可调整区域太小，很难点出双箭头」→ 边 8px、角 18px。
@@ -331,8 +331,6 @@ def _install_frame_proc(h) -> None:
     u.CallWindowProcW.restype = LRESULT
     u.CallWindowProcW.argtypes = [ctypes.c_void_p, wintypes.HWND, ctypes.c_uint, WPARAM, LPARAM]
 
-    _hit_debug = []
-
     def proc(hwnd, msg, wparam, lparam):
         if msg == WM_NCCALCSIZE and wparam:
             # ★ 顶部那条粗带的根源就在这里：默认算法会把"标题栏高度"算进顶部非客户区。
@@ -345,9 +343,23 @@ def _install_frame_proc(h) -> None:
             params.rgrc[0].right -= 1
             params.rgrc[0].bottom -= 1
             return 0
+        if msg == WM_SIZE:
+            # 最小化（SIZE_MINIMIZED=1）/ 恢复（SIZE_RESTORED=0）：
+            # ★ 最小化时 WebView2 报的视口是假的（本机实测 157x25），页面据此做布局会误判
+            #   （会把侧栏错误地收起、还会命中手机断点）；而页面自己判断不出"窗口回来了"。
+            #   谁最清楚实话 —— 宿主。所以恢复瞬间主动通知页面一次，让它按真尺寸重新贴合。
+            if wparam == 1:
+                _win_holder["was_min"] = True
+            elif wparam == 0 and _win_holder.get("was_min"):
+                _win_holder["was_min"] = False
+                try:
+                    _w = _win_holder.get("w")
+                    if _w is not None:
+                        _w.evaluate_js("window.__c4eaiOnWindowRestored&&window.__c4eaiOnWindowRestored()")
+                        log("窗口已从最小化恢复：已通知前端重新贴合布局")
+                except Exception:
+                    log("通知前端失败：\n" + traceback.format_exc())
         if msg == WM_NCHITTEST:
-            if len(_hit_debug) < 10:
-                _hit_debug.append(1)
             x = ctypes.c_short(lparam & 0xFFFF).value
             y = ctypes.c_short((lparam >> 16) & 0xFFFF).value
             r = _RECT()
@@ -359,16 +371,10 @@ def _install_frame_proc(h) -> None:
             if side_c and edge_c:
                 res = {(HTLEFT, HTTOP): HTTOPLEFT, (HTLEFT, HTBOTTOM): HTBOTTOMLEFT,
                        (HTRIGHT, HTTOP): HTTOPRIGHT, (HTRIGHT, HTBOTTOM): HTBOTTOMRIGHT}[(side_c, edge_c)]
-                if len(_hit_debug) < 10:
-                    _hit_debug.append(1)
-                    log("角命中 dl=%d dt=%d → 返回 %d" % (dl, dt, res))
                 return res
             if dl < BORDER or dr < BORDER or dt < BORDER or db < BORDER:
                 res = (HTLEFT if dl < BORDER else HTRIGHT if dr < BORDER else None) or \
                       (HTTOP if dt < BORDER else HTBOTTOM if db < BORDER else None) or HTCLIENT
-                if len(_hit_debug) < 10:
-                    _hit_debug.append(1)
-                    log("边命中 dl=%d dr=%d dt=%d db=%d → 返回 %d" % (dl, dr, dt, db, res))
                 return res
         return u.CallWindowProcW(old_proc, hwnd, msg, wparam, lparam)
 
@@ -541,12 +547,32 @@ APP_ID = "C4EAI.Researchers.JNU.C4EAI"     # 任务栏身份：不设的话窗�
 
 
 def _set_app_id() -> None:
-    """告诉 Windows 这是独立应用（任务栏图标/分组才不会用 python 的）。"""
+    """告诉 Windows 这是独立应用（任务栏图标/分组才不会用 python 的）。
+
+    ★ 光设 AppUserModelID 还不够：任务栏右键菜单/固定项上显示的**名字**，Windows 取自
+      `HKCU:/Software/Classes/AppUserModelId/<APP_ID>` 里的 DisplayName；不注册的话它退回
+      可执行文件的版本资源 —— 而我们的窗口属于 pythonw.exe，于是显示成 "python"（用户反馈）。
+      注册一次即可，永久生效（写在 HKCU，不动系统）。
+    """
     try:
         import ctypes
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
     except Exception:
         pass
+    try:
+        import winreg
+        key = winreg.CreateKey(winreg.HKEY_CURRENT_USER,
+                               "Software\\Classes\\AppUserModelId\\" + APP_ID)
+        winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, "C4EAI")
+        ico = os.path.join(HERE, "assets", "icons", "c4eai.ico")
+        if os.path.exists(ico):
+            winreg.SetValueEx(key, "IconUri", 0, winreg.REG_SZ, ico)
+        exe = os.path.join(HERE, "C4EAI.exe")
+        if os.path.exists(exe):
+            winreg.SetValueEx(key, "RelaunchCommand", 0, winreg.REG_SZ, '"%s"' % exe)
+        winreg.CloseKey(key)
+    except Exception:
+        log("注册任务栏身份失败：\n" + traceback.format_exc())
 
 
 def main() -> None:

@@ -174,6 +174,7 @@
                         '</div>' +
                         '<input id="auth-login-user" placeholder="用户名" autocomplete="username" style="width:100%;height:34px;padding:0 .6rem;border:1px solid var(--border,#ddd);border-radius:9px;margin-bottom:.5rem;box-sizing:border-box;background:var(--input-bg,#fbfcfd);">' +
                         '<input id="auth-login-pass" type="password" placeholder="密码" autocomplete="current-password" style="width:100%;height:34px;padding:0 .6rem;border:1px solid var(--border,#ddd);border-radius:9px;margin-bottom:.35rem;box-sizing:border-box;background:var(--input-bg,#fbfcfd);">' +
+                        '<input id="auth-login-pass2" type="password" placeholder="确认密码" autocomplete="new-password" style="display:none;width:100%;height:34px;padding:0 .6rem;border:1px solid var(--border,#ddd);border-radius:9px;margin-bottom:.35rem;box-sizing:border-box;background:var(--input-bg,#fbfcfd);">' +
                         '<div id="auth-login-err" style="color:var(--danger,#d33);font-size:.76rem;min-height:1.05em;margin-bottom:.35rem;"></div>' +
                         '<button id="auth-login-btn" style="width:100%;height:34px;border:none;border-radius:9px;background:var(--primary,#4a7dff);color:#fff;cursor:pointer;font-size:.9rem;font-weight:600;">登 录</button>' +
                         '<div id="auth-login-hint" style="font-size:.72rem;color:var(--text-secondary,#888);margin-top:.6rem;text-align:center;line-height:1.4;">登录后可使用共享库与自己的数据库</div>' +
@@ -215,6 +216,11 @@
                 ? '登录后可使用共享库与自己的数据库'
                 : '自由注册；注册后私人功能立即可用，数据库需管理员授权';
             err.textContent = '';
+            var p2 = document.getElementById('auth-login-pass2');
+            if (p2) {
+                p2.style.display = (m === 'register') ? 'block' : 'none';
+                if (m !== 'register') p2.value = '';   // 切回登录时清掉，别把密码留在框里
+            }
             ov.querySelectorAll('.auth-tab').forEach(function (b) {
                 var on = b.dataset.m === m;
                 // 下划线式页签（主流登录框做法）：不再用两块实心按钮
@@ -233,13 +239,29 @@
         });
 
         function submit() {
+            var nm = u.value.trim(), pw = p.value;
+            if (!nm) { err.textContent = '请输入用户名'; u.focus(); return; }
+            if (!pw) { err.textContent = '请输入密码'; p.focus(); return; }
+            if (mode === 'register') {
+                var p2 = document.getElementById('auth-login-pass2');
+                if (p2 && p2.value !== pw) {
+                    err.textContent = '两次输入的密码不一致';
+                    p2.value = ''; p2.focus(); return;
+                }
+            }
+            err.textContent = '';
             btn.disabled = true;
             btn.textContent = mode === 'login' ? '登录中…' : '注册中…';
             var url = mode === 'login' ? '/api/auth/login' : '/api/auth/register';
+            // ★ 超时保护：共享库不可达时请求会一直挂着，按钮会永远停在「登录中…」点不动
+            //   （用户反馈过：登录一阵子之后按钮失效）。20 秒没应答就当失败，按钮一定恢复可点。
+            var ctl = (typeof AbortController === 'function') ? new AbortController() : null;
+            var timer = ctl ? setTimeout(function () { ctl.abort(); }, 20000) : null;
             _origFetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: u.value.trim(), password: p.value })
+                body: JSON.stringify({ username: nm, password: pw }),
+                signal: ctl ? ctl.signal : undefined
             }).then(function (r) { return r.json().then(function (d) { return { status: r.status, data: d }; }); })
               .then(function (res) {
                   if (mode === 'register') {
@@ -264,9 +286,14 @@
                       err.textContent = res.data.error || '登录失败';
                       btn.disabled = false; btn.textContent = '登 录';
                   }
-              }).catch(function () {
-                  err.textContent = '网络错误';
-                  btn.disabled = false; btn.textContent = mode === 'login' ? '登 录' : '注 册';
+              }).catch(function (e2) {
+                  var aborted = e2 && e2.name === 'AbortError';
+                  err.textContent = aborted ? '请求超时：连不上共享库，请检查网络后重试'
+                                            : '网络错误：连不上共享库';
+                  btn.textContent = mode === 'login' ? '登 录' : '注 册';
+              }).finally(function () {
+                  if (timer) clearTimeout(timer);
+                  btn.disabled = false;      // 无论成功/失败/超时，按钮都必须恢复可点
               });
         }
         btn.addEventListener('click', submit);
@@ -477,6 +504,7 @@
         else m.style.top = (r.bottom + 6) + 'px';
         var it = 'padding:6px 10px;border-radius:7px;font-size:.84rem;cursor:pointer;color:var(--text-secondary,inherit);';
         m.innerHTML = (_canManage(me) ? '<div data-a="admin" style="' + it + '">👥 用户管理</div>' : '') +
+            (_sessionExpired ? '<div data-a="relogin" style="' + it + 'color:var(--danger,#ef4444);">🔑 重新登录（会话已过期）</div>' : '') +
             '<div data-a="switch" style="' + it + '">🔁 切换账号</div>' +
             '<div data-a="logout" style="' + it + '">🚪 退出登录</div>';
         document.body.appendChild(m);
@@ -484,6 +512,10 @@
         m.querySelectorAll('div').forEach(function (d) {
             d.onmouseover = function () { d.style.background = 'var(--hover,#f2f4f8)'; d.style.color = 'inherit'; };
             d.onmouseout = function () { d.style.background = 'none'; d.style.color = 'var(--text-secondary,inherit)'; };
+        });
+        var rl = m.querySelector('[data-a="relogin"]');
+        if (rl) rl.addEventListener('click', function () {
+            clearAuth(); window.__userAskedLogin = true; _openLogin(true);
         });
         m.querySelector('[data-a="logout"]').addEventListener('click', function () {
             window.fetch('/api/auth/logout', { method: 'POST' }).finally(function () { clearAuth(); location.reload(); });

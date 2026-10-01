@@ -211,9 +211,14 @@ async def _hub_api(method: str, path: str, payload: dict = None, token: str = ""
         return None
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     timeout = _httpx.Timeout(connect=5, read=15, write=15, pool=5)
-    async with _httpx.AsyncClient(timeout=timeout) as cli:
-        r = await cli.request(method, f"{base}{path}", json=payload, headers=headers)
-        return r.status_code, r.text
+    try:
+        async with _httpx.AsyncClient(timeout=timeout) as cli:
+            r = await cli.request(method, f"{base}{path}", json=payload, headers=headers)
+            return r.status_code, r.text
+    except Exception as e:
+        # ★ 连接失败必须和"密码错误"分开：以前这里直接抛异常 → 上层把任何非 200 都当成
+        #   "用户名或密码错误"，密码对的人也会被误导。用 -1 作为"连不上"的哨兵。
+        return -1, f"连接共享库失败：{e}"
 
 class LoginReq(BaseModel):
     username: str; password: str
@@ -240,8 +245,19 @@ async def api_auth_login(req: LoginReq):
         if res is None:
             return JSONResponse({"error": "本地实例未连接共享服务器（未设 C4EAI_HUB），无需登录"}, status_code=400)
         code, text = res
+        if code == -1:
+            return JSONResponse({"error": "连不上共享库服务器（网络不通或服务未启动），请稍后重试"},
+                                status_code=502)
         if code != 200:
-            return JSONResponse({"error": "用户名或密码错误"}, status_code=401)
+            # 只有共享库明确说账号/密码不对时才归到密码错；其它情况照实报
+            try:
+                msg = (json.loads(text) or {}).get("error") or ""
+            except Exception:
+                msg = ""
+            if code in (400, 401, 403):
+                return JSONResponse({"error": msg or "用户名或密码错误"}, status_code=401)
+            return JSONResponse({"error": f"登录失败（共享库返回 {code}）{('：' + msg) if msg else ''}"},
+                                status_code=502)
         d = json.loads(text)
         _save_hub_session({"token": d["token"], "username": d["username"],
                            "role": d.get("role", "user"),
@@ -267,6 +283,9 @@ async def api_auth_register(req: RegisterReq):
         if res is None:
             return JSONResponse({"error": "共享服务器不可达，无法注册"}, status_code=502)
         code, text = res
+        if code == -1:
+            return JSONResponse({"error": "连不上共享库服务器（网络不通或服务未启动），请稍后重试"},
+                                status_code=502)
         try:
             return JSONResponse(json.loads(text) if text else {}, status_code=code)
         except Exception:

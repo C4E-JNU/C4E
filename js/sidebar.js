@@ -58,6 +58,12 @@
         // 窗口是不是最小化着：最小化时 WebView2 报的视口是假的（本机实测 157x25），
         // 据此做布局决定是错的（会把侧栏自动收起、还会命中手机断点）。
         var _sbMinimized = false;
+        // 宿主（desktop.pyw）在窗口从最小化恢复时调用 —— 最小化期间 WebView2 报的是假尺寸，
+        // 页面自己判断不出"窗口回来了"，由掌握实情的宿主通知。
+        window.__c4eaiOnWindowRestored = function () {
+            _sbMinimized = false;
+            _sbFitToWindow();
+        };
         function _sbSyncMinimized() {
             try {
                 if (!window.pywebview || !pywebview.api || !pywebview.api.is_minimized) return;
