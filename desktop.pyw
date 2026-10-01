@@ -226,7 +226,32 @@ class _WinAPI:
         u.SetWindowPos(h, 0, pt.x - off[0], pt.y - off[1], 0, 0, 0x0001 | 0x0004 | 0x0010)
 
     def end_drag(self):
-        _win_holder.pop("drag_offset", None)
+        """松开鼠标：光标贴在屏幕左/右边缘 → 分成左/右半屏；贴在顶边 → 最大化。
+
+        ★ 为什么得自己做：拖动是自研的（页面报 mousemove、后端 SetWindowPos），
+          没有进系统的模态移动循环，所以 Windows 的 Aero Snap 不会自己触发。
+        """
+        h, off = _win_holder.get("h"), _win_holder.pop("drag_offset", None)
+        if not h or not off:
+            return
+        import ctypes
+
+        u = ctypes.windll.user32
+        pt = _POINT()
+        u.GetCursorPos(ctypes.byref(pt))
+        wa = _work_area(h)
+        if not wa:
+            return
+        wl, wt, wr, wb = wa                 # 可用区 (left, top, right, bottom)
+        EDGE_HIT = 12                       # 离边缘多少像素算"贴边"
+        w, hh = wr - wl, wb - wt
+        if pt.y - wt <= 4 and wl <= pt.x <= wr:
+            u.ShowWindow(h, 3)              # SW_MAXIMIZE
+            return
+        if pt.x - wl <= EDGE_HIT:
+            u.SetWindowPos(h, 0, wl, wt, w // 2, hh, 0x0004 | 0x0010)            # 左半屏
+        elif wr - pt.x <= EDGE_HIT:
+            u.SetWindowPos(h, 0, wl + w // 2, wt, w // 2, hh, 0x0004 | 0x0010)   # 右半屏
 
 
 class _RECT(ctypes.Structure):                       # noqa: N801 —— 与 Win32 RECT 同名对齐
@@ -283,7 +308,9 @@ def _install_frame_proc(h) -> None:
     WM_NCCALCSIZE, WM_NCHITTEST = 0x0083, 0x0084
     (HTCLIENT, HTLEFT, HTRIGHT, HTTOP, HTTOPLEFT, HTTOPRIGHT,
      HTBOTTOM, HTBOTTOMLEFT, HTBOTTOMRIGHT) = 1, 10, 11, 12, 13, 14, 15, 16, 17
-    BORDER = 6
+    # ★ 用户报「四个角的可调整区域太小，很难点出双箭头」→ 边 8px、角 18px。
+    #   角必须比边明显大：斜向改尺寸只在角的方形区域里才认得出。
+    BORDER, CORNER = 8, 18
     LRESULT, WPARAM, LPARAM = ctypes.c_ssize_t, ctypes.c_size_t, ctypes.c_ssize_t
 
     class NCCALCSIZE_PARAMS(ctypes.Structure):
@@ -295,6 +322,8 @@ def _install_frame_proc(h) -> None:
     u.SetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_void_p]
     u.CallWindowProcW.restype = LRESULT
     u.CallWindowProcW.argtypes = [ctypes.c_void_p, wintypes.HWND, ctypes.c_uint, WPARAM, LPARAM]
+
+    _hit_debug = []
 
     def proc(hwnd, msg, wparam, lparam):
         if msg == WM_NCCALCSIZE and wparam:
@@ -309,25 +338,37 @@ def _install_frame_proc(h) -> None:
             params.rgrc[0].bottom -= 1
             return 0
         if msg == WM_NCHITTEST:
+            if len(_hit_debug) < 10:
+                _hit_debug.append(1)
             x = ctypes.c_short(lparam & 0xFFFF).value
             y = ctypes.c_short((lparam >> 16) & 0xFFFF).value
             r = _RECT()
             u.GetWindowRect(hwnd, ctypes.byref(r))
             dl, dr, dt, db = x - r.left, r.right - x, y - r.top, r.bottom - y
+            # 先按「角」（半径 CORNER 的方形区）判，再按「边」（BORDER 宽）判
+            side_c = HTLEFT if dl < CORNER else (HTRIGHT if dr < CORNER else None)
+            edge_c = HTTOP if dt < CORNER else (HTBOTTOM if db < CORNER else None)
+            if side_c and edge_c:
+                res = {(HTLEFT, HTTOP): HTTOPLEFT, (HTLEFT, HTBOTTOM): HTBOTTOMLEFT,
+                       (HTRIGHT, HTTOP): HTTOPRIGHT, (HTRIGHT, HTBOTTOM): HTBOTTOMRIGHT}[(side_c, edge_c)]
+                if len(_hit_debug) < 10:
+                    _hit_debug.append(1)
+                    log("角命中 dl=%d dt=%d → 返回 %d" % (dl, dt, res))
+                return res
             if dl < BORDER or dr < BORDER or dt < BORDER or db < BORDER:
-                side = HTLEFT if dl < BORDER else (HTRIGHT if dr < BORDER else None)
-                edge = HTTOP if dt < BORDER else (HTBOTTOM if db < BORDER else None)
-                if side and edge:
-                    return {(HTLEFT, HTTOP): HTTOPLEFT, (HTLEFT, HTBOTTOM): HTBOTTOMLEFT,
-                            (HTRIGHT, HTTOP): HTTOPRIGHT, (HTRIGHT, HTBOTTOM): HTBOTTOMRIGHT}[(side, edge)]
-                return side or edge or HTCLIENT
+                res = (HTLEFT if dl < BORDER else HTRIGHT if dr < BORDER else None) or \
+                      (HTTOP if dt < BORDER else HTBOTTOM if db < BORDER else None) or HTCLIENT
+                if len(_hit_debug) < 10:
+                    _hit_debug.append(1)
+                    log("边命中 dl=%d dr=%d dt=%d db=%d → 返回 %d" % (dl, dr, dt, db, res))
+                return res
         return u.CallWindowProcW(old_proc, hwnd, msg, wparam, lparam)
 
     cb = ctypes.WINFUNCTYPE(LRESULT, wintypes.HWND, ctypes.c_uint, WPARAM, LPARAM)(proc)
     old_proc = u.SetWindowLongPtrW(h, GWLP_WNDPROC, ctypes.cast(cb, ctypes.c_void_p))
     _win_holders.append(cb)
     _win_holder["h"] = int(h)
-    log("已接管窗口过程（四边等厚 + 四边/四角拖拽热区）")
+    log("已接管窗口过程（四边等厚；边 %d px / 角 %d px）" % (BORDER, CORNER))
 
 
 def _fit_on_screen(h) -> None:
@@ -548,13 +589,15 @@ def main() -> None:
 
     # 顶栏（header）当窗口拖拽区：只有点在顶栏本身才拖动，里面的按钮/主题圆点照常可点
     webview.settings['DRAG_REGION_DIRECT_TARGET_ONLY'] = True
-    # 最小尺寸要放得进 720p 屏的可用区，别让窗口只能开到屏幕外面去
+    # ★ 最小尺寸必须明显小于"屏幕一半"，否则 Windows 分屏（半屏 640px）会被挡住 ——
+    #   用户报「无法使用 windows 分屏功能」就是这个原因。前端配套：窗口变窄到放不下
+    #   "侧栏最小 + 对话区最小"时自动收起侧栏（js/sidebar.js）。
     _w, _h = _win_size()
     # frameless：去掉系统那条白色标题栏 —— 顶栏就是应用自己的 header（logo/主题/数据库/窗口按钮同一条）
     # ★ hidden=True：窗口先不显示 —— 边框/图标/颜色这些 chrome 是窗口出现之后才改的，
     #   先亮出来的话首帧带着那条"标题栏高度的粗条"，要等用户操作触发重绘才消失。
     #   现在流程改成：建隐藏窗 → 上 chrome → 强制重算边框 → show()。
-    win = webview.create_window("C4EAI", URL, width=_w, height=_h, min_size=(900, 520),
+    win = webview.create_window("C4EAI", URL, width=_w, height=_h, min_size=(420, 340),
                                 frameless=True, hidden=True, js_api=_WinAPI())
     _win_holder["w"] = win
     kw = {"private_mode": False, "storage_path": PROFILE_DIR}

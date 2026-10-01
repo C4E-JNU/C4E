@@ -1,7 +1,15 @@
         // ==================== 历史侧栏 ↔ 聊天 左右占比（宽度持久化） ====================
+        // ★ 三件事共用一个判据，但"谁在动"是客观不同的，所以行为也不同：
+        //   · 拖分隔条 = 用户主动要更多侧栏 → 拖过"对话区容忍最小"就整个让位（专注对话管理）
+        //   · 窗口变小 = 用户没说要藏对话  → 侧栏让位（自动收起），对话区保住
         var _SB_KEY = 'c4eai-sidebar-width';   // localStorage: 历史侧栏宽度(px)
         var _SB_DEFAULT = 300;
         var _SB_MIN = 240;
+        var _CHAT_MIN = 360;                   // 对话区容忍的最小宽度（原 _sbMaxWidth 里那个 360）
+        var _SB_FOCUS_SLACK = 24;              // 拖过分界多少像素才算"我要全屏看对话管理"（防边界抖）
+
+        var _sbFocusBack = 0;                  // 进专注前的侧栏宽度
+        var _sbFocusPending = null;            // 专注期间点过、但没渲染的对话（退出时补）
 
         function _sbEl() { return document.getElementById('chat-sidebar'); }
         function _sbSection() { return document.querySelector('.chat-section'); }
@@ -18,10 +26,10 @@
         function _sbStoreWidth(w) {
             try { localStorage.setItem(_SB_KEY, String(Math.round(w))); } catch (e) {}
         }
-        // 侧栏可用最大宽度 = 区域宽 - 聊天保留宽度
+        // 侧栏可用最大宽度 = 区域宽 - 对话区容忍最小宽度
         function _sbMaxWidth() {
             var sec = _sbSection();
-            return Math.max(_SB_MIN + 1, (sec ? sec.clientWidth : 1200) - 360);
+            return Math.max(_SB_MIN + 1, (sec ? sec.clientWidth : 1200) - _CHAT_MIN);
         }
         // 分隔条应处的 x（相对 chat-section 左边）——自然留白的中点
         function _sbDividerX() {
@@ -32,13 +40,20 @@
             try { g = parseFloat(getComputedStyle(sec).columnGap) || 0; } catch (e) {}
             return (sr.right - cr.left) + g / 2;
         }
-        // 定位分隔条到当前边界（收起时隐藏）
+        // 定位分隔条：收起时隐藏；区域还没布局出来时也隐藏（否则会被丢到 0 或负坐标，
+        // 看起来就是"拖动键消失了" —— 用户报的那个 bug）
         function _sbPlaceDivider() {
-            var rs = _sbResizer(), sb = _sbEl();
-            if (!rs || !sb) return;
-            if (sb.classList.contains('collapsed')) { rs.style.display = 'none'; return; }
+            var rs = _sbResizer(), sb = _sbEl(), sec = _sbSection();
+            if (!rs || !sb || !sec) return;
+            if (sb.classList.contains('collapsed') || !sec.clientWidth ||
+                !sb.getBoundingClientRect().width) {
+                rs.style.display = 'none';
+                return;
+            }
+            var x = _sbDividerX();
+            if (!isFinite(x) || x <= 0) { rs.style.display = 'none'; return; }
             rs.style.display = 'block';
-            rs.style.left = _sbDividerX() + 'px';
+            rs.style.left = Math.min(x, sec.clientWidth) + 'px';
         }
 
         // 展开 / 收起（不再有 50% 全屏档）
@@ -46,6 +61,7 @@
             var sb = _sbEl(), sec = _sbSection(), btn = document.getElementById('sidebar-toggle-btn');
             if (!sb || !sec || !btn) return;
             sec.classList.remove('sidebar-full');   // 废弃旧全屏档残留
+            if (_sbInFocus()) { _sbExitFocus(true); return; }
             btn.classList.remove('full');
             if (sb.classList.contains('collapsed')) {
                 // 收起 → 展开：回到用户拖好的宽度
@@ -61,12 +77,75 @@
             _sbPlaceDivider();
             setTimeout(_sbPlaceDivider, 350);        // 宽度过渡结束后再定位
         }
+        // 只有"用户自己按按钮"才算用户意图；自动收起打的是 autoCollapsed 记号，两者不混
+        function _sbUserToggle() {
+            var sb = _sbEl();
+            if (sb) {
+                delete sb.dataset.autoCollapsed;
+                sb.dataset.userCollapsed = sb.classList.contains('collapsed') ? '0' : '1';
+                var btn = document.getElementById('sidebar-toggle-btn');
+                if (btn) btn.classList.toggle('active', sb.dataset.userCollapsed === '1');
+            }
+            toggleSidebar();
+        }
+
+        // ==================== 专注对话管理（只看条目和笔记） ====================
+        function _sbInFocus() {
+            var sec = _sbSection();
+            return !!(sec && sec.classList.contains('focus-manage'));
+        }
+        function _sbEnterFocus() {
+            var sb = _sbEl(), sec = _sbSection();
+            if (!sb || !sec || _sbInFocus()) return;
+            _sbFocusBack = parseFloat(sb.style.width) || _sbSavedWidth();
+            sec.classList.add('focus-manage');       // CSS：对话区 display:none
+            sb.style.width = '100%';                 // 侧栏铺满（宽度仍归 JS 管，不写死 CSS）
+            _sbPlaceDivider();                       // 拖动键留在右边界，随时能拖回来
+        }
+        function _sbExitFocus(loadPending) {
+            var sb = _sbEl(), sec = _sbSection();
+            if (!sb || !sec || !_sbInFocus()) return;
+            sec.classList.remove('focus-manage');
+            sb.style.width = Math.min(_sbFocusBack || _SB_DEFAULT, _sbMaxWidth()) + 'px';
+            _sbStoreWidth(parseFloat(sb.style.width) || _SB_DEFAULT);
+            _sbPlaceDivider();
+            var pending = _sbFocusPending;
+            _sbFocusPending = null;
+            if (loadPending && pending && typeof switchToBranch === 'function') {
+                switchToBranch(pending);             // 退出专注才真正加载（专注期间点过的那条）
+            }
+        }
+
+        // 窗口尺寸变化时的自适应：放不下"侧栏最小 + 对话区容忍最小"→ 自动收起侧栏，把空间全给对话。
+        // 窗口重新变宽 → 自动弹回来（只弹"我自动收的"那次，用户自己收的不动）。
+        function _sbFitToWindow() {
+            var sb = _sbEl(), sec = _sbSection();
+            if (!sb || !sec || !sec.clientWidth) return;   // 落地页/未布局：等下一次尺寸变化
+            if (!_sbInFocus()) {
+                if (sec.clientWidth < _SB_MIN + _CHAT_MIN) {
+                    if (!sb.classList.contains('collapsed')) {
+                        sb.dataset.autoCollapsed = '1';
+                        sb.classList.add('collapsed');
+                        sb.style.width = '';
+                    }
+                } else if (sb.dataset.autoCollapsed === '1' && sb.dataset.userCollapsed !== '1') {
+                    delete sb.dataset.autoCollapsed;
+                    sb.classList.remove('collapsed');
+                    sb.style.width = Math.min(_sbSavedWidth(), _sbMaxWidth()) + 'px';
+                }
+                if (!sb.classList.contains('collapsed')) {
+                    var mw = _sbMaxWidth(), cur = parseFloat(sb.style.width) || _sbSavedWidth();
+                    if (cur > mw) { sb.style.width = mw + 'px'; _sbStoreWidth(mw); }
+                }
+            }
+            _sbPlaceDivider();
+        }
 
         // 初始化：绑定 + 恢复持久化宽度 + 分隔条拖动
         (function _initSidebarSplit() {
             var sb = _sbEl();
             var btn = document.getElementById('sidebar-toggle-btn');
-            if (btn) btn.addEventListener('click', toggleSidebar);
+            if (btn) btn.addEventListener('click', _sbUserToggle);
             if (sb && !sb.classList.contains('collapsed')) {
                 sb.style.width = Math.min(_sbSavedWidth(), _sbMaxWidth()) + 'px';
             }
@@ -77,16 +156,26 @@
                     if (e.button !== 0) return;
                     e.preventDefault();
                     var startX = e.clientX;
-                    var startW = sb.classList.contains('collapsed') ? 0
-                        : (parseFloat(sb.style.width) || sb.getBoundingClientRect().width);
+                    // 专注态下从"上限"起步（继续往左拖才是回收）
+                    var startW = _sbInFocus() ? _sbMaxWidth()
+                        : (sb.classList.contains('collapsed') ? 0
+                           : (parseFloat(sb.style.width) || sb.getBoundingClientRect().width));
                     var prevTr = sb.style.transition;
                     sb.style.transition = 'none';     // 拖动中禁用过渡，避免卡顿
                     rs.classList.add('rs-active');
                     document.body.style.userSelect = 'none';
                     function mv(ev) {
-                        var w = Math.max(_SB_MIN, Math.min(_sbMaxWidth(), startW + (ev.clientX - startX)));
-                        sb.style.width = w + 'px';
-                        rs.style.left = _sbDividerX() + 'px';
+                        var base = startW + (ev.clientX - startX), limit = _sbMaxWidth();
+                        if (!_sbInFocus()) {
+                            if (base - limit > _SB_FOCUS_SLACK) { _sbEnterFocus(); return; }
+                            sb.style.width = Math.max(_SB_MIN, Math.min(limit, base)) + 'px';
+                        } else if (base - limit < -_SB_FOCUS_SLACK) {
+                            _sbExitFocus(false);                       // 先退专注，宽度在 mouseup 时结算
+                            startW = parseFloat(sb.style.width) || _sbMaxWidth();
+                            startX = ev.clientX;
+                            return;
+                        }
+                        if (!_sbInFocus()) rs.style.left = _sbDividerX() + 'px';
                     }
                     function up() {
                         document.removeEventListener('mousemove', mv);
@@ -94,27 +183,27 @@
                         document.body.style.userSelect = '';
                         sb.style.transition = prevTr;
                         rs.classList.remove('rs-active');
-                        var fw = parseFloat(sb.style.width);
-                        if (fw && fw >= _SB_MIN) _sbStoreWidth(fw);
+                        if (!_sbInFocus()) {
+                            var fw = parseFloat(sb.style.width);
+                            if (fw && fw >= _SB_MIN) _sbStoreWidth(fw);
+                            if (_sbFocusPending) {                     // 刚从专注拖回来 → 补加载
+                                var pd = _sbFocusPending; _sbFocusPending = null;
+                                if (typeof switchToBranch === 'function') switchToBranch(pd);
+                            }
+                        }
                         _sbPlaceDivider();
                     }
                     document.addEventListener('mousemove', mv);
                     document.addEventListener('mouseup', up);
                 });
 
-                // 尺寸 / 进出全屏变化时保持分隔条在边界
+                // 尺寸变化（含最小化恢复、进出全屏、落地页 ↔ 对话页切换）都重新贴合
                 if (window.ResizeObserver) {
-                    new ResizeObserver(function () { _sbPlaceDivider(); }).observe(sec);
+                    new ResizeObserver(function () { _sbFitToWindow(); }).observe(sec);
                 }
-                window.addEventListener('resize', function () {
-                    if (sb.classList.contains('collapsed')) return;
-                    var cur = parseFloat(sb.style.width) || _sbSavedWidth();
-                    var mw = _sbMaxWidth();
-                    if (cur > mw) { sb.style.width = mw + 'px'; _sbStoreWidth(mw); }
-                    _sbPlaceDivider();
-                });
-                setTimeout(_sbPlaceDivider, 60);
-                setTimeout(_sbPlaceDivider, 300);
+                window.addEventListener('resize', _sbFitToWindow);
+                setTimeout(_sbFitToWindow, 60);
+                setTimeout(_sbFitToWindow, 300);
             }
         })();
 
@@ -716,12 +805,14 @@
                 }
             });
 
-            // 添加空对话（没有消息但需要显示在侧边栏的永久分支）
-            // main 是空占位，不显示在侧边栏历史列表（避免每次刷新都出现一个空的“默认对话”）
+            // 添加空对话（没有消息，但需要显示在侧边栏的**永久对话**）
+            // main 是历史遗留的空占位，不显示（避免每次刷新都出现一个空的“默认对话”）
+            // ★ 2026-09-30：去掉原先的 isTemporary === false 条件 —— 已无「临时对话/草稿」
+            //   概念，所有对话一律永久，空对话同样列出、且永不自动删除。
             for (const branchId in state.branches) {
                 if (branchId === 'main') continue;
                 const branch = state.branches[branchId];
-                if (!groupedByBranch[branchId] && branch.isTemporary === false) {
+                if (!groupedByBranch[branchId]) {
                     groupedByBranch[branchId] = {
                         branchId: branchId,
                         branchName: branch.name,
@@ -1100,6 +1191,22 @@
         }
 
         function switchToBranch(branchId) {
+            // 专注对话管理时（只看条目和笔记）：只跟手更新选中态，不渲染对话 ——
+            // 这正是"避免切换对话卡顿"的兑现；记下是哪条，退出专注时再补渲染。
+            if (_sbInFocus()) {
+                state.currentBranchId = branchId;
+                if (typeof persistCurrentBranch === 'function') persistCurrentBranch();
+                _sbFocusPending = branchId;
+                if (typeof updateHistoryList === 'function') updateHistoryList();
+                if (typeof clearChatMark === 'function') clearChatMark(branchId);
+                // 笔记要跟着条目走（用户就是来看"条目 + 对应笔记"的）；
+                // 不渲染的只是对话消息 —— 那才是切换对话卡顿的来源。
+                var np = document.getElementById('notes-panel');
+                if (np && np.classList.contains('active') && typeof renderNotesPanel === 'function') {
+                    renderNotesPanel();
+                }
+                return;
+            }
             // 点已经打开的那条对话 → 只重渲染一次（用户 2026-09-27：早退会让"默认亮起但没加载"
             // 的对话永远点不出来）。不清输入框、不收起附件面板。
             if (state.currentBranchId === branchId) {

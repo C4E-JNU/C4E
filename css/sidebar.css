@@ -1243,3 +1243,9 @@
     box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.18);
 }
 @keyframes chat-mark-spin { to { transform: rotate(360deg); } }
+
+
+/* ==================== 专注对话管理 ====================
+   用户把分隔条拖过"对话区容忍最小宽度"→ 对话区整个让位，只留对话管理（条目 + 笔记）。
+   宽度归 JS（js/sidebar.js 的 _sbEnterFocus/_sbExitFocus），这里只负责把它藏掉。 */
+.chat-section.focus-manage .chat-main { display: none; }
