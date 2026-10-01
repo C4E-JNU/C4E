@@ -288,6 +288,40 @@
     max-width: 90%;
 }
 
+/* ==================== 运行中转圈（忙碌指示） ====================
+   用途：流式过程中「工具调用 / 等待模型 / 子智能体运行」等长耗时阶段
+   显示持续旋转的圆环 + 当前动作 + 已运行秒数，避免看起来像卡死。 */
+@keyframes q-spin { to { transform: rotate(360deg); } }
+.q-spinner {
+    display: inline-block;
+    width: .78em;
+    height: .78em;
+    margin-right: .4em;
+    vertical-align: -.06em;
+    border: 2px solid rgba(99, 102, 241, 0.25);
+    border-top-color: #6366f1;
+    border-radius: 50%;
+    box-sizing: border-box;
+    flex: none;
+    animation: q-spin .7s linear infinite;
+}
+.q-spinner.q-spinner-sm { width: .6em; height: .6em; border-width: 1.5px; margin-right: .3em; }
+.q-live-header {
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+    font-size: var(--font-size-thinking);
+    font-weight: 600;
+    color: #6366f1;
+}
+.q-live-text { opacity: .92; }
+.q-live-elapsed {
+    margin-left: .6em;
+    font-weight: 400;
+    opacity: .6;
+    font-variant-numeric: tabular-nums;
+}
+
 /* ==================== 推理步骤容器（最终回答内） ==================== */
 .reasoning-steps-container {
     display: flex;

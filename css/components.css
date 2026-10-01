@@ -119,7 +119,7 @@
             align-items: center;
             justify-content: center;
             z-index: 10;
-            transition: all 0.3s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
 
@@ -360,7 +360,7 @@
             border-radius: 50px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s;
         }
 
         .new-chat-btn:hover {
@@ -665,6 +665,54 @@
             white-space: pre-wrap;
             word-break: break-word;
             color: var(--dark);
+        }
+        /* .md 渲染视图 —— 与笔记框共用 formatting.js 的 formatMessage（2026-09-28 新增）
+           .file-preview-md 负责容器与滚动，内层沿用 .message-content 的既有 markdown 样式 */
+        .file-preview-panel .file-preview-togglebar {
+            flex-shrink: 0;
+            display: flex;
+            gap: 0.3rem;
+            padding: 0.35rem 0.6rem;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(0, 0, 0, 0.02);
+        }
+        .file-preview-panel .file-preview-tg {
+            background: none;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 0.72rem;
+            line-height: 1.4;
+            padding: 0.1rem 0.5rem;
+            cursor: pointer;
+            color: var(--gray);
+        }
+        .file-preview-panel .file-preview-tg:hover { background: var(--primary-soft); }
+        .file-preview-panel .file-preview-tg.active {
+            color: var(--primary);
+            border-color: var(--primary);
+            background: #fff;
+        }
+        .file-preview-panel .file-preview-md {
+            flex: 1;
+            min-height: 0;
+            padding: 0.6rem 0.9rem 1rem;
+            font-size: 0.82rem;
+            line-height: 1.7;
+            color: var(--dark);
+            overflow-wrap: break-word;
+            word-break: break-word;
+        }
+        .file-preview-panel .file-preview-md pre { overflow-x: auto; }
+        .file-preview-panel .file-preview-md img { max-width: 100%; }
+        .file-preview-panel .file-preview-md table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 0.78rem;
+        }
+        .file-preview-panel .file-preview-md th,
+        .file-preview-panel .file-preview-md td {
+            border: 1px solid var(--border-color);
+            padding: 0.3rem 0.45rem;
         }
         /* 四角缩放热区（功能保留，但不显示角标视觉 —— 用户 2026-09-22 要求去掉角标）
            尺寸与笔记编辑浮窗的 .fe-resize 统一为 16px，手感一致 */

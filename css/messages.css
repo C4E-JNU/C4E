@@ -26,7 +26,7 @@
             border-radius: 8px;
             cursor: pointer;
             font-size: 0.9rem;
-            transition: all 0.3s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s;
         }
 
         .chat-btn:hover {
@@ -125,7 +125,7 @@
             border: 1px solid rgba(129, 140, 248, 0.2);
             background: #11141b;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .theme-midnight .user .message-content:hover {
@@ -137,7 +137,7 @@
             background: #0d0f14;
             border: 1px solid rgba(255, 255, 255, 0.05);
             box-shadow: none;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .theme-midnight .assistant .message-content:hover {
@@ -248,7 +248,7 @@
             cursor: pointer;
             font-size: 0.85rem;
             font-weight: 500;
-            transition: all 0.3s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s;
             display: flex;
             align-items: center;
             gap: 0.5rem;
@@ -323,7 +323,7 @@
               padding: 1rem !important;
               position: relative;
               cursor: pointer;
-              transition: all 0.3s;
+              transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s;
           }
 
           .reasoning-chain:hover {
@@ -403,7 +403,7 @@
             cursor: pointer;
             font-size: 0.8rem;
             color: var(--primary);
-            transition: all 0.3s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s;
         }
 
         .branch-btn {

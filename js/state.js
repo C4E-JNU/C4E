@@ -55,7 +55,9 @@
                 settings: {
                      temperature: 0.7,
                      contextLength: 10,
-                     contextWindow: 262144,   // 模型窗口（DeepSeek V4 256K，用户铁律：绝不压低）
+                     contextWindow: 262144,   // hard limit：只用于算清理触发线，本机绝不据此报错（用户 2026-10 定）
+                     contextBudget: 0,        // 清理触发线（token）；0 = 自动 (window−输出预留)×75%，保底 ≥1024
+                     maxTokens: 65536,        // 每次请求的 max_tokens（输出上限）；64K = DeepSeek 思考模式默认
                      expectedContextTokens: 4000,
                      streaming: true,
                      showRawData: false,
@@ -95,12 +97,8 @@
             // 历史视图模式
             historyMode: 'global',
 
-            // 临时对话状态
-            tempConversation: {
-                id: null,
-                messages: [],
-                hasContent: false
-            },
+            // （原「临时对话状态 tempConversation」已于 2026-09-30 删除：零使用，且用户已取消
+            //   「临时对话/草稿」概念 —— 所有对话一律永久，空对话也保留。）
 
             // 对话条目状态（内存态：运行时转圈 / 答完未读绿点）
             chatMarks: {},
@@ -141,11 +139,14 @@
             if (!btn) return;
             if (isEntering) {
                 document.body.classList.add('full-screen-mode');
+                // 记住"在对话界面"：WebView2 被系统回收后整页重载时，靠它原样回到这里
+                try { localStorage.setItem('c4eai-view-mode', 'chat'); } catch (e) {}
                 btn.classList.add('active');
                 if (typeof showToast === 'function') showToast('已进入对话界面', 'success');
             } else {
                 document.body.classList.add('no-scroll-transition');
                 document.body.classList.remove('full-screen-mode');
+                try { localStorage.setItem('c4eai-view-mode', 'home'); } catch (e) {}
                 btn.classList.remove('active');
                 // 退出全屏即回到启动页：滚到顶部，让大 logo 与入口按钮居中呈现
                 window.scrollTo({ top: 0, behavior: 'auto' });

@@ -8,7 +8,7 @@
             flex-shrink: 0;
             position: relative;
             background: var(--card-bg);
-            transition: all 0.3s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s;
         }
 
         /* 全屏模式样式 */
@@ -94,7 +94,7 @@
                   background: var(--sidebar-bg);
                   width: 260px;
                   /* 固定宽度 */
-                  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                  transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s cubic-bezier(0.4, 0, 0.2, 1);
                   position: relative;
                   z-index: 10;
               }
@@ -134,7 +134,7 @@
 
         body.full-screen-mode .chat-main {
             width: 100%;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         /* 侧边栏切换按钮样式 - 极简设计 */
@@ -152,7 +152,7 @@
             cursor: pointer;
             align-items: center;
             justify-content: center;
-            transition: all 0.2s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.2s;
             color: #999;
             transform: translateY(-50%);
             border-radius: 0 8px 8px 0;
@@ -218,7 +218,7 @@
             cursor: pointer;
             color: var(--primary);
             font-size: 1.1rem;
-            transition: all 0.3s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s;
             flex-shrink: 0;
             margin-bottom: 2px;
         }
@@ -242,7 +242,7 @@
             cursor: pointer;
             color: var(--gray);
             font-size: 1.1rem;
-            transition: all 0.3s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s;
             flex-shrink: 0;
         }
 
@@ -264,7 +264,7 @@
             border-radius: 12px;
             padding: 1rem;
             margin-bottom: 0.5rem;
-            transition: all 0.3s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s;
             animation: slideDown 0.3s ease-out;
         }
 
@@ -301,7 +301,7 @@
             border-radius: 12px;
             padding: 1.5rem;
             margin-bottom: 0.5rem;
-            transition: all 0.3s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s;
         }
 
         .file-upload-panel.active {
@@ -346,7 +346,7 @@
             cursor: pointer;
             font-size: 1.2rem;
             padding: 0.25rem;
-            transition: all 0.2s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.2s;
         }
 
         .close-panel-btn:hover {
@@ -361,7 +361,7 @@
             border-radius: 8px;
             background: #f8f9ff;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s;
         }
 
         .upload-drop-zone:hover {
@@ -409,7 +409,7 @@
             padding: 0.4rem 0.75rem;
             font-size: 0.85rem;
             color: var(--dark);
-            transition: all 0.2s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.2s;
         }
 
         .file-chip:hover {
@@ -447,7 +447,7 @@
             font-size: 1rem;
             padding: 0;
             margin-left: 0.25rem;
-            transition: all 0.2s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.2s;
         }
 
         .file-chip-remove:hover {
@@ -487,7 +487,7 @@
             border-radius: 8px;
             padding: 0.5rem 0.75rem;
             font-size: 0.85rem;
-            transition: all 0.2s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.2s;
         }
 
         .attachment-item:hover {
@@ -552,7 +552,7 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             position: relative;
         }
 
@@ -567,7 +567,7 @@
             background: rgba(255, 255, 255, 0.6);
             border: 1px solid rgba(255, 255, 255, 0.8);
             backdrop-filter: blur(10px);
-            transition: all 0.3s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s;
         }
 
         .theme-colorful .modern-input-bar:focus-within,
@@ -589,7 +589,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.2s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.2s;
             font-size: 1.1rem;
             flex-shrink: 0;
         }
@@ -664,7 +664,7 @@
             border-radius: 12px;
             display: flex;
             align-items: center;
-            transition: all 0.2s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.2s;
             border: 1px solid var(--border-color);
         }
 
@@ -719,7 +719,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.3s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s;
             flex-shrink: 0;
             font-size: 1rem;
         }
@@ -761,7 +761,7 @@
             border: none;
             box-shadow: 0 4px 12px var(--primary-glow);
             color: white;
-            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
 
         .theme-colorful .send-circle-btn:hover:not(:disabled),

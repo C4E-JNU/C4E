@@ -72,7 +72,7 @@
             border-radius: 8px;
             border: 1px solid transparent;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.2s;
             font-size: 0.85rem;
             background: transparent;
         }
@@ -96,7 +96,7 @@
             padding: 0;
             box-shadow: 0 4px 10px var(--primary-glow);
             border: none;
-            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
 
         .action-icon-btn.primary-circle:hover {
@@ -159,7 +159,7 @@
             border: 2px solid var(--border-color);
             border-radius: 10px;
             font-size: 0.68rem;
-            transition: all 0.2s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.2s;
             color: var(--dark);
         }
 
@@ -196,7 +196,7 @@
             border-radius: 6px;
             cursor: pointer;
             font-size: 0.7rem;
-            transition: all 0.2s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.2s;
             color: var(--gray);
             font-weight: 500;
             text-align: center;
@@ -286,7 +286,7 @@
                   border-radius: 8px;
                   margin-bottom: 0.25rem;
                   cursor: pointer;
-                  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+                  transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.2s cubic-bezier(0.4, 0, 0.2, 1);
                   border-left: 3px solid transparent;
                   background: transparent;
                   position: relative;
@@ -393,7 +393,7 @@
             border: 1px solid var(--border-color);
             color: var(--gray);
             cursor: pointer;
-            transition: all 0.2s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.2s;
             max-width: 100%;
             white-space: nowrap;
             overflow: hidden;
@@ -451,7 +451,7 @@
             background: transparent;
             color: var(--gray);
             cursor: pointer;
-            transition: all 0.15s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.15s;
             border: 1px dashed var(--border-color);
             flex-shrink: 0;
         }
@@ -494,7 +494,7 @@
             border: none;
             font-size: calc(var(--font-size-popup) * 0.9);
             cursor: pointer;
-            transition: all 0.15s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.15s;
         }
 
         .bubble-add-panel .btn-add-text {
@@ -662,7 +662,7 @@
         /* Midnight Specific Dialogue Management Refinements */
         .theme-midnight .history-item .history-preview {
             color: var(--gray);
-            transition: all 0.2s ease;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.2s ease;
         }
 
         .theme-midnight .history-item:hover .history-preview {
@@ -690,7 +690,7 @@
             background: transparent;
             color: var(--gray);
             border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            transition: all 0.2s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.2s;
         }
 
         .theme-midnight .group-header:hover {
@@ -780,7 +780,7 @@
                         border-radius: 8px;
                         overflow: hidden;
                         border: 1px solid var(--border-color);
-                        transition: all 0.2s;
+                        transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.2s;
                     }
 
                     /* 对话管理区域禁用文字选择 */
@@ -815,7 +815,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            transition: all 0.2s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.2s;
             border-bottom: 1px solid var(--border-color);
             margin-bottom: 0.25rem;
             position: relative;
@@ -883,7 +883,7 @@
             padding: 0.125rem 0.45rem;
             border-radius: 10px;
             font-size: 0.7rem;
-            transition: all 0.2s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.2s;
             z-index: 1;
             font-weight: 500;
         }
@@ -924,7 +924,7 @@
             gap: 0.25rem;
             opacity: 0;
             visibility: hidden;
-            transition: all 0.2s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.2s;
             pointer-events: none;
             z-index: 2;
         }
@@ -947,7 +947,7 @@
             cursor: pointer;
             font-size: 0.8rem;
             color: var(--gray);
-            transition: all 0.3s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s;
         }
 
         .group-action-btn:hover {
@@ -972,7 +972,7 @@
             border: 1px solid var(--border-color);
             border-radius: 6px;
             font-size: 0.875rem;
-            transition: all 0.2s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.2s;
             background: var(--card-bg);
             color: var(--dark);
         }
@@ -1016,7 +1016,7 @@
             font-size: 0.8rem;
             cursor: pointer;
             color: var(--gray);
-            transition: all 0.15s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.15s;
         }
         .notes-panel-actions button:hover {
             border-color: var(--primary);
@@ -1040,7 +1040,7 @@
             border: 1px solid var(--border-color);
             border-radius: 12px;
             padding: 0.85rem 1rem;
-            transition: all 0.15s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.15s;
         }
         .note-card:hover {
             border-color: var(--primary);
@@ -1181,7 +1181,7 @@
             border: none;
             font-size: 0.8rem;
             cursor: pointer;
-            transition: all 0.15s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.15s;
         }
         .note-card-save-btn {
             background: var(--primary);

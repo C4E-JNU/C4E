@@ -89,7 +89,7 @@
             border-radius: 6px;
             cursor: pointer;
             font-size: 0.75rem;
-            transition: all 0.2s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.2s;
             display: flex;
             align-items: center;
             gap: 4px;
@@ -532,7 +532,7 @@
             border-radius: 8px;
             background: white;
             overflow: hidden;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .mermaid-wrapper.collapsed {
@@ -576,7 +576,7 @@
             border-radius: 4px;
             cursor: pointer;
             font-size: 0.9rem;
-            transition: all 0.2s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.2s;
             position: relative;
         }
 
@@ -695,7 +695,7 @@
             text-align: center;
             margin-bottom: 1.5rem;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s;
         }
 
         .file-upload-area:hover {

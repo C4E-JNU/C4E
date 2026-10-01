@@ -605,6 +605,11 @@
         var tok = window.getAuthToken();
         if (!tok || tok === 'guest') {
             clearAuth();
+            // ★ 先把"未登录"这个本地就能确定的事实**同步**渲染出来，再去问服务器。
+            //   原来只 clearAuth() 不渲染，账号行要等 /api/auth/me 回来才出现（实测空行 2.8 秒、
+            //   回来时又突然撑开 43px）—— 用户反馈的"登录要隔一段时间才显示"就是它。
+            //   没有 token 就是游客，这是客观事实，不需要等任何请求。
+            setAuth('guest', { username: 'guest', role: 'guest' });
             window.fetch('/api/auth/me').then(function (r) {
                 if (r.status === 401) {
                     // 未登录：弹登录框。

@@ -9,6 +9,7 @@
         if (location.search.indexOf('shell=desktop') >= 0) {
             document.documentElement.classList.add('shell-desktop');
         }
+
     </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -56,6 +57,23 @@
 </head>
 
 <body>
+    <script>
+        /* ★ 恢复上次的视图（在第一帧之前、在下列节点解析之前）。
+           为什么必须做：窗口最小化时 WebView2 可能被系统回收并**整页重载**，
+           而 full-screen-mode 是个纯运行时的 body 类 —— 重载后就丢了，
+           用户看到的是"像刷新了一下，然后回到落地页"（用户反馈过的现象）。
+           把视图存下来，重载后原样回去，重载对用户就不可见。
+           用户偏好："进入对话界面/回到落地页"由他自己决定，所以两个状态都记。 */
+        try {
+            if (localStorage.getItem('c4eai-view-mode') === 'chat') {
+                document.body.classList.add('full-screen-mode');
+            }
+        } catch (e) {}
+        document.addEventListener('DOMContentLoaded', function () {
+            var b = document.getElementById('full-screen-toggle');
+            if (b && document.body.classList.contains('full-screen-mode')) b.classList.add('active');
+        });
+    </script>
     <!-- 导航栏 -->
     <header>
         <div class="container nav-container">
@@ -844,7 +862,7 @@
 
 
     <!-- 脚本文件 (按依赖顺序) -->
-    <script src="js/state.js?v=18"></script>
+    <script src="js/state.js?v=19"></script>
     <!-- 个人设置后端存储（必须在其它模块之前：hydrate 要把后端设置灌回缓存） -->
     <script src="js/user_settings.js?v=2"></script>
     <script src="js/user_chats.js?v=6"></script>

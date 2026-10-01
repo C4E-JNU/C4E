@@ -28,6 +28,18 @@ done
 rm -f "$CHK"
 
 echo "== 关键不变量 =="
+
+# ── 布局单源化守卫（2026-10-01）：防止"多套 CSS 相互替代"的堆叠重新长回来 ──
+# ① transition:all 会把 padding/margin/font-size 一起做补间，而 JS 又在过渡中途量尺寸 →
+#    中间值被写进 inline，越量越歪。全项目必须为 0，只允许显式属性白名单。
+n_tall=$(grep -ro 'transition:[[:space:]]*all' css/*.css 2>/dev/null | wc -l | tr -d ' ')
+if [ "$n_tall" = "0" ]; then ok "无 transition:all（布局补间不再污染尺寸）"; else bad "仍有 $n_tall 处 transition:all"; fi
+# ② 手机断点必须限定给非桌面外壳，否则最小化时的假视口(157x25)会让手机壳接管桌面窗口
+chk css/mobile.css 'html:not(.shell-desktop)' 'mobile.css 断点已限定给非桌面外壳'
+# ③ 视图状态必须持久化：WebView2 被系统回收会整页重载，不记状态就会"刷新后回到落地页"
+chk js/state.js "c4eai-view-mode" 'state.js 持久化视图状态（重载后不丢界面）'
+chk index.html "c4eai-view-mode" 'index.html 首帧前恢复视图状态'
+
 chk() { if grep -qF "$2" "$1" 2>/dev/null; then ok "$3"; else bad "$3"; fi; }
 # 手机端：隐藏侧栏箭头（与抽屉行为冲突）
 chk css/mobile.css '.sidebar-toggle-btn, html:not(.shell-desktop) #sidebar-toggle-btn{ display: none !important; }' 'mobile.css 隐藏 sidebar-toggle-btn（手机断点；html:not(.shell-desktop) = 桌面外壳不吃手机断点）'
