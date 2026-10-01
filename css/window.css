@@ -10,18 +10,20 @@
 body.desktop-app .win-controls {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 0;
     margin-left: 6px;
     /* 顶栏容器右侧有 20px 内边距 —— 抹掉它，让按钮组贴到窗口右边（主流软件都贴边） */
     margin-right: -20px;
 }
 
 body.desktop-app .win-btn {
-    width: 44px;
-    height: 30px;
+    /* ★ 贴满顶栏高度（44px）：主流软件的标题栏按钮就是这么做的 —— 悬停灰块顶到窗口上沿，
+       不再出现"上下留白 14px、右边 0px"的观感。宽 46px、无圆角，也是 Windows 的常规。 */
+    width: 46px;
+    height: 44px;
     padding: 0;
     border: none;
-    border-radius: 6px;
+    border-radius: 0;
     background: transparent;
     color: var(--foreground, #2b2b2b);
     opacity: .6;

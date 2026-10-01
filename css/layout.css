@@ -1,6 +1,9 @@
         /* 导航栏 */
         header {
-            padding: 0.4rem 0;
+            /* 顶栏高度就一条线：44px（原来 58px 是被 44px 的 logo 胶囊撑的，
+               窗口按钮只有 30px 高 → 上下各留 14/15px 空白） */
+            padding: 0;
+            height: 44px;
             border-bottom: 1px solid var(--border-color);
             background: var(--header-bg);
             position: sticky;
@@ -18,14 +21,15 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            height: 100%;
         }
 
         .logo-area {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             background: rgba(255, 255, 255, 0.03);
-            padding: 3px 10px;
+            padding: 2px 8px;
             border-radius: 50px;
             border: 1px solid var(--border-color);
             transition: all 0.3s;
@@ -37,7 +41,7 @@
         }
 
         .header-logo {
-            height: 48px;
+            height: 28px;
             width: auto;
             object-fit: contain;
             filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
@@ -218,7 +222,7 @@
         .global-theme-switcher {
             display: flex;
             align-items: center;
-            gap: 5px;
+            gap: 4px;
             background: var(--card-bg);
             padding: 3px 7px;
             border-radius: 50px;
@@ -239,8 +243,8 @@
         }
 
         .theme-dot {
-            width: 14px;
-            height: 14px;
+            width: 12px;
+            height: 12px;
             border-radius: 50%;
             cursor: pointer;
             border: 2px solid transparent;
@@ -976,7 +980,9 @@
             background: var(--sidebar-bg);
             border-radius: 16px;
             box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
-            padding: 1.5rem;
+            /* 上下不对称：顶部收紧到 12px（原来四边都 24px，「对话管理」那行离顶太远），
+               底部留 16px 给账号行呼吸 */
+            padding: 12px 12px 16px;
             height: 600px;
             display: flex;
             flex-direction: column;

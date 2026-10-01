@@ -1,3 +1,15 @@
+        /* 账号行：贴侧栏底部（上面推到内容的下面），轻微上分隔线 */
+        .side-account {
+            margin-top: auto;
+            padding-top: 8px;
+            border-top: 1px solid var(--border-color);
+            flex: 0 0 auto;
+        }
+
+        .side-account:empty {
+            display: none;
+        }
+
         .sidebar-header {
             padding: 0 0 1rem 0;
             margin-bottom: 0;
