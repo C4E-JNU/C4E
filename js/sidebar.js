@@ -58,19 +58,29 @@
         // 窗口是不是最小化着：最小化时 WebView2 报的视口是假的（本机实测 157x25），
         // 据此做布局决定是错的（会把侧栏自动收起、还会命中手机断点）。
         var _sbMinimized = false;
-        // 宿主（desktop.pyw）在窗口从最小化恢复时调用 —— 最小化期间 WebView2 报的是假尺寸，
-        // 页面自己判断不出"窗口回来了"，由掌握实情的宿主通知。
-        window.__c4eaiOnWindowRestored = function () {
-            _sbMinimized = false;
-            _sbFitToWindow();
-        };
+        var _sbMinPoll = null;
         function _sbSyncMinimized() {
             try {
                 if (!window.pywebview || !pywebview.api || !pywebview.api.is_minimized) return;
                 pywebview.api.is_minimized().then(function (v) {
-                    if (v === _sbMinimized) return;
+                    var was = _sbMinimized;
                     _sbMinimized = !!v;
-                    if (!_sbMinimized) _sbFitToWindow();   // 恢复回来，按真尺寸重新贴合一次
+                    if (_sbMinimized) {
+                        // 最小化中：页面自己判断不出"什么时候回来"（恢复时不一定有 resize 事件），
+                        // 所以最小化期间才轮询宿主状态，一恢复立刻停 —— 纯查询接口，不涉及 GUI 线程。
+                        if (!_sbMinPoll) {
+                            _sbMinPoll = setInterval(function () {
+                                try { pywebview.api.is_minimized().then(function (v2) {
+                                    if (v2) return;
+                                    clearInterval(_sbMinPoll); _sbMinPoll = null;
+                                    _sbMinimized = false;
+                                    _sbFitToWindow();
+                                }).catch(function () {}); } catch (e) {}
+                            }, 800);
+                        }
+                    } else if (was) {
+                        _sbFitToWindow();                  // 恢复回来，按真尺寸重新贴合一次
+                    }
                 }).catch(function () {});
             } catch (e) {}
         }

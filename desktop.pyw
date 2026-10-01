@@ -343,22 +343,6 @@ def _install_frame_proc(h) -> None:
             params.rgrc[0].right -= 1
             params.rgrc[0].bottom -= 1
             return 0
-        if msg == WM_SIZE:
-            # 最小化（SIZE_MINIMIZED=1）/ 恢复（SIZE_RESTORED=0）：
-            # ★ 最小化时 WebView2 报的视口是假的（本机实测 157x25），页面据此做布局会误判
-            #   （会把侧栏错误地收起、还会命中手机断点）；而页面自己判断不出"窗口回来了"。
-            #   谁最清楚实话 —— 宿主。所以恢复瞬间主动通知页面一次，让它按真尺寸重新贴合。
-            if wparam == 1:
-                _win_holder["was_min"] = True
-            elif wparam == 0 and _win_holder.get("was_min"):
-                _win_holder["was_min"] = False
-                try:
-                    _w = _win_holder.get("w")
-                    if _w is not None:
-                        _w.evaluate_js("window.__c4eaiOnWindowRestored&&window.__c4eaiOnWindowRestored()")
-                        log("窗口已从最小化恢复：已通知前端重新贴合布局")
-                except Exception:
-                    log("通知前端失败：\n" + traceback.format_exc())
         if msg == WM_NCHITTEST:
             x = ctypes.c_short(lparam & 0xFFFF).value
             y = ctypes.c_short((lparam >> 16) & 0xFFFF).value
