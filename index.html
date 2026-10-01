@@ -45,11 +45,13 @@
     <link rel="stylesheet" href="css/input.css?v=9">
     <link rel="stylesheet" href="css/modals.css?v=4">
     <link rel="stylesheet" href="css/xiaoe.css?v=7">
-    <link rel="stylesheet" href="css/mobile.css?v=28">
+    <link rel="stylesheet" href="css/mobile.css?v=28" id="css-mobile">
     <link rel="stylesheet" href="css/remote.css?v=1">
     <link rel="stylesheet" href="css/window.css?v=4">
     <link rel="stylesheet" href="css/components.css?v=7">
     <link rel="stylesheet" href="css/agent.css?v=5">
+
+    
 
 </head>
 
@@ -229,13 +231,14 @@
                 <div class="setting-item">
                      <label class="setting-label">
                          最大输出 Token 数
-                         <span class="setting-value" id="max-tokens-value">8192</span>
+                         <span class="setting-value" id="max-tokens-value">65536</span>
                      </label>
-                     <input type="number" min="100" max="1000000" step="100" value="8192" class="number-input"
+                     <input type="number" min="100" max="393216" step="100" value="65536" class="number-input"
                          id="max-tokens">
                      <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
-                         每次请求发给模型的 max_tokens：单次回答最多生成多少 token，超了会被服务端截断。<br>
-                         ⚠️ 不要超过模型服务端的真实输出上限（常见 8K~64K）。填 30 万这类大值不会让回答变长，反而可能被服务端直接报 400 拒收。<br>
+                         每次请求发给模型的 max_tokens：单次回答最多能生成多少 token，超了会被服务端截断。<br>
+                         DeepSeek 官方合法范围 1~393216（384K）；不传时默认「非思考 8K / 思考 64K」。思考模式下思维链也占这份额度，所以设太小会让正文很短（甚至为空）。<br>
+                         ⚠️ 填大不会让回答变长（何时停由模型决定），但超过服务端真实上限会被 400 拒收。想要长代码/长报告，建议 64K 以上。<br>
                          该值还参与「清理触发线」计算（用来预留输出空间）。回答被截断且正夹着工具调用时，本轮会中止并提示调大它。
                      </div>
                  </div>
@@ -250,7 +253,8 @@
                      <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
                          模型一次最多能接收的 token 数（hard limit，由模型本身决定，如 256K / 1M）。<br>
                          它只用于计算「什么时候开始清理旧工具结果」，本机不会因为超过此值而报错、截断或中断对话；真的超过模型能力时，只由模型服务端报错（那才是真的超上下文）。<br>
-                         👉 填真实值最稳：填小 → 更早开始清理（保守，不报错）；填大 → 更晚清理，超了交给服务端。
+                         👉 填真实值最稳：填小 → 更早开始清理（保守，不报错）；填大 → 更晚清理，超了交给服务端。<br>
+                         👉 本值不与所选模型自动绑定，请按实际调用的模型填（256K 填 262144，1M 填 1048576）。
                      </div>
                  </div>
 
@@ -840,7 +844,7 @@
 
 
     <!-- 脚本文件 (按依赖顺序) -->
-    <script src="js/state.js?v=17"></script>
+    <script src="js/state.js?v=18"></script>
     <!-- 个人设置后端存储（必须在其它模块之前：hydrate 要把后端设置灌回缓存） -->
     <script src="js/user_settings.js?v=2"></script>
     <script src="js/user_chats.js?v=6"></script>
@@ -852,14 +856,14 @@
     <script src="js/auth.js?v=23"></script>
     <script src="js/api.js?v=14"></script>
     <script src="js/database.js?v=21"></script>
-    <script src="js/sidebar.js?v=26"></script>
-    <script src="js/branching.js?v=18"></script>
+    <script src="js/sidebar.js?v=27"></script>
+    <script src="js/branching.js?v=19"></script>
     <script src="js/provider.js?v=9"></script>
     <script src="js/messages.js?v=10"></script>
     <script src="js/editing.js?v=3"></script>
     <script src="js/formatting.js?v=6"></script>
     <script src="js/tools.js?v=4"></script>
-    <script src="js/graph_rag.js?v=18"></script>
+    <script src="js/graph_rag.js?v=19"></script>
     <script src="js/note_refs.js?v=2"></script>
     <script src="js/subagent_view.js?v=3"></script>
     <!-- 前端工具注册表已删除（工具全部由后端提供） -->
@@ -871,7 +875,7 @@
     <script src="js/utils.js?v=2"></script>
     <script src="js/main.js?v=6"></script>
     <script src="js/xiaoe.js?v=8"></script>
-    <script src="js/mobile.js?v=5"></script>
+    <script src="js/mobile.js?v=6"></script>
     <script src="js/vendor/qrcode.min.js"></script>
     <script src="js/remote.js?v=2"></script>
     <script src="js/window_controls.js?v=6"></script>

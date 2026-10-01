@@ -8,6 +8,14 @@
 (function () {
     'use strict';
 
+    // ★ 桌面外壳（C4EAI.exe 启动时 <html> 带 .shell-desktop）里本模块必须完全不工作。
+    //   它用 matchMedia('(max-width:768px)') 判断"是不是手机"，而窗口最小化时 WebView2
+    //   报的假视口（157x25）会命中 —— 更致命的是抽屉打开时它把 #chat-sidebar 搬到
+    //   document.body 下（adoptSidebar），一搬走，css/layout.css 里那条
+    //     .chat-sidebar:not(.collapsed) ~ .sidebar-resizer { display: block }
+    //   的兄弟关系就永久失效 —— 拖动键从此再也不出现（用户反馈的"拖动键没能正常化"）。
+    if (document.documentElement.classList.contains('shell-desktop')) return;
+
     var MQ = '(max-width: 768px)';
     var OPEN_CLS = 'mobile-drawer-open';
 
