@@ -1315,3 +1315,29 @@
             flex: 1 1 auto;
             min-width: 0;
         }
+
+        /* ── 桌面外壳（C4EAI.exe；URL 带 shell=desktop）──────────────────────────
+           窗口是能被用户拖小的，所以不能套用面向浏览器的响应式：
+           css/components.css 的 @media (max-width:1024px) 会把 .chat-section 改成纵向堆叠、
+           侧栏撑成 100% 宽 × 300px 高，而 .chat-container 是固定 600px 高 →
+           对话区被推到窗口下方（300+600px）完全看不见（用户报「缩小后对话页面完全消失」）。
+           桌面外壳固定保持「左侧栏 + 右对话」左右排布，并让高度跟着窗口走。
+           选择器带 html.shell-desktop 前缀，优先级高于媒体查询里的裸类名。 */
+        html.shell-desktop .chat-section {
+            flex-direction: row;
+            height: calc(100vh - 44px - 24px);
+            min-height: 300px;
+        }
+
+        html.shell-desktop .chat-sidebar {
+            width: auto;
+            flex: 0 1 300px;
+            min-width: 176px;
+            height: auto;
+            max-height: 100%;
+        }
+
+        html.shell-desktop .chat-container {
+            height: 100%;
+            min-height: 0;
+        }

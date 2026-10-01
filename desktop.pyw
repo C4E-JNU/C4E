@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.join(HERE, "backend"))
 
 PORT = int(os.environ.get("C4EAI_PORT", "8080"))
 HOST = os.environ.get("C4EAI_HOST", "127.0.0.1")
-URL = f"http://127.0.0.1:{PORT}/"
+URL = f"http://127.0.0.1:{PORT}/" + "?shell=desktop"   # 让前端知道自己跑在桌面窗口里（CSS 据此不做浏览器式响应式堆叠）
 ICO = os.path.join(HERE, "assets", "icons", "c4eai.ico")
 if not os.path.isfile(ICO):
     ICO = os.path.join(HERE, "c4eai.ico")
