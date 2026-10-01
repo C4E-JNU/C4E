@@ -73,7 +73,6 @@
         function toggleSidebar() {
             var sb = _sbEl(), sec = _sbSection(), btn = document.getElementById('sidebar-toggle-btn');
             if (!sb || !sec || !btn) return;
-            sec.classList.remove('sidebar-full');   // 废弃旧全屏档残留
             if (_sbInFocus()) { _sbExitFocus(true); return; }
             btn.classList.remove('full');
             if (sb.classList.contains('collapsed')) {

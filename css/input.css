@@ -163,33 +163,7 @@
             color: var(--primary);
         }
 
-        /* 侧边栏全屏态：sidebar 50% + notes 50%，隐藏对话框 */
-        .chat-section.sidebar-full .chat-sidebar {
-            width: 50%;
-            flex: none;
-            min-width: 300px;
-        }
-        .chat-section.sidebar-full .notes-panel.active {
-            width: 50%;
-            flex: none;
-            min-width: 200px;
-        }
-        .chat-section.sidebar-full .chat-main {
-            display: none;
-        }
-        /* 全屏态下的全屏态适配 */
-        body.full-screen-mode .chat-section.sidebar-full .chat-sidebar {
-            height: 100vh;
-            border-radius: 0;
-            border-right: none;
-        }
-        body.full-screen-mode .chat-section.sidebar-full .notes-panel.active {
-            height: 100vh;
-            border-radius: 0;
-            border-right: 1px solid var(--border-color);
-        }
 
-        /* 切换按钮箭头 - 与 sidebar-full 态适配 */
         .sidebar-toggle-btn::before {
             content: "";
             display: block;
@@ -204,13 +178,8 @@
             transform: rotate(-135deg);
             margin-left: -4px;
         }
-        /* 普通展开：左箭头（收起） */
+        /* 切换按钮箭头：普通展开 = 左箭头（收起） */
         .chat-sidebar:not(.collapsed) ~ .sidebar-toggle-btn::before {
-            transform: rotate(45deg);
-            margin-left: 4px;
-        }
-        /* 全屏态：双箭头（表示收起至折叠） */
-        .chat-section.sidebar-full .sidebar-toggle-btn::before {
             transform: rotate(45deg);
             margin-left: 4px;
         }
