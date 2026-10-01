@@ -20,7 +20,7 @@ body.desktop-app .win-btn {
     /* ★ 贴满顶栏高度（44px）：主流软件的标题栏按钮就是这么做的 —— 悬停灰块顶到窗口上沿，
        不再出现"上下留白 14px、右边 0px"的观感。宽 46px、无圆角，也是 Windows 的常规。 */
     width: 46px;
-    height: 44px;
+    height: var(--header-h);
     padding: 0;
     border: none;
     border-radius: 0;
@@ -49,6 +49,5 @@ body.desktop-app header.pywebview-drag-region {
     user-select: none;
 }
 
-@media (max-width: 768px) {
-    body.desktop-app .win-controls { display: none; }   /* 手机端不显示 */
+   /* 手机端不显示 */
 }

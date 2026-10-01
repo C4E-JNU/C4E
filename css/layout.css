@@ -3,7 +3,7 @@
             /* 顶栏高度就一条线：44px（原来 58px 是被 44px 的 logo 胶囊撑的，
                窗口按钮只有 30px 高 → 上下各留 14/15px 空白） */
             padding: 0;
-            height: 44px;
+            height: var(--header-h);
             border-bottom: 1px solid var(--border-color);
             background: var(--header-bg);
             position: sticky;
@@ -24,21 +24,9 @@
             height: 100%;
         }
 
-        .logo-area {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            background: rgba(255, 255, 255, 0.03);
-            padding: 2px 8px;
-            border-radius: 50px;
-            border: 1px solid var(--border-color);
-            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s;
-        }
+        .logo-area { display: flex; align-items: center; }
 
-        .logo-area:hover {
-            background: rgba(255, 255, 255, 0.08);
-            border-color: var(--primary);
-        }
+        
 
         .header-logo {
             height: 28px;
@@ -96,13 +84,7 @@
             margin-right: 8px;
         }
 
-        .logo-text-wrapper {
-            display: flex;
-            flex-direction: column;
-            background: rgba(255, 255, 255, 0.05);
-            padding: 1px 6px;
-            border-radius: 8px;
-        }
+        
 
         .logo {
             font-size: 1.1rem;
@@ -116,12 +98,7 @@
             color: var(--secondary);
         }
 
-        .company-tagline {
-            font-size: 0.62rem;
-            color: var(--gray);
-            margin-top: 0.05rem;
-            font-weight: 500;
-        }
+        
 
         .nav-controls {
             display: flex;
@@ -210,7 +187,7 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
-        }
+        ; font-size: .8rem; padding: .3rem .75rem}
 
         .db-analysis-btn:hover {
             opacity: 0.9;
@@ -1344,3 +1321,17 @@
             height: 100%;
             min-height: 0;
         }
+
+
+/* ★ ⋯ 面板（主题色唯一入口）：全宽度通用。开关 = body.mobile-more-open（唯一真相）。
+   顶栏是 sticky/fixed，天然是面板的包含块（top:100% 落到顶栏正下方）。 */
+.mobile-more-sheet { position: absolute; top: 100%; right: 8px; z-index: 2600; display: none;
+    min-width: 200px; max-width: calc(100vw - 16px); background: var(--card-bg, #fff);
+    border: 1px solid var(--border-color); border-radius: 12px; padding: 10px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .12); box-sizing: border-box; }
+body.mobile-more-open .mobile-more-sheet { display: block; }
+.mobile-more-sheet .global-theme-switcher { width: 100%; flex-wrap: wrap; box-sizing: border-box; }
+/* ⋯ 按钮本体：全宽度通用（不再只在手机出现） */
+.mobile-more-btn { display: inline-flex; align-items: center; justify-content: center;
+    width: 34px; height: 34px; border: 1px solid var(--border-color); border-radius: 8px;
+    background: transparent; font-size: 15px; line-height: 1; color: inherit; cursor: pointer; flex: 0 0 auto; }

@@ -175,3 +175,18 @@ if [ -z "$_stray" ]; then ok '无遗漏的单选 files[0]'; else bad "仍有单�
 echo
 if [ "$fail" -eq 0 ]; then echo "ALL_PASS ✅"; else echo "FAILED ($fail)"; fi
 exit "$fail"
+
+# ── 顶栏统一（2026-10-02）守卫 ──
+# 1) 顶栏高度唯一真源必须存在
+grep -q -- "--header-h" css/variables.css || { echo "FAIL: variables.css 缺 --header-h 单源"; exit 1; }
+# 2) window.css 不得再藏窗口键（缩窗不丢三键）
+! grep -q "@media" css/window.css || { echo "FAIL: window.css 出现媒体查询（窗口键被隐藏过）"; exit 1; }
+# 3) mobile.css 不得再有顶栏 46px 写死
+! grep -q "height: 46px" css/mobile.css || { echo "FAIL: mobile.css 顶栏高度写死 46px"; exit 1; }
+# 4) index.html 顶栏不得再有登录芯片槽/字标副标
+! grep -q "auth-chip-slot\|logo-text-wrapper\|company-tagline" index.html || { echo "FAIL: index.html 顶栏残留登录槽/字标/副标"; exit 1; }
+# 5) mobile.js 不得再搬 nav-controls（placeNavControls 已废除）
+! grep -q "placeNavControls" js/mobile.js || { echo "FAIL: mobile.js placeNavControls 复活"; exit 1; }
+# 6) auth.js 不得再写 --c4e-header-h
+! grep -q "c4e-header-h" js/auth.js || { echo "FAIL: auth.js 残留 --c4e-header-h"; exit 1; }
+echo "GUARD_HDR PASS"

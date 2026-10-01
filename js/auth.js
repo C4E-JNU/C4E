@@ -107,36 +107,14 @@
         return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    // ── 顶栏高度同步到 CSS 变量 ──
-    // 认证遮罩用 --c4e-header-h 从顶栏下方开始显示；顶栏高度可能因字号/全屏模式变化，
-    // 故用 JS 实测并写入变量（改布局也不会再出现"遮罩吃掉顶栏点击"的问题）。
-    function _syncHeaderHeight() {
-        try {
-            var h = document.querySelector('header');
-            if (!h) return;
-            var rect = h.getBoundingClientRect();
-            var px = Math.max(0, Math.round(rect.height || 0));
-            if (px > 0) {
-                document.documentElement.style.setProperty('--c4e-header-h', px + 'px');
-            }
-        } catch (e) { /* 忽略 */ }
-    }
-    window.syncHeaderHeight = _syncHeaderHeight;
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', _syncHeaderHeight);
-    } else {
-        setTimeout(_syncHeaderHeight, 0);
-    }
-    window.addEventListener('resize', _syncHeaderHeight);
-    setTimeout(_syncHeaderHeight, 400);
 
     // ── 登录/注册框 ──
     // closable=true（本地可选登录）：✕/点遮罩/Esc 可关闭；强制登录（云端）不可关闭
     // ⚠️ 遮罩必须避开顶栏：app.py/header 的 z-index 是 1000，遮罩是 4000；若遮罩铺满 inset:0
     //    会把顶栏（主题切换器/数据库按钮/登录芯片）整条吃掉点击 → 圆点"点不动"。
-    //    故：① 遮罩从顶栏下方开始（inset:var(--c4e-header-h,56px) 0 0 0）
+    //    故：① 遮罩从顶栏下方开始（inset:var(--header-h,44px) 0 0 0）
     //        ② 遮罩本身 pointer-events:none、只有卡片 auto（双保险，改顶栏高度也不会复发）
-    var OV_LAYER_STYLE = 'position:fixed;inset:var(--c4e-header-h,56px) 0 0 0;background:rgba(0,0,0,.45);' +
+    var OV_LAYER_STYLE = 'position:fixed;inset:var(--header-h,44px) 0 0 0;background:rgba(0,0,0,.45);' +
         'z-index:4000;display:flex;align-items:center;justify-content:center;pointer-events:none;';
     var OV_CARD_STYLE = 'pointer-events:auto;';
     function _openLogin(closable) {
@@ -188,7 +166,7 @@
                 _loginOpen = false;
                 // 关掉登录框后，顶栏必须留一个身份入口（否则页面上再无登录/用户管理入口）
                 try {
-                    var slot = document.getElementById('auth-chip-slot');
+                    var slot = document.getElementById('auth-side-row');
                     if (slot && !slot.children.length) {
                         if (!window.getAuthUser()) setAuth('guest', { username: 'guest', role: 'guest' });
                         _renderChip();
@@ -536,7 +514,7 @@
 
     function _renderChip() {
         var me = window.getAuthUser();
-        var slot = document.getElementById('auth-chip-slot');
+        var slot = document.getElementById('auth-side-row');
         if (!me || !slot) return;
         var isGuest = (me.username === 'guest');
         var info = _lvInfo(me);
@@ -640,7 +618,7 @@
                 // 兜底：弹了登录框（或请求失败）但顶栏没有任何身份入口时，
                 // 补一个游客芯片 —— 否则用户关掉登录框后页面上再无登录入口（点不到用户管理）
                 setTimeout(function () {
-                    var slot = document.getElementById('auth-chip-slot');
+                    var slot = document.getElementById('auth-side-row');
                     if (slot && !slot.children.length && !window.getAuthUser()) {
                         setAuth('guest', { username: 'guest', role: 'guest' });
                         _renderChip();

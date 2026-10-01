@@ -9,30 +9,14 @@
 .mobile-menu-btn { display: none; }
 
 /* 方案 A（2026-09-27）：手机端专用元素 —— 桌面端一律不显示（手机规则在下面 @media 里） */
-.mobile-chat-title, .mobile-more-btn, .mobile-more-sheet, .mobile-item-more, .empty-chat-cta { display: none !important; }
+/* 手机端专用元素 —— 非手机外壳一律不显示（⋯ 面板已全宽度通用，不在此列） */
+.mobile-chat-title, .mobile-menu-btn, .mobile-item-more, .empty-chat-cta { display: none !important; }
 
 @media (max-width: 768px) {
 
     /* ========== ① 顶栏：只留 汉堡 + 主题 + 数据库 + 登录（logo 去掉） ========== */
-    html:not(.shell-desktop) .nav-container{
-        padding: 0 8px !important;
-        min-height: 46px !important;
-        height: 46px !important;
-        display: flex !important;
-        flex-wrap: nowrap !important;
-        align-items: center !important;
-        justify-content: flex-start !important;   /* 汉堡贴左；控件组用 margin-left:auto 贴右 */
-        gap: 6px !important;
-        position: sticky !important;
-        top: 0 !important;
-        z-index: 2200 !important;
-        background: var(--card-bg, #fff) !important;
-        border-bottom: 1px solid var(--border, #eee) !important;
-        overflow: visible !important;
-        box-sizing: border-box !important;
-        width: 100% !important;
-        max-width: 100% !important;
-    }
+    /* ★ 顶栏统一后 @768 只剩窄边距/小间距；高度由 --header-h 单源供给（variables.css），不写死 */
+    html:not(.shell-desktop) .nav-container{ padding: 0 8px; gap: 6px; }
     /* 汉堡按钮 */
     html:not(.shell-desktop) .mobile-menu-btn{
         display: inline-flex !important;
@@ -45,82 +29,6 @@
         padding: 0; line-height: 1;
     }
     html:not(.shell-desktop) .mobile-menu-btn:active{ background: var(--hover, #f0f2f5); }
-    /* ⚠️ 手机上不要 C4EAI logo（用户要求），把整块藏掉，省下的空间给按钮 */
-    html:not(.shell-desktop) .logo-area{ display: none !important; }
-    /* 右侧控件组：不抢占、不换行、末尾贴右 */
-    html:not(.shell-desktop) .nav-controls{
-        flex: 0 0 auto !important;
-        display: flex !important;
-        flex-wrap: nowrap !important;
-        align-items: center !important;
-        justify-content: flex-end !important;
-        gap: 6px !important;
-        margin: 0 0 0 auto !important;
-        max-width: none !important;
-        min-width: 0 !important;
-        overflow: visible !important;
-    }
-    /* 主题圆点：手机上保留但缩小（用户要求可用）。不换行、定宽，避免疯长 */
-    html:not(.shell-desktop) .header-theme-switcher, html:not(.shell-desktop) .global-theme-switcher{
-        display: flex !important;
-        flex-wrap: wrap !important;
-        align-items: center !important;
-        align-content: center !important;
-        justify-content: flex-start !important;
-        gap: 3px !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        width: 92px !important;
-        min-width: 92px !important;
-        max-width: 92px !important;
-        height: 30px !important;
-        max-height: 30px !important;
-        flex: 0 0 auto !important;
-        overflow: hidden !important;
-    }
-    html:not(.shell-desktop) .header-theme-switcher .theme-dot, html:not(.shell-desktop) .global-theme-switcher .theme-dot{
-        width: 12px !important;
-        height: 12px !important;
-        min-width: 12px !important;
-        max-width: 12px !important;
-        margin: 0 !important;
-        border-width: 1px !important;
-        flex: 0 0 auto !important;
-    }
-    /* 数据库按钮：定宽 + 缩小 + 不换行 */
-    html:not(.shell-desktop) .nav-controls .db-analysis-btn{
-        font-size: .68rem !important;
-        padding: .3rem .45rem !important;
-        margin: 0 !important;
-        white-space: nowrap !important;
-        flex: 0 0 auto !important;
-        width: auto !important;
-        max-width: 88px !important;
-        border-radius: 14px !important;
-        min-height: 28px !important;
-        height: 28px !important;
-        line-height: 1 !important;
-        overflow: hidden !important;
-        text-overflow: ellipsis !important;
-    }
-    /* 身份芯片：定宽不消失 */
-    html:not(.shell-desktop) #auth-chip-slot{
-        flex: 0 0 auto !important;
-        display: inline-flex !important;
-        align-items: center !important;
-        min-width: 0 !important;
-    }
-    html:not(.shell-desktop) #auth-user-chip{
-        font-size: .68rem !important;
-        padding: .26rem .45rem !important;
-        white-space: nowrap !important;
-        min-height: 28px !important;
-        height: 28px !important;
-        line-height: 1.2 !important;
-        max-width: 92px !important;
-        overflow: hidden !important;
-        text-overflow: ellipsis !important;
-    }
 
     /* ========== ② 主体：去掉长滚动，让对话区占满 ========== */
     html:not(.shell-desktop) html, html:not(.shell-desktop) body{
@@ -557,20 +465,18 @@
      *   （input.css:38/56）——手机上**没有 hover**，于是 ☰ / 标题 / ⋯ 永远点不到。
      *   手机改为常驻，并把对话区整体下移一个顶栏高度。 */
     html:not(.shell-desktop) body.full-screen-mode header{
-        transform: none !important;
-        height: 46px !important;              /* 与下面 chat-section 的下移量一致 */
-        overflow: visible !important;
-        position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important;
-        z-index: 3300 !important;          /* 高于遮罩(2900)与抽屉(3200)：抽屉开着时 ✕ 也点得到 */
+        transform: none;              /* 手机无 hover：顶栏常驻（特异度高于 input.css 的 translateY，无需 !important） */
+        overflow: visible;
+        z-index: 3300;               /* 高于遮罩(2900)与抽屉(3200) */
     }
-    html:not(.shell-desktop) body.full-screen-mode header::after{ display: none !important; }   /* 去掉桌面隐形热区 */
+    html:not(.shell-desktop) body.full-screen-mode header::after{ display: none; }   /* 去掉桌面悬停热区 */
     /* 全屏时给顶栏让位：**不要**用 top/height 位移（.chat-section 是 relative，
      *   top 只是视觉位移、不减流内高度 → 整块往下顶 46px，底部输入区被顶出屏幕、
      *   #send-btn 跑到 y=845（视口 844）点不到）。改成内边距 + border-box，
      *   让顶栏浮在它的上方空白处，输入区正好落在屏幕底部。 */
     html:not(.shell-desktop) body.full-screen-mode .chat-section{
         top: 0 !important;
-        padding-top: 46px !important;
+        padding-top: var(--header-h) !important;
         box-sizing: border-box !important;
     }
     /* 条目：标题可压缩、操作换到第二行，⋯ 常驻第一行右端（原来标题没 min-width:0 会挤掉 ⋯） */
@@ -592,58 +498,6 @@
         color: var(--dark, #212529) !important;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    html:not(.shell-desktop) .mobile-more-btn{
-        display: inline-flex !important; align-items: center; justify-content: center;
-        width: 44px !important; height: 44px !important; flex: 0 0 auto;
-        border: none; background: none; border-radius: 10px; cursor: pointer;
-        font-size: 1.4rem; line-height: 1; color: var(--text-secondary, #555);
-    }
-    html:not(.shell-desktop) .mobile-more-btn:active{ background: var(--hover, #f0f2f5); }
-    html:not(.shell-desktop) .mobile-more-sheet{
-        display: none;
-        position: absolute; top: 100%; right: 8px; z-index: 2600;
-        min-width: 240px; max-width: calc(100vw - 16px);
-        background: var(--card-bg, #fff);
-        border: 1px solid var(--border, #eee);
-        border-radius: 14px; padding: 12px;
-        box-shadow: 0 10px 30px rgba(20, 30, 80, .16);
-        box-sizing: border-box;
-    }
-    html:not(.shell-desktop) body.mobile-more-open .mobile-more-sheet{ display: block !important; }
-    html:not(.shell-desktop) .mobile-more-sheet{
-        max-height: 72vh !important;
-        overflow-y: auto !important;
-    }
-    /* 搬进来的那组控件：换行排布，主题圆点保持可点 */
-    html:not(.shell-desktop) .mobile-more-sheet .nav-controls{
-        display: flex !important; flex-wrap: wrap !important;
-        gap: 10px 12px !important; align-items: center !important;
-        margin: 0 !important; padding: 0 !important;
-        width: auto !important; max-width: none !important;
-    }
-    html:not(.shell-desktop) .mobile-more-sheet .header-theme-switcher{ margin: 0 !important; padding: 0 !important; flex-wrap: wrap !important; gap: 8px !important; }
-    /* 面板里的主题切换：容器原来被钉成 92×30 + overflow:hidden（那是给桌面顶栏用的），
-     *  色点还被 max-width:12px 卡住 → 手机上既挤成小条、又被裁掉，点不到。
-     *  这里整块放开：容器自适应、色点 36px 真实可点。 */
-    html:not(.shell-desktop) .mobile-more-sheet .global-theme-switcher, html:not(.shell-desktop) .mobile-more-sheet .header-theme-switcher{
-        width: auto !important;
-        min-width: 0 !important;
-        max-width: 100% !important;
-        height: auto !important;
-        max-height: none !important;
-        overflow: visible !important;
-        flex-wrap: wrap !important;
-        gap: 8px !important;
-        margin: 0 !important;
-    }
-    html:not(.shell-desktop) .mobile-more-sheet .theme-dot{
-        flex: 0 0 auto !important;
-        width: 18px !important;      /* 用户 2026-09-28：原 36px 太大，减半（面积 1/4） */
-        height: 18px !important;
-        min-width: 18px !important;
-        max-width: 18px !important;
-    }
-    html:not(.shell-desktop) .mobile-more-sheet .header-theme-switcher{ gap: 6px !important; }
     /* 消息区：顶部呼吸留白 + 底部避开小e（原来首条贴 y=0、小e 压正文） */
     html:not(.shell-desktop) #messages-container{ padding-top: 12px !important; padding-bottom: 96px !important; }
     /* 正文：手机端不低于 15px（对话字号默认值 0.75rem=12px 在手机上太小） */
@@ -697,9 +551,6 @@
 
 /* ========== 超窄屏（≤380px）进一步压缩 ========== */
 @media (max-width: 380px) {
-    html:not(.shell-desktop) .nav-controls .db-analysis-btn span.btn-text{ display: none; }
-    html:not(.shell-desktop) .nav-controls .db-analysis-btn{ padding: .3rem .45rem !important; }
-    html:not(.shell-desktop) #auth-user-chip{ font-size: .68rem !important; }
     html:not(.shell-desktop) .chat-sidebar{ width: 90vw !important; }
 }
 

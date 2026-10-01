@@ -14,6 +14,44 @@
     //   document.body 下（adoptSidebar），一搬走，css/layout.css 里那条
     //     .chat-sidebar:not(.collapsed) ~ .sidebar-resizer { display: block }
     //   的兄弟关系就永久失效 —— 拖动键从此再也不出现（用户反馈的"拖动键没能正常化"）。
+    // ⋯ 面板（主题色唯一入口）：全宽度通用的开关。放最前 —— 桌面外壳里同样可用。
+    (function bindMoreUniversal(){
+        var btn = document.getElementById('mobile-more-btn');
+        if (btn && !btn.dataset.bound) {
+            btn.dataset.bound = '1';
+            btn.addEventListener('click', function(e){
+                e.preventDefault(); e.stopPropagation();
+                document.body.classList.toggle('mobile-more-open');
+            });
+        }
+        document.addEventListener('pointerdown', function(e){
+            if (!document.body.classList.contains('mobile-more-open')) return;
+            var t = e.target;
+            if (t.closest && (t.closest('#mobile-more-sheet') || t.closest('#mobile-more-btn'))) return;
+            document.body.classList.remove('mobile-more-open');
+        }, true);
+        document.addEventListener('keydown', function(e){
+            if (e.key === 'Escape') document.body.classList.remove('mobile-more-open');
+        });
+    
+        // 顶栏溢出阶梯（全宽度通用）：位置不够时 Shared Wiki 只留 🗄️ 图标；回升后自动恢复
+        (function headerOverflowLadder(){
+            var nav = document.querySelector('.nav-container');
+            var btn = document.getElementById('db-analysis-btn');
+            var txt = btn && btn.querySelector('.btn-text');
+            if (!nav || !btn || !txt || !('ResizeObserver' in window)) return;
+            var applying = false;
+            var ro = new ResizeObserver(function(){
+                if (applying) return;
+                applying = true;
+                txt.style.display = '';                       // 先恢复再量（防单向塌陷）
+                if (nav.scrollWidth > nav.clientWidth + 1) txt.style.display = 'none';
+                applying = false;
+            });
+            ro.observe(nav);
+        })();
+    })();
+
     if (document.documentElement.classList.contains('shell-desktop')) return;
 
     var MQ = '(max-width: 768px)';
@@ -177,19 +215,7 @@
     /** 把桌面顶栏那组控件（主题圆点 / 数据库 / 登录）整块**搬进** ⋯ 面板；
      *  回到桌面宽度再搬回去。移动 DOM 而不是复制 —— 事件监听、auth.js 渲染的
      *  登录芯片都在原位照旧工作（用户偏好：复用现成机制，不新建平行的一套）。 */
-    function placeNavControls() {
-        var sheet = document.getElementById('mobile-more-sheet');
-        var container = document.querySelector('.nav-container');
-        if (!sheet || !container) return;
-        var nav = container.querySelector(':scope > .nav-controls') || sheet.querySelector(':scope > .nav-controls');
-        if (!nav) return;
-        if (isMobile()) {
-            if (nav.parentElement !== sheet) sheet.appendChild(nav);
-        } else {
-            if (nav.parentElement !== container) container.insertBefore(nav, sheet);
-            closeSheet();
-        }
-    }
+    
 
     /** 抽屉搜索框：手机端占位文字太长会被截断（"搜索（点击C4E图标可以收起该区域）"），
      *  这里换成短的；回到桌面宽度再还原。 */
@@ -201,36 +227,16 @@
     }
 
     function bindMore() {
-        var btn = document.getElementById('mobile-more-btn');
-        if (btn && !btn.dataset.bound) {
-            btn.dataset.bound = '1';
-            btn.addEventListener('click', function (e) {
-                e.preventDefault();
-                e.stopPropagation();
-                if (sheetOpen()) closeSheet(); else openSheet();
-            });
-        }
-        // 点面板外 → 收起
-        document.addEventListener('pointerdown', function (e) {
-            if (!sheetOpen()) return;
-            var t = e.target;
-            if (t.closest && (t.closest('#mobile-more-sheet') || t.closest('#mobile-more-btn'))) return;
-            closeSheet();
-        }, true);
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && sheetOpen()) closeSheet();
-        });
-        try {
-            var mql2 = window.matchMedia(MQ);
-            var onResize = function () { placeNavControls(); syncSearchPlaceholder(); };
-            if (mql2.addEventListener) mql2.addEventListener('change', onResize);
-            else if (mql2.addListener) mql2.addListener(onResize);
-        } catch (e) {}
-        window.addEventListener('orientationchange', function () { closeSheet(); });
-        placeNavControls();
         syncSearchPlaceholder();
-        syncTitle();
+        if (window.matchMedia) {
+            var mql = window.matchMedia('(max-width: 768px)');
+            var onResize = function() { syncSearchPlaceholder(); };
+            if (mql.addEventListener) mql.addEventListener('change', onResize);
+            else if (mql.addListener) mql.addListener(onResize);
+        }
+        window.addEventListener('orientationchange', syncSearchPlaceholder);
     }
+
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', bind);
