@@ -225,6 +225,14 @@ class _WinAPI:
         u.GetCursorPos(ctypes.byref(pt))
         u.SetWindowPos(h, 0, pt.x - off[0], pt.y - off[1], 0, 0, 0x0001 | 0x0004 | 0x0010)
 
+    def is_minimized(self):
+        """窗口是否处于最小化。给前端用：最小化时 WebView2 报的视口尺寸是假的（157x25），
+        前端据此做布局判断会把侧栏错误地收起、还会命中手机断点。"""
+        h = _win_holder.get("h")
+        if not h:
+            return False
+        return bool(ctypes.windll.user32.IsIconic(h))
+
     def end_drag(self):
         """松开鼠标：光标贴在屏幕左/右边缘 → 分成左/右半屏；贴在顶边 → 最大化。
 

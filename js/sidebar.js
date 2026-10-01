@@ -9,6 +9,7 @@
         var _SB_FOCUS_SLACK = 24;              // 拖过分界多少像素才算"我要全屏看对话管理"（防边界抖）
 
         var _sbFocusBack = 0;                  // 进专注前的侧栏宽度
+        var _sbAutoBack = 0;                   // 被自动收起前的侧栏宽度
         var _sbFocusPending = null;            // 专注期间点过、但没渲染的对话（退出时补）
 
         function _sbEl() { return document.getElementById('chat-sidebar'); }
@@ -40,20 +41,32 @@
             try { g = parseFloat(getComputedStyle(sec).columnGap) || 0; } catch (e) {}
             return (sr.right - cr.left) + g / 2;
         }
-        // 定位分隔条：收起时隐藏；区域还没布局出来时也隐藏（否则会被丢到 0 或负坐标，
-        // 看起来就是"拖动键消失了" —— 用户报的那个 bug）
+        // 定位分隔条：只写 left。
+        // ★ 显示与否一律交给 CSS（唯一真相）：
+        //     .chat-sidebar:not(.collapsed) ~ .sidebar-resizer { display: block }
+        //     手机断点 .sidebar-resizer { display: none !important }
+        //   JS 再写 inline display 就会有残留：写死过 none 之后，CSS 的 block 永远盖不回来 ——
+        //   "拖动键有时会消失"就是这么来的（inline 优先级高于样式表，除 !important 外）。
         function _sbPlaceDivider() {
             var rs = _sbResizer(), sb = _sbEl(), sec = _sbSection();
-            if (!rs || !sb || !sec) return;
-            if (sb.classList.contains('collapsed') || !sec.clientWidth ||
-                !sb.getBoundingClientRect().width) {
-                rs.style.display = 'none';
-                return;
-            }
+            if (!rs || !sb || !sec || !sec.clientWidth) return;   // 区域没显示：什么都不用做
             var x = _sbDividerX();
-            if (!isFinite(x) || x <= 0) { rs.style.display = 'none'; return; }
-            rs.style.display = 'block';
+            if (!isFinite(x) || x <= 0) return;
             rs.style.left = Math.min(x, sec.clientWidth) + 'px';
+        }
+
+        // 窗口是不是最小化着：最小化时 WebView2 报的视口是假的（本机实测 157x25），
+        // 据此做布局决定是错的（会把侧栏自动收起、还会命中手机断点）。
+        var _sbMinimized = false;
+        function _sbSyncMinimized() {
+            try {
+                if (!window.pywebview || !pywebview.api || !pywebview.api.is_minimized) return;
+                pywebview.api.is_minimized().then(function (v) {
+                    if (v === _sbMinimized) return;
+                    _sbMinimized = !!v;
+                    if (!_sbMinimized) _sbFitToWindow();   // 恢复回来，按真尺寸重新贴合一次
+                }).catch(function () {});
+            } catch (e) {}
         }
 
         // 展开 / 收起（不再有 50% 全屏档）
@@ -120,10 +133,14 @@
         // 窗口重新变宽 → 自动弹回来（只弹"我自动收的"那次，用户自己收的不动）。
         function _sbFitToWindow() {
             var sb = _sbEl(), sec = _sbSection();
+            _sbSyncMinimized();                            // 顺手问一次（异步返回后若已恢复会再调一次本函数）
+            if (_sbMinimized) return;                      // 最小化中：尺寸是假的，别做布局决定
             if (!sb || !sec || !sec.clientWidth) return;   // 落地页/未布局：等下一次尺寸变化
             if (!_sbInFocus()) {
                 if (sec.clientWidth < _SB_MIN + _CHAT_MIN) {
                     if (!sb.classList.contains('collapsed')) {
+                        _sbAutoBack = parseFloat(sb.style.width) ||
+                                      sb.getBoundingClientRect().width || _sbSavedWidth();
                         sb.dataset.autoCollapsed = '1';
                         sb.classList.add('collapsed');
                         sb.style.width = '';
@@ -131,7 +148,11 @@
                 } else if (sb.dataset.autoCollapsed === '1' && sb.dataset.userCollapsed !== '1') {
                     delete sb.dataset.autoCollapsed;
                     sb.classList.remove('collapsed');
-                    sb.style.width = Math.min(_sbSavedWidth(), _sbMaxWidth()) + 'px';
+                    // 回到"被自动收起之前"的那个宽度（不是上一次持久化的值 —— 否则窗口一缩一放，
+                    // 侧栏宽度就自己跳成别的数）
+                    sb.style.width = Math.min(_sbAutoBack || _sbSavedWidth(), _sbMaxWidth()) + 'px';
+                    _sbStoreWidth(parseFloat(sb.style.width) || _SB_DEFAULT);
+                    _sbAutoBack = 0;
                 }
                 if (!sb.classList.contains('collapsed')) {
                     var mw = _sbMaxWidth(), cur = parseFloat(sb.style.width) || _sbSavedWidth();
@@ -204,6 +225,7 @@
                 window.addEventListener('resize', _sbFitToWindow);
                 setTimeout(_sbFitToWindow, 60);
                 setTimeout(_sbFitToWindow, 300);
+                _sbSyncMinimized();                        // 启动先问一次，别等第一次 resize
             }
         })();
 

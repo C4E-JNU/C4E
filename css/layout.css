@@ -1324,9 +1324,10 @@
            桌面外壳固定保持「左侧栏 + 右对话」左右排布，并让高度跟着窗口走。
            选择器带 html.shell-desktop 前缀，优先级高于媒体查询里的裸类名。 */
         html.shell-desktop .chat-section {
+            /* 只抵消 @media (max-width:1024px) 的竖向堆叠。
+               高度不写：全屏态由 body.full-screen-mode .chat-section{height:100vh} 管（input.css 在后面，优先级更高），
+               非全屏态整个 .chat-section 是 display:none —— 写了也是死代码。 */
             flex-direction: row;
-            height: calc(100vh - 44px - 24px);
-            min-height: 300px;
         }
 
         html.shell-desktop .chat-sidebar {
