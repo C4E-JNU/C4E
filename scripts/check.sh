@@ -30,7 +30,7 @@ rm -f "$CHK"
 echo "== 关键不变量 =="
 chk() { if grep -qF "$2" "$1" 2>/dev/null; then ok "$3"; else bad "$3"; fi; }
 # 手机端：隐藏侧栏箭头（与抽屉行为冲突）
-chk css/mobile.css 'sidebar-toggle-btn { display: none' 'mobile.css 隐藏 sidebar-toggle-btn'
+chk css/mobile.css '.sidebar-toggle-btn, html:not(.shell-desktop) #sidebar-toggle-btn{ display: none !important; }' 'mobile.css 隐藏 sidebar-toggle-btn（手机断点；html:not(.shell-desktop) = 桌面外壳不吃手机断点）'
 # 小e 手机端可拖：touch-action:none 是必要条件
 chk css/xiaoe.css 'touch-action: none' 'xiaoe.css touch-action:none'
 chk js/xiaoe.js  'pointercancel'        'xiaoe.js pointercancel 兜底'
