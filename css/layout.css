@@ -104,7 +104,7 @@
             display: flex;
             gap: 1rem;
             align-items: center;
-        }
+        ; margin-left: auto}
 
         /* 文档和数据库上传按钮组 */
         .upload-buttons {

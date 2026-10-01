@@ -40,7 +40,7 @@
     <!-- 本地样式文件 -->
     <link rel="stylesheet" href="css/variables.css?v=6">
     <link rel="stylesheet" href="css/reset.css?v=4">
-    <link rel="stylesheet" href="css/layout.css?v=28">
+    <link rel="stylesheet" href="css/layout.css?v=29">
     <link rel="stylesheet" href="css/sidebar.css?v=11">
     <link rel="stylesheet" href="css/messages.css?v=2">
     <link rel="stylesheet" href="css/input.css?v=9">
@@ -94,15 +94,16 @@
                 </button>
                 <!-- 登录/账号芯片插槽（auth.js 渲染） -->
 
+                
+            </div>
+            <!-- 手机端「⋯」：把桌面顶栏那组控件（主题/数据库/登录）整块搬进来（见 js/mobile.js） -->
+            <button class="mobile-more-btn" id="mobile-more-btn" aria-label="更多" title="更多">⋯</button>
                 <!-- 桌面版窗口按钮：和上面那排控件同一条顶栏（浏览器打开时整块隐藏，见 js/window_controls.js） -->
                 <div class="win-controls" id="win-controls">
                     <button class="win-btn" id="win-min" type="button" title="最小化" aria-label="最小化"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5.5h10" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
                     <button class="win-btn" id="win-max" type="button" title="最大化" aria-label="最大化"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
                     <button class="win-btn" id="win-close" type="button" title="关闭" aria-label="关闭"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0.5 0.5l9 9M9.5 0.5l-9 9" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
                 </div>
-            </div>
-            <!-- 手机端「⋯」：把桌面顶栏那组控件（主题/数据库/登录）整块搬进来（见 js/mobile.js） -->
-            <button class="mobile-more-btn" id="mobile-more-btn" aria-label="更多" title="更多">⋯</button>
             <div class="mobile-more-sheet" id="mobile-more-sheet"><div class="global-theme-switcher header-theme-switcher">
                     <div class="theme-dot active" data-theme="default" title="经典蓝" onclick="setGlobalTheme('default')">
                     </div>
