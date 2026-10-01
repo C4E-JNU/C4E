@@ -1330,9 +1330,11 @@
         }
 
         html.shell-desktop .chat-sidebar {
-            width: auto;
-            flex: 0 1 300px;
-            min-width: 176px;
+            /* ★ 这里只抵消 @media (max-width:1024px) 的 height:300px。
+               绝对不要写 width / flex / min-width —— 会连坐两件事：
+                 · 拖拽宽度写的是 inline style.width，而 flex-basis 会盖过 width → 分隔拖条失效
+                 · 「收回侧栏」靠 .chat-sidebar.collapsed{width:0;padding:0} → min-width 锁死 → 收不回去
+               宽度与折叠完全交还给应用自己的规则（js/sidebar.js + input.css）。 */
             height: auto;
             max-height: 100%;
         }
