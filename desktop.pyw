@@ -92,11 +92,16 @@ def backend_alive() -> bool:
         return False
 
 
+# ★ CREATE_NO_WINDOW：不加的话每调一次 netstat/tasklist 就闪一个黑窗。启动轮询里
+#   port_owner() 是每 0.3 秒一次的 → 用户看到的就是"cmd 一直闪"（实测就是这个原因）。
+_NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0
+
+
 def port_owner(port: int) -> int:
     """占着这个端口的进程 PID（0 = 没人占）。用来分清"端口被别的程序占了"和"后端自己没起来"。"""
     try:
         out = subprocess.run(["netstat", "-ano", "-p", "TCP"], capture_output=True,
-                             text=True, errors="replace").stdout
+                             text=True, errors="replace", creationflags=_NO_WINDOW).stdout
         for line in out.splitlines():
             p = line.split()
             if len(p) >= 5 and p[3] == "LISTENING" and p[1].endswith(":%d" % port):
@@ -438,7 +443,10 @@ def _add_resize_frame() -> None:
             def cb(h, _):
                 p = wintypes.DWORD()
                 u.GetWindowThreadProcessId(h, ctypes.byref(p))
-                if p.value == pid and u.IsWindowVisible(h):
+                # ★ 不能要求窗口"可见"：窗口是 hidden=True 建的，chrome 上完才 show()。
+                #   以前这里是 pid and IsWindowVisible → 隐藏窗永远找不到 → 边框上不去、
+                #   show() 也不会被调用，结果窗口根本不显示。
+                if p.value == pid:
                     n = ctypes.create_unicode_buffer(256)
                     u.GetWindowTextW(h, n, 256)
                     if n.value == "C4EAI":
@@ -465,6 +473,16 @@ def _add_resize_frame() -> None:
         _set_window_icon(h)
         _set_frame_color(h)
         _fit_on_screen(h)
+        # 强制按新样式重算边框并立即重绘，然后才让窗口显示 —— 首帧就是最终样子
+        u.SetWindowPos(h, 0, 0, 0, 0, 0, SWP | 0x0010)          # + SWP_NOACTIVATE
+        u.RedrawWindow(h, None, None, 0x0001 | 0x0080 | 0x0100 | 0x0400)   # FRAME|UPDATENOW|ALLCHILDREN
+        w = _win_holder.get("w")
+        if w:
+            w.show()
+            # ★ pywebview 只在"窗口可见"时注入 JS 桥（window.pywebview）—— 隐藏建窗的话
+            #   桥永远不注入，窗口按钮/拖动全哑。所以 show() 之后重载一次页面，
+            #   让页面在可见状态下重新加载 → 桥注入。代价是启动时多一次页面加载。
+            w.load_url(URL)
         log("已加回可调整边框（四边一样细 + 圆角，四边/四角可拖拽改大小）")
     except Exception:
         log("加窗口边框失败：\n" + traceback.format_exc())
@@ -533,8 +551,11 @@ def main() -> None:
     # 最小尺寸要放得进 720p 屏的可用区，别让窗口只能开到屏幕外面去
     _w, _h = _win_size()
     # frameless：去掉系统那条白色标题栏 —— 顶栏就是应用自己的 header（logo/主题/数据库/窗口按钮同一条）
+    # ★ hidden=True：窗口先不显示 —— 边框/图标/颜色这些 chrome 是窗口出现之后才改的，
+    #   先亮出来的话首帧带着那条"标题栏高度的粗条"，要等用户操作触发重绘才消失。
+    #   现在流程改成：建隐藏窗 → 上 chrome → 强制重算边框 → show()。
     win = webview.create_window("C4EAI", URL, width=_w, height=_h, min_size=(900, 520),
-                                frameless=True, js_api=_WinAPI())
+                                frameless=True, hidden=True, js_api=_WinAPI())
     _win_holder["w"] = win
     kw = {"private_mode": False, "storage_path": PROFILE_DIR}
     # 图标不走 pywebview 的 icon= —— Windows 后端靠 Pillow 读 ico，没装 Pillow 就静默跳过。
