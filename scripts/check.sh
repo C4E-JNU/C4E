@@ -196,6 +196,7 @@ grep -q "reasoning-rail-btn" index.html || { echo "FAIL: 思考收起浮动键�
 grep -q "reasoning-rail-btn" css/messages.css || { echo "FAIL: 浮动键样式缺失"; exit 1; }
 ! grep -rq --exclude="*.bak*" "agent-reasoning-toggle" index.html js/ css/ || { echo "FAIL: 旧的顶部内联收起键复活（已按方案 A 移除）"; exit 1; }
 grep -q "updateReasoningRail" js/messages.js js/ui.js js/graph_rag.js || { echo "FAIL: 浮动键状态同步缺失"; exit 1; }
+grep -q "reasoningRailVisible" js/messages.js || { echo "FAIL: 浮动键丢了「屏幕上有没有思考」的视口判据"; exit 1; }
 [ $(grep -l "^\.settings-panel\|^\.settings-nav\|^\.settings-pane" css/*.css | grep -v "css/settings.css" | wc -l) -eq 0 ] || { echo "FAIL: 设置样式散落在 settings.css 之外"; exit 1; }
 ! grep -q "agent-config-panel" index.html || { echo "FAIL: 智能体独立面板复活"; exit 1; }
 ! grep -q "settings-content" index.html || { echo "FAIL: 旧设置内容区残留"; exit 1; }

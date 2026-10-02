@@ -1306,27 +1306,48 @@ document.addEventListener('click', function (e) {
 });
 
 // ==================== 对话区右侧「收起思考」浮动键 ====================
-// 控件本体不在消息里（否则大片思考铺满屏幕时会压正文/被滚走）：
-// 它钉在对话区右侧留白，垂直居中；没有思考块时自己隐藏。
+// 判据取客观事实：DOM 里存在「未收起」的思考块，且它与消息区可视范围相交 ——
+// 也就是"此刻屏幕上真的有一片思考"，键才出现；全部收起、或思考块被滚出视野，就隐藏。
+// 只看"对话里有没有思考块"是不够的（收起后屏幕上只剩一行提示，键却还挂着，用户 2026-10-02 指出）。
+function reasoningRailVisible() {
+    var mc = document.getElementById('messages-container');
+    if (!mc) return false;
+    var vr = mc.getBoundingClientRect();
+    var blocks = mc.querySelectorAll('.agent-reasoning-block:not(.collapsed)');
+    for (var i = 0; i < blocks.length; i++) {
+        var r = blocks[i].getBoundingClientRect();
+        if (r.height > 0 && r.bottom > vr.top && r.top < vr.bottom) return true;   // 与可视范围相交
+    }
+    return false;
+}
+
 function updateReasoningRail() {
     var btn = document.getElementById('reasoning-rail-btn');
     if (!btn) return;
-    var blocks = document.querySelectorAll('#messages-container .agent-reasoning-block');
-    if (!blocks.length) { btn.hidden = true; return; }
-    var anyOpen = Array.prototype.some.call(blocks, function (b) { return !b.classList.contains('collapsed'); });
-    btn.hidden = false;
-    btn.querySelector('.rrb-label').textContent = anyOpen ? '收起思考' : '展开思考';
-    btn.title = anyOpen ? '收起智能体推理' : '展开智能体推理';
+    btn.hidden = !reasoningRailVisible();
 }
+
 window.updateReasoningRail = updateReasoningRail;
 
 (function () {
     var btn = document.getElementById('reasoning-rail-btn');
-    if (!btn) return;
+    var mc = document.getElementById('messages-container');
+    if (!btn || !mc) return;
+
+    // 点一下 = 把屏幕上的思考全部收起（收起后键自己消失；单条的展开用消息里那行提示）
     btn.addEventListener('click', function () {
-        var blocks = document.querySelectorAll('#messages-container .agent-reasoning-block');
-        var anyOpen = Array.prototype.some.call(blocks, function (b) { return !b.classList.contains('collapsed'); });
-        Array.prototype.forEach.call(blocks, function (b) { b.classList.toggle('collapsed', anyOpen); });
+        var blocks = mc.querySelectorAll('.agent-reasoning-block:not(.collapsed)');
+        Array.prototype.forEach.call(blocks, function (b) { b.classList.add('collapsed'); });
         updateReasoningRail();
     });
+
+    // 滚动/改窗口大小都会改变"屏幕上有没有思考"，跟着重判（rAF 节流，一次事件只算一帧）
+    var queued = false;
+    function onMove() {
+        if (queued) return;
+        queued = true;
+        requestAnimationFrame(function () { queued = false; updateReasoningRail(); });
+    }
+    mc.addEventListener('scroll', onMove, { passive: true });
+    window.addEventListener('resize', onMove);
 })();
