@@ -184,9 +184,10 @@
         min-width: 0 !important;
         font-size: 16px !important;       /* ≥16px 防止 iOS/安卓自动放大 */
         max-height: 26vh !important;
-        padding: 8px 6px !important;
-        min-height: 34px !important;
-        height: 34px !important;          /* 覆盖桌面的 24px 定高，避免出现缝隙 */
+        padding: 7px 6px !important;
+        /* ★ 定高会裁字：34px - 上下 padding 16 = 内容 18px，而 16px 字 ×1.4 需要 22px */
+        min-height: 38px !important;
+        height: auto !important;
         max-height: 26vh !important;
         line-height: 1.4 !important;
         box-sizing: border-box !important;

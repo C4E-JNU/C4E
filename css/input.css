@@ -611,18 +611,21 @@
             width: 100%;
             border: none;
             background: transparent;
-            padding: 8px 4px;
+            padding: 4px 4px;                /* 上下各自留白，别把行高吃掉 */
             font-size: 0.95rem;
             font-family: inherit;
             resize: none;
             outline: none;
             max-height: 120px;
             line-height: 1.5;
-            min-height: 24px;
-            height: 24px;
+            min-height: 21px;                 /* = 行高：一行字完整可见 */
+            height: auto;                     /* 定高 24px 会把字裁掉（内容区只剩 8px）→ 交回内容决定 */
+            overflow-y: auto;
+            scrollbar-width: none;            /* 滚动条不占位、也看不见（内容超 120px 仍可滚） */
             color: var(--text, #333);
-            /* Init height */
         }
+
+        .modern-input::-webkit-scrollbar { width: 0; display: none; }
 
         .modern-input::placeholder {
             color: var(--gray);
