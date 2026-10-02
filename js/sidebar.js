@@ -8,8 +8,9 @@
         var _CHAT_MIN = 480;                   // 对话区最小可呼吸宽度（= variables.css --chat-min；低于它侧栏让位，宽度驱动）
         var _SB_FOCUS_SLACK = 24;              // 拖过分界多少像素才算"我要全屏看对话管理"（防边界抖）
 
-        var _sbFocusBack = 0;                  // 进专注前的侧栏宽度
-        var _sbAutoBack = 0;                   // 被自动收起前的侧栏宽度
+        // ★ 宽度只有两个来源：用户意图（localStorage 存档）＋ 客观上限（_sbMaxWidth）。
+        //   不再各存一份"进专注前 / 被自动收起前"的宽度 —— 那是从渲染结果量出来的数：
+        //   最小化瞬间量到的抽屉宽（82vw = 129px）曾被当成"用户宽度"写回，侧栏就永久压成了 129px。
         var _sbFocusPending = null;            // 专注期间点过、但没渲染的对话（退出时补）
 
         function _sbEl() { return document.getElementById('chat-sidebar'); }
@@ -37,6 +38,22 @@
         function _sbMaxWidth() {
             var sec = _sbSection();
             return Math.max(_SB_MIN + 1, (sec ? sec.clientWidth : 1200) - _CHAT_MIN);
+        }
+        // 当前 --sb-w 的数值（读声明值，不做布局测量 —— 测量会撞上动画中间值，正是老 bug 的来源）
+        function _sbVarW() {
+            try { return Math.round(parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sb-w')) || 0); }
+            catch (e) { return 0; }
+        }
+        // ★ 贴合窗口的唯一入口：真源 = min(用户意图, 客观上限)。
+        //   展开/退出专注/窗口变化/启动 全走这一条；收起态不回写（宽度归零是 CSS 的事）。
+        function _sbApplyWidth() {
+            var sb = _sbEl(), sec = _sbSection();
+            if (!sb || !sec || !sec.clientWidth) return;          // 未布局（落地页 display:none）不裁决
+            if (sb.classList.contains('collapsed')) return;       // 收起态由 CSS 归零
+            var rs = _sbResizer();
+            if (rs && rs.classList.contains('rs-active')) return; // 拖动进行中：宽度由指针决定，别抢
+            var want = Math.min(_sbSavedWidth(), _sbMaxWidth());
+            if (want !== _sbVarW()) _sbSetW(want);
         }
         // 分隔条应处的 x（相对 chat-section 左边）——自然留白的中点
         function _sbDividerX() {
@@ -96,11 +113,10 @@
             var sb = _sbEl(), sec = _sbSection(), btn = document.getElementById('sidebar-toggle-btn');
             if (!sb || !sec || !btn) return;
             if (_sbInFocus()) { _sbExitFocus(true); return; }
-            btn.classList.remove('full');
             if (sb.classList.contains('collapsed')) {
                 // 收起 → 展开：回到用户拖好的宽度
                 sb.classList.remove('collapsed');
-                _sbSetW(_sbSavedWidth());
+                _sbApplyWidth();
                 btn.classList.remove('active');
             } else {
                 // 展开 → 收起
@@ -108,7 +124,7 @@
                 btn.classList.add('active');
             }
             _sbPlaceDivider();
-            setTimeout(_sbPlaceDivider, 350);        // 宽度过渡结束后再定位
+            setTimeout(_sbPlaceDivider, 350);        // 平推过渡结束后再定位（过渡途中量到的是动画中间值）
         }
         // 只有"用户自己按按钮"才算用户意图；自动收起打的是 autoCollapsed 记号，两者不混
         function _sbUserToggle() {
@@ -130,7 +146,6 @@
         function _sbEnterFocus() {
             var sb = _sbEl(), sec = _sbSection();
             if (!sb || !sec || _sbInFocus()) return;
-            _sbFocusBack = sb.getBoundingClientRect().width || _sbSavedWidth();
             sec.classList.add('focus-manage');       // CSS：对话区 display:none
             /* 铺满宽度由 CSS 类管：.chat-section.focus-manage .chat-sidebar{width:100%}（layout.css），不抢 --sb-w */
             _sbPlaceDivider();                       // 拖动键留在右边界，随时能拖回来
@@ -139,8 +154,7 @@
             var sb = _sbEl(), sec = _sbSection();
             if (!sb || !sec || !_sbInFocus()) return;
             sec.classList.remove('focus-manage');
-            _sbSetW(Math.min(_sbFocusBack || _SB_DEFAULT, _sbMaxWidth()));
-            _sbStoreWidth(_sbSavedWidth());   // _sbSetW 刚写过，存档与 --sb-w 同步
+            _sbApplyWidth();                  // 退出专注 = 按存档宽度重新贴合（唯一真源）
             _sbPlaceDivider();
             var pending = _sbFocusPending;
             _sbFocusPending = null;
@@ -170,29 +184,17 @@
                         return _narrow && !_sbDrawerIntent;
                     })()) {
                     if (!sb.classList.contains('collapsed')) {
-                        _sbAutoBack = sb.getBoundingClientRect().width || _sbSavedWidth();
-                        sb.dataset.autoCollapsed = '1';
+                        sb.dataset.autoCollapsed = '1';   // 宽度不回写：展开时按存档值贴合
                         sb.classList.add('collapsed');
                     }
                 } else if (sb.dataset.autoCollapsed === '1' && sb.dataset.userCollapsed !== '1') {
                     delete sb.dataset.autoCollapsed;
                     sb.classList.remove('collapsed');
-                    // 回到"被自动收起之前"的那个宽度（不是上一次持久化的值 —— 否则窗口一缩一放，
-                    // 侧栏宽度就自己跳成别的数）
-                    _sbSetW(Math.min(_sbAutoBack || _sbSavedWidth(), _sbMaxWidth()));
-                    _sbStoreWidth(_sbSavedWidth());   // _sbSetW 刚写过，存档与 --sb-w 同步
-                    _sbAutoBack = 0;
-                }
-                if (!sb.classList.contains('collapsed')) {
-                    var mw = _sbMaxWidth(), cur = _sbSavedWidth();
-                    if (cur > mw) { _sbSetW(mw); _sbStoreWidth(mw); }
+                    _sbApplyWidth();          // 展开 = 按存档宽度重新贴合
                 }
             }
+            _sbApplyWidth();                  // 贴合窗口：上限变了才写，没变不写
             _sbPlaceDivider();
-            // ★ 必须再定位一次：进/出 collapsed 会走宽度过渡，过渡途中取到的侧栏宽度是动画中间
-            //   值（接近 0），_sbPlaceDivider 里的 x<=0 守卫会直接 return —— 于是拖动键停在旧坐标
-            //   上再也不动（"最小化恢复后拖动键没能正常化"就是这个）。等过渡结束再摆一次。
-            setTimeout(_sbPlaceDivider, 360);
         }
 
         // 初始化：绑定 + 恢复持久化宽度 + 分隔条拖动
@@ -200,9 +202,7 @@
             var sb = _sbEl();
             var btn = document.getElementById('sidebar-toggle-btn');
             if (btn) btn.addEventListener('click', _sbUserToggle);
-            if (sb && !sb.classList.contains('collapsed')) {
-                _sbSetW(Math.min(_sbSavedWidth(), _sbMaxWidth()));
-            }
+            _sbApplyWidth();   // 有布局才贴合（落地页 .chat-section 未布局时 clientWidth=0，不裁决也不写宽度）
 
             var rs = _sbResizer(), sec = _sbSection();
             if (sb && rs && sec) {
@@ -259,8 +259,8 @@
                 setTimeout(_sbFitToWindow, 60);
                 setTimeout(_sbFitToWindow, 300);
                 _sbSyncMinimized();                        // 启动先问一次，别等第一次 resize
-            _sbFitToWindow();                        // ★ 启动即定窄空间归属（窗口一开就是 700px 也得进 narrow）
-            window._sbRefit = _sbFitToWindow;       // 视图切换（进/出对话）后外部可触发复测
+                _sbFitToWindow();                        // ★ 启动即定窄空间归属（窗口一开就是 700px 也得进 narrow）
+                window._sbRefit = _sbFitToWindow;       // 视图切换（进/出对话）后外部可触发复测
             }
         })();
 

@@ -109,13 +109,14 @@
             font-family: inherit;
             font-size: 0.82rem;
             font-weight: 600;
-            color: #fff;
-            background: var(--primary, #4361ee);
+            color: var(--primary);                    /* 方案 B：同一套（淡主题底 + 主题色文字） */
+            background: var(--primary-soft);
             border: none;
             border-radius: 8px;
             cursor: pointer;
+            transition: background-color .16s;
         }
-        .empty-chat-cta:hover { background: var(--secondary, #3651d4); }
+        .empty-chat-cta:hover { background: color-mix(in srgb, var(--primary) 20%, transparent); }
 
         .empty-state {
             padding: 3rem 1rem;
@@ -139,19 +140,19 @@
         }
 
         .new-chat-btn {
-            padding: 0.75rem 1.5rem;
-            background: var(--primary);
-            color: white;
+            padding: 0.6rem 1.25rem;                 /* 方案 B：淡主题底 + 主题色文字，尺寸略收 */
+            background: var(--primary-soft);
+            color: var(--primary);
             border: none;
             border-radius: 50px;
             font-weight: 600;
             cursor: pointer;
-            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s;
+            transition: background-color .16s, transform .16s;
         }
 
         .new-chat-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(67, 97, 238, 0.3);
+            background: color-mix(in srgb, var(--primary) 20%, transparent);
+            transform: translateY(-1px);
         }
 
         /* 空状态样式 */

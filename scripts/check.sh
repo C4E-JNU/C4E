@@ -209,6 +209,20 @@ grep -q -- "--chat-min" css/variables.css || { echo "FAIL: variables.css 缺 --c
 grep -q "_sbSetW" js/sidebar.js || { echo "FAIL: sidebar.js 缺 _sbSetW 入口"; exit 1; }
 ! grep -q "adoptSidebar" js/topbar.js || { echo "FAIL: mobile.js adoptSidebar 复活"; exit 1; }
 grep -q "chat-section.narrow .chat-sidebar" css/layout.css || { echo "FAIL: layout.css 缺窄空间抽屉样式"; exit 1; }
+# ★ 收起 = 整体平移滑出（2026-10-03 用户拍板「选B方案，2.3可以」）：宽度恒定、只补间 margin-left，容器负责裁切。
+#   老做法是补间 width + 归零 padding/border → 面板内容被一点点吃掉，看起来「先胀再收」。以下守卫防它长回来。
+grep -q "chat-section:not(.narrow) .chat-sidebar.collapsed" css/layout.css || { echo "FAIL: 缺侧栏平推收起规则"; exit 1; }
+grep -q "margin-left: calc(-1 \* var(--sb-w))" css/layout.css || { echo "FAIL: 侧栏收起未走 margin-left 平推"; exit 1; }
+! grep -qE "^[[:space:]]*\.chat-sidebar\.collapsed[[:space:]]*\{" css/*.css || { echo "FAIL: 又出现 width 归零式收起的 .chat-sidebar.collapsed{ 块"; exit 1; }
+! grep -q "transition:[[:space:]]*width" css/layout.css css/input.css || { echo "FAIL: 侧栏又开始补间 width（内容会被裁切挤压）"; exit 1; }
+grep -q "flex: 0 0 auto" css/layout.css || { echo "FAIL: 侧栏未锁定不可压缩（最小化假视口会把它挤扁）"; exit 1; }
+# ★ 宽度只有两个来源：用户意图（存档）+ 客观上限。禁止再出现「把量出来的渲染宽度当输入」的记忆变量
+! grep -q "_sbAutoBack\|_sbFocusBack" js/sidebar.js || { echo "FAIL: 侧栏又出现渲染宽度记忆变量（最小化会压成 82vw）"; exit 1; }
+grep -q "_sbApplyWidth" js/sidebar.js || { echo "FAIL: 侧栏缺唯一宽度贴合入口 _sbApplyWidth"; exit 1; }
+# ★ 新建对话键（方案 B：淡主题底 + 主题色图标，28px；不许回到实心蓝渐变 + 光晕）
+grep -q "var(--primary-soft)" css/sidebar.css || { echo "FAIL: 新建对话键未用方案 B（淡主题底）"; exit 1; }
+! grep -q "primary-gradient" css/sidebar.css || { echo "FAIL: 新建对话键又用回实心渐变"; exit 1; }
+grep -q "color-mix" css/sidebar.css || { echo "FAIL: 新建对话键 hover 未用主题色加深"; exit 1; }
 
 # ── CSS 残渣体检（2026-10-02）——改前端必看：死样式 / 括号残渣 ──
 for a in scripts/css_audit.py scripts/css_class_audit.py; do

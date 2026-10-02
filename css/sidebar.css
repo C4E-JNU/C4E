@@ -68,11 +68,11 @@
             align-items: center;
             justify-content: center;
             gap: 4px;
-            height: 32px;
+            height: 28px;                                          /* 与新建对话键同高（一排里两个键必须一样大） */
             border-radius: 8px;
             border: 1px solid transparent;
             cursor: pointer;
-            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.2s;
+            transition: transform .16s, opacity .16s, background-color .16s, color .16s, border-color .16s;
             font-size: 0.85rem;
             background: transparent;
         }
@@ -85,25 +85,22 @@
             font-weight: 600;
         }
 
-        /* 新的设计：圆形/方形 实色新建按钮 */
-        /* 新的设计：圆形/方形 实色新建按钮 */
+        /* 新建对话：淡主题底 + 主题色图标（28px，无渐变无阴影 —— 实心蓝渐变太抢眼） */
         .action-icon-btn.primary-circle {
-            width: 32px;
-            height: 32px;
-            background: var(--primary-gradient);
-            color: white;
+            width: 28px;
+            height: 28px;
+            background: var(--primary-soft);
+            color: var(--primary);
             border-radius: 8px;
             padding: 0;
-            box-shadow: 0 4px 10px var(--primary-glow);
+            box-shadow: none;
             border: none;
-            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            transition: background-color .16s, color .16s, transform .16s;
         }
 
         .action-icon-btn.primary-circle:hover {
-            transform: translateY(-2px) scale(1.05);
-            box-shadow: 0 6px 15px var(--primary-glow);
-            filter: brightness(1.1);
-            color: white;
+            background: color-mix(in srgb, var(--primary) 20%, transparent);
+            transform: translateY(-1px);
         }
 
         .action-icon-btn.primary:hover {
@@ -114,7 +111,7 @@
 
 
         .action-icon-btn.icon-only {
-            width: 32px;
+            width: 28px;
             border: 1px solid var(--border-color);
             color: var(--gray);
         }

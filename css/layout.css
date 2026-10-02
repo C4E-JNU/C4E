@@ -456,6 +456,7 @@
             display: flex;
             gap: 1.5rem;
             position: relative;
+            overflow: hidden;   /* ★ 侧栏收起 = 整体向左平推滑出，滑出去的部分由这里裁掉（不再压缩宽度） */
         }
 
         .chat-main {
@@ -478,7 +479,8 @@
         /* 右侧侧滑栏 */
         .chat-sidebar {
             width: var(--sb-w);
-            transition: width .28s cubic-bezier(.4, 0, .2, 1), padding .28s cubic-bezier(.4, 0, .2, 1);   /* ★ 平推：唯一被补间的属性是 width */
+            flex: 0 0 auto;   /* ★ 宽度是唯一真源：容器被挤压（最小化瞬间的假视口）也不许改它 */
+            transition: margin-left .28s cubic-bezier(.4, 0, .2, 1);   /* ★ 平推：只补间 margin-left（面板整体滑出，内容不重排） */
             background: var(--sidebar-bg);
             border-radius: 16px;
             box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
@@ -490,6 +492,13 @@
             flex-direction: column;
             position: relative;
             border: 1px solid var(--border-color);
+        }
+
+        /* 收起 = 整体向左平移滑出：宽度/内边距/内容都不动，只把面板平推出视野，
+           滑出去的部分由 .chat-section 的 overflow 裁掉，对话区随 flex 自然补位。
+           仅非窄屏 —— 窄屏下侧栏是覆盖式抽屉，位移走 transform（本文件末段）。 */
+        .chat-section:not(.narrow) .chat-sidebar.collapsed {
+            margin-left: calc(-1 * var(--sb-w));
         }
 
         /* 左右占比分隔拖条（历史侧栏 ↔ 聊天）——覆盖在自然留白上，不额外占宽 */
