@@ -36,13 +36,11 @@ n_tall=$(grep -ro 'transition:[[:space:]]*all' css/*.css 2>/dev/null | wc -l | t
 if [ "$n_tall" = "0" ]; then ok "无 transition:all（布局补间不再污染尺寸）"; else bad "仍有 $n_tall 处 transition:all"; fi
 # ② 手机断点必须限定给非桌面外壳，否则最小化时的假视口(157x25)会让手机壳接管桌面窗口
 chk() { if grep -qF "$2" "$1" 2>/dev/null; then ok "$3"; else bad "$3"; fi; }
-chk css/mobile.css 'html:not(.shell-desktop)' 'mobile.css 断点已限定给非桌面外壳'
 # ③ 视图状态必须持久化：WebView2 被系统回收会整页重载，不记状态就会"刷新后回到落地页"
 chk js/state.js "c4eai-view-mode" 'state.js 持久化视图状态（重载后不丢界面）'
 chk index.html "c4eai-view-mode" 'index.html 首帧前恢复视图状态'
 
 # 手机端：隐藏侧栏箭头（与抽屉行为冲突）
-chk css/mobile.css '.sidebar-toggle-btn, html:not(.shell-desktop) #sidebar-toggle-btn{ display: none !important; }' 'mobile.css 隐藏 sidebar-toggle-btn（手机断点；html:not(.shell-desktop) = 桌面外壳不吃手机断点）'
 # 小e 手机端可拖：touch-action:none 是必要条件
 chk css/xiaoe.css 'touch-action: none' 'xiaoe.css touch-action:none'
 chk js/xiaoe.js  'pointercancel'        'xiaoe.js pointercancel 兜底'
@@ -177,34 +175,34 @@ echo
 # ── 顶栏统一（2026-10-02）守卫 ──
 grep -q -- "--header-h" css/variables.css || { echo "FAIL: variables.css 缺 --header-h 单源"; exit 1; }
 ! grep -q "@media" css/window.css || { echo "FAIL: window.css 出现媒体查询（窗口键被隐藏过）"; exit 1; }
-! grep -qE "^[[:space:]]*height:[[:space:]]*46px" css/mobile.css || { echo "FAIL: mobile.css 顶栏高度写死 46px"; exit 1; }
 ! grep -q "auth-chip-slot\|logo-text-wrapper\|company-tagline" index.html || { echo "FAIL: index.html 顶栏残留登录槽/字标/副标"; exit 1; }
 grep -q "header-brand" index.html || { echo "FAIL: index.html 顶栏缺右侧字标 header-brand"; exit 1; }
 grep -q "theme-btn" index.html || { echo "FAIL: index.html 顶栏缺主题按键 theme-btn"; exit 1; }
 ! grep -q "mobile-more-btn\|mobile-more-sheet" index.html || { echo "FAIL: index.html 残留 ⋯ 面板"; exit 1; }
 ! grep -q "mobile-more" css/layout.css || { echo "FAIL: layout.css 残留 ⋯ 面板样式"; exit 1; }
 grep -q "nav-container.tight" css/layout.css || { echo "FAIL: layout.css 缺顶栏 tight 阶梯"; exit 1; }
-grep -q "bindHeaderFit" js/mobile.js || { echo "FAIL: mobile.js 缺顶栏溢出阶梯"; exit 1; }
-! grep -q "mobile-menu-btn" index.html css/layout.css css/mobile.css js/sidebar.js || { echo "FAIL: ☰ 按钮残留"; exit 1; }
+grep -q "bindHeaderFit" js/topbar.js || { echo "FAIL: topbar.js 缺顶栏溢出阶梯"; exit 1; }
+! grep -q "orientationchange" js/topbar.js || { echo "FAIL: topbar.js 又用设备事件 orientationchange"; exit 1; }
 ! grep -rq --exclude='*.bak*' --exclude-dir=node_modules "agent-config-panel\|agent-config-toggle" index.html js/ css/ || { echo "FAIL: 智能体配置独立面板残留（应已并入设置）"; exit 1; }
 grep -q "settings-nav" index.html || { echo "FAIL: 设置面板缺左分类 settings-nav"; exit 1; }
 grep -q "settings-pane" index.html || { echo "FAIL: 设置面板缺右侧内容区 settings-pane"; exit 1; }
 grep -q "pane-agent" index.html || { echo "FAIL: 设置面板缺「智能体」分类"; exit 1; }
-grep -q "win-tight" css/input.css js/mobile.js || { echo "FAIL: 输入条窄屏判据 win-tight 缺失"; exit 1; }
+grep -q "win-tight" css/input.css js/topbar.js || { echo "FAIL: 输入条窄屏判据 win-tight 缺失"; exit 1; }
 grep -q "css/settings.css" index.html || { echo "FAIL: 设置样式表 css/settings.css 未引入"; exit 1; }
+! grep -rq "shell-desktop" index.html js/ css/ --include="*.js" --include="*.css" --include="*.html" 2>/dev/null || { echo "FAIL: 外壳(css/js 形态分叉)判据残留"; exit 1; }
+! grep -rq --exclude="*.bak*" "mobile-item-more\|mobile-actions-open\|mobile-chat-title" index.html js/ css/ || { echo "FAIL: 手机专用元素残留"; exit 1; }
+grep -q "js/topbar.js" index.html || { echo "FAIL: 顶栏脚本未引入"; exit 1; }
 [ $(grep -l "^\.settings-panel\|^\.settings-nav\|^\.settings-pane" css/*.css | grep -v "css/settings.css" | wc -l) -eq 0 ] || { echo "FAIL: 设置样式散落在 settings.css 之外"; exit 1; }
 ! grep -q "agent-config-panel" index.html || { echo "FAIL: 智能体独立面板复活"; exit 1; }
 ! grep -q "settings-content" index.html || { echo "FAIL: 旧设置内容区残留"; exit 1; }
-! grep -q "placeNavControls" js/mobile.js || { echo "FAIL: mobile.js placeNavControls 复活"; exit 1; }
+! grep -q "placeNavControls" js/topbar.js || { echo "FAIL: mobile.js placeNavControls 复活"; exit 1; }
 
 # ── 侧栏平推（2026-10-02）守卫 ──
 grep -q -- "--sb-w" css/variables.css || { echo "FAIL: variables.css 缺 --sb-w 单源"; exit 1; }
 grep -q -- "--chat-min" css/variables.css || { echo "FAIL: variables.css 缺 --chat-min"; exit 1; }
 ! grep -q "sb.style.width" js/sidebar.js || { echo "FAIL: sidebar.js 仍有 inline 宽度（须走 _sbSetW/--sb-w）"; exit 1; }
 grep -q "_sbSetW" js/sidebar.js || { echo "FAIL: sidebar.js 缺 _sbSetW 入口"; exit 1; }
-! grep -q "adoptSidebar" js/mobile.js || { echo "FAIL: mobile.js adoptSidebar 复活"; exit 1; }
-! grep -q "mobile-drawer-open" css/mobile.css js/mobile.js || { echo "FAIL: 旧抽屉 mobile-drawer-open 复活"; exit 1; }
+! grep -q "adoptSidebar" js/topbar.js || { echo "FAIL: mobile.js adoptSidebar 复活"; exit 1; }
 grep -q "chat-section.narrow .chat-sidebar" css/layout.css || { echo "FAIL: layout.css 缺窄空间抽屉样式"; exit 1; }
-! grep -q "width: 90vw" css/mobile.css || { echo "FAIL: mobile.css 90vw 抽屉复活"; exit 1; }
 if [ "$fail" -eq 0 ]; then echo "ALL_PASS ✅"; else echo "FAILED ($fail)"; fi
 exit "$fail"

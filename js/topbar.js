@@ -1,6 +1,6 @@
-/* ==================== 顶栏外壳 + 顺手小行为 ====================
+/* ==================== 顶栏（宽度驱动，与外壳/设备无关） ====================
  * 2026-10-02 起，本模块只管四件事（布局一律宽度驱动，不再按设备断点）：
- *   1. 当前对话名 → 顶栏窄空间标题（ui.js 切分支时调 __mobileSyncTitle）
+ *   1. 当前对话名 → 顶栏窄空间标题（ui.js 切分支时调 __topbarSyncTitle）
  *   2. 抽屉搜索框占位文字：窄空间（body.narrow-space，sidebar.js 宽度裁决）换短文案
  *   3. 顶栏溢出阶梯：ResizeObserver 实测 .nav-container 宽度 → tight/overflow 类
  *      （tight ≲520px：左只留 logo+对话名、右 wiki 只留图标；overflow：只收 wiki 字样）
@@ -9,14 +9,14 @@
     'use strict';
 
     function syncTitle() {
-        var el = document.getElementById('mobile-chat-title');
+        var el = document.getElementById('header-chat-title');
         if (!el) return;
         // ⚠️ state 是 state.js 里的顶层 const 绑定（不在 window 上），只能用裸 state 判断
         var st = (typeof state !== 'undefined') ? state : null;
         var b = (st && st.branches) ? st.branches[st.currentBranchId] : null;
         el.textContent = (b && b.name) ? b.name : '对话';
     }
-    window.__mobileSyncTitle = syncTitle;
+    window.__topbarSyncTitle = syncTitle;
 
     /** 抽屉搜索框：窄空间占位文字太长会被截断，换短的；回宽还原。 */
     function syncSearchPlaceholder() {
@@ -24,6 +24,7 @@
         if (!el) return;
         if (!el.dataset.fullPh) el.dataset.fullPh = el.getAttribute('placeholder') || '';
         var narrow = document.body.classList.contains('narrow-space');
+        // 文案只跟实测窄空间（sidebar.js 裁决）走，不用设备方向事件
         el.setAttribute('placeholder', narrow ? '搜索对话…' : el.dataset.fullPh);
     }
 
@@ -37,6 +38,7 @@
             nav.classList.toggle('overflow', nav.scrollWidth > w + 1);
             // 同一测量、同一阈值：输入条也照这个判据收（模型 → 按钮、token 收起）
             document.body.classList.toggle('win-tight', w < 520);
+            syncSearchPlaceholder();      // 与顶栏同一测量：窄了就换短占位文字
         });
         ro.observe(nav);
     }
@@ -63,7 +65,6 @@
         syncSearchPlaceholder();
         bindHeaderFit();
         bindThemePopover();
-        window.addEventListener('orientationchange', syncSearchPlaceholder);
     }
 
     if (document.readyState === 'loading') {

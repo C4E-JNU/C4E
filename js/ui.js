@@ -1,6 +1,6 @@
         function renderMessages() {
             // 手机端顶栏标题（方案 A：☰ + 当前对话标题 + ⋯）
-            if (window.__mobileSyncTitle) window.__mobileSyncTitle();
+            if (window.__topbarSyncTitle) window.__topbarSyncTitle();
             const currentBranch = state.currentBranchId ? state.branches[state.currentBranchId] : null;
 
             messagesContainer.innerHTML = '';
@@ -13,8 +13,8 @@
                 emptyMsg.innerHTML = `
                     <div class="message-content">
                         <div class="empty-state-icon">💬</div>
-                        <div style="text-align:center;font-size:1.1rem;">还没有对话</div>
-                        <div style="text-align:center;color:var(--gray);margin-top:0.4rem;">点下面的按钮开始新的聊天</div>
+                        <div class="empty-state-title">还没有对话</div>
+                        <div class="empty-state-sub">点下面的按钮开始新的聊天</div>
                         <button class="empty-chat-cta" onclick="createNewConversation()">＋ 新建对话</button>
                     </div>
                 `;

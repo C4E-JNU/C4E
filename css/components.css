@@ -134,9 +134,6 @@
                 padding: 0 1rem;
             }
 
-            .key-input-group {
-                grid-template-columns: 1fr;
-            }
 
             .message-content {
                 max-width: 90%;
@@ -147,37 +144,11 @@
                 gap: 0.75rem;
             }
 
-            .input-controls {
-                width: 100%;
-                justify-content: space-between;
-                flex-wrap: nowrap;
-            }
 
-            .model-selector-container {
-                min-width: 150px;
-            }
 
-            .model-selector {
-                min-width: 100px;
-            }
 
-            .send-btn {
-                height: 50px;
-                min-width: 80px;
-                padding: 0 1rem;
-            }
 
-            .message-input {
-                min-height: 50px;
-                font-size: 0.95rem;
-            }
 
-            .upload-buttons {
-                flex-direction: column;
-                width: 100%;
-                margin-top: 0.5rem;
-                order: 2;
-            }
 
             .doc-analysis-btn,
             
@@ -194,30 +165,31 @@
         }
 
         @media (max-width: 480px) {
-            .input-controls {
-                flex-wrap: wrap;
-                gap: 0.5rem;
-            }
 
-            .model-selector-container {
-                width: 100%;
-                order: 1;
-            }
 
-            .database-toggle {
-                order: 2;
-                flex: 1;
-                justify-content: center;
-            }
 
-            .send-btn {
-                order: 3;
-                flex: 1;
-                min-width: auto;
-            }
         }
 
         /* 现代化对话空状态 */
+        /* 空态文案与「新建对话」按钮（单一设计：exe/浏览器/任意宽度同一套） */
+        .empty-state-title { text-align: center; font-size: 1.1rem; }
+        .empty-state-sub { text-align: center; color: var(--gray); margin-top: 0.4rem; }
+        .empty-chat-cta {
+            align-self: center;
+            margin-top: 0.9rem;
+            height: 32px;
+            padding: 0 14px;
+            font-family: inherit;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: #fff;
+            background: var(--primary, #4361ee);
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .empty-chat-cta:hover { background: var(--secondary, #3651d4); }
+
         .empty-state {
             padding: 3rem 1rem;
             text-align: center;

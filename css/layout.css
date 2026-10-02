@@ -1073,35 +1073,8 @@
 
         /* 侧边栏头部新设计样式 */
 
-        /* ── 桌面外壳（C4EAI.exe；URL 带 shell=desktop）──────────────────────────
-           窗口是能被用户拖小的，所以不能套用面向浏览器的响应式：
-           css/components.css 的 @media (max-width:1024px) 会把 .chat-section 改成纵向堆叠、
-           侧栏撑成 100% 宽 × 300px 高，而 .chat-container 是固定 600px 高 →
-           对话区被推到窗口下方（300+600px）完全看不见（用户报「缩小后对话页面完全消失」）。
-           桌面外壳固定保持「左侧栏 + 右对话」左右排布，并让高度跟着窗口走。
-           选择器带 html.shell-desktop 前缀，优先级高于媒体查询里的裸类名。 */
-        html.shell-desktop .chat-section {
-            /* 只抵消 @media (max-width:1024px) 的竖向堆叠。
-               高度不写：全屏态由 body.full-screen-mode .chat-section{height:100vh} 管（input.css 在后面，优先级更高），
-               非全屏态整个 .chat-section 是 display:none —— 写了也是死代码。 */
-            flex-direction: row;
-        }
-
-        html.shell-desktop .chat-sidebar {
-            /* ★ 这里只抵消 @media (max-width:1024px) 的 height:300px。
-               绝对不要写 width / flex / min-width —— 会连坐两件事：
-                 · 拖拽宽度写的是 inline style.width，而 flex-basis 会盖过 width → 分隔拖条失效
-                 · 「收回侧栏」靠 .chat-sidebar.collapsed{width:0;padding:0} → min-width 锁死 → 收不回去
-               宽度与折叠完全交还给应用自己的规则（js/sidebar.js + input.css）。 */
-            height: auto;
-            max-height: 100%;
-        }
-
-        html.shell-desktop .chat-container {
-            height: 100%;
-            min-height: 0;
-        }
-
+        /* 原「桌面外壳」覆盖块已删：它对抗的 @media (max-width:1024px) 竖向堆叠早就移除，
+           换窄统一走宽度驱动（.chat-section.narrow + --chat-min），exe 与浏览器同一条路径。 */
 
 /* ★ 主题浮层：开关 = .theme-slot.open（唯一真相）。顶栏是包含块，top:100% 落到顶栏正下方。 */
 .theme-slot { position: relative; flex: 0 0 auto; }
@@ -1122,9 +1095,9 @@
 .header-brand .brand-sub { font-size: .72rem; opacity: .6; }
 
 /* 窄空间标题（logo 后跟当前对话名）：默认藏，.tight 才放出来 */
-.mobile-chat-title { display: none; min-width: 0; max-width: 38vw; padding: 0 4px;
+.header-chat-title { display: none; min-width: 0; max-width: 38vw; padding: 0 4px;
     font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.nav-container.tight .mobile-chat-title { display: block; flex: 0 1 auto; }
+.nav-container.tight .header-chat-title { display: block; flex: 0 1 auto; }
 
 /* ★ 顶栏溢出阶梯（唯一真相 = .nav-container 实测宽度，js/mobile.js ResizeObserver 挂类）：
    tight（≲520px，手机程度）→ 左只留 logo+对话名，右 wiki 只留图标，字标/主题收；
