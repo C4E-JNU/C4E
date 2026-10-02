@@ -86,15 +86,6 @@
     color: var(--gray, #666);
 }
 
-.agent-source-tag {
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: var(--gray, #666);
-    margin-bottom: 0.4rem;
-    padding: 0.15rem 0.4rem;
-    background: rgba(67, 97, 238, 0.08);
-}
-
 /* 推理区包层：只管「这一组思考是收起还是展开」这一个状态。
    控件本体不在消息里，而是对话区右侧那颗浮动键（.reasoning-rail-btn）——
    这样大片思考铺满屏幕时它也不压正文、不会被滚走（用户 2026-10-02 定的方案 A）。 */
@@ -125,41 +116,23 @@
     max-width: 90%;
 }
 
-/* ==================== 智能体思考步骤 ==================== */
-.message.agent-thought .streaming-thought {
-    font-size: 0.82rem;
-    color: var(--text, #333);
-    line-height: 1.5;
-    white-space: pre-wrap;
-    word-break: break-word;
-    min-height: 1.2em;
-    margin-top: 0.1rem;
-}
-
 /* ==================== 步骤内的模型推理框 ==================== */
 .agent-reasoning-box {
     margin-bottom: 0.1rem;
 }
 .agent-reasoning-box .reasoning-toggle {
-    position: sticky;                 /* 同一条设计：模型推理框很长时切换键也要点得到 */
-    top: 0;
-    z-index: 6;
     font-size: var(--font-size-thinking);
     font-weight: 600;
     color: #8b5cf6;
     cursor: pointer;
     padding: 0.1rem 0.3rem;
     border-radius: 3px;
-    background: linear-gradient(rgba(139, 92, 246, 0.06), rgba(139, 92, 246, 0.06)),
-                linear-gradient(var(--card-bg, #fff), var(--card-bg, #fff)),
-                #ffffff;
+    background: rgba(139, 92, 246, 0.06);
     display: inline-block;
     user-select: none;
 }
 .agent-reasoning-box .reasoning-toggle:hover {
-    background: linear-gradient(rgba(139, 92, 246, 0.14), rgba(139, 92, 246, 0.14)),
-                linear-gradient(var(--card-bg, #fff), var(--card-bg, #fff)),
-                #ffffff;
+    background: rgba(139, 92, 246, 0.14);
 }
 .agent-reasoning-box .reasoning-content {
     font-size: var(--font-size-thinking);

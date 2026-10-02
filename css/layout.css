@@ -27,9 +27,6 @@
 
         .logo-area { display: flex; align-items: center; }
 
-        
-
-
         /* 品牌标记：C4E 图形 LOGO ＋ 一圈圆环（环色跟随主题 --primary）
            注意：容器原本是"渐变字裁剪"，放图片后必须把 background-clip 复位，
            且不要加半透明白边框——圆弧顶端会与背景接缝混出灰脏色带。 */
@@ -72,7 +69,6 @@
             margin-right: 8px;
         }
 
-        
 
         .logo {
             font-size: 1.1rem;
@@ -86,7 +82,6 @@
             color: var(--secondary);
         }
 
-        
 
         .nav-controls {
             display: flex;
@@ -118,27 +113,6 @@
             color: var(--success) !important;
             transform: rotate(45deg) scale(1.12) !important;
             box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.16), 0 8px 20px rgba(16, 185, 129, 0.22) !important;
-        }
-
-        /* 文档上传按钮 */
-        .doc-analysis-btn {
-            background: var(--document);
-            color: white;
-            border: none;
-            border-radius: 20px;
-            padding: 0.5rem 1rem;
-            cursor: pointer;
-            font-size: 0.9rem;
-            font-weight: 500;
-            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .doc-analysis-btn:hover {
-            background: #7c3aed;
-            transform: translateY(-2px);
         }
 
         /* 数据库上传按钮 */

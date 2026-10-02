@@ -184,8 +184,7 @@
                            default: return '';
                        }
                    }).join('\n');
-                   const containerId = 'rs-' + message.id;
-                   reasoningStepsHtml = `<div class="agent-reasoning-block"><div id="${containerId}" class="reasoning-steps-container">${stepsHtml}</div><div class="reasoning-collapsed-hint" onclick="this.parentElement.classList.remove('collapsed');updateReasoningRail()">🧠 思考过程已收起 · 点开</div></div>`;
+                   reasoningStepsHtml = `<div class="agent-reasoning-block"><div class="reasoning-steps-container">${stepsHtml}</div><div class="reasoning-collapsed-hint" onclick="this.parentElement.classList.remove('collapsed');updateReasoningRail()">🧠 思考过程已收起 · 点开</div></div>`;
                }
 
                // 附件显示 (仅用户消息)

@@ -202,30 +202,6 @@
             align-items: flex-end;
         }
 
-        /* 文件附件按钮 */
-        .attachment-btn {
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            background: transparent;
-            border: 2px solid var(--border-color);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            color: var(--primary);
-            font-size: 1.1rem;
-            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s;
-            flex-shrink: 0;
-            margin-bottom: 2px;
-        }
-
-        .attachment-btn:hover {
-            background: var(--light);
-            transform: scale(1.05);
-        }
-
-
         /* 展开消息按钮 */
         .expand-btn {
             width: 32px;

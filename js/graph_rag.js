@@ -158,6 +158,16 @@ async function reactAgentLoop(userQuestion, options /* {fileIds:[], note_refs:[]
             reasoningBox = document.createElement('div');
             reasoningBox.className = 'agent-reasoning-box';
             reasoningBox.innerHTML = '<div class="reasoning-toggle">🧠 模型推理 ▾</div><div class="reasoning-content"></div>';
+            // 实时这张卡以前没接点击（箭头是摆设）—— 与历史渲染的 toggleMrBox 表现一致：切显隐 + 换箭头
+            (function () {
+                var tgl = reasoningBox.querySelector('.reasoning-toggle');
+                var box = reasoningBox.querySelector('.reasoning-content');
+                tgl.onclick = function () {
+                    var hidden = box.style.display === 'none';
+                    box.style.display = hidden ? 'block' : 'none';
+                    tgl.textContent = hidden ? '🧠 模型推理 ▾' : '🧠 模型推理 ▸';
+                };
+            })();
             reasoningContainer.appendChild(reasoningBox);
         }
         return reasoningBox.querySelector('.reasoning-content');
