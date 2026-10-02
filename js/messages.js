@@ -1,3 +1,43 @@
+        // ── 模型推理块的展开状态 ────────────────────────────────────────────────
+        // 实时流式期间推理正文是【展开】可见的；而 renderMessages() 每次切对话都会清空
+        // 重建 DOM，旧实现把 display 写死为 none → 一切回对话，推理正文全被收成一行
+        // "🧠 模型推理 ▸"，看起来像"思考过程收集不到了"。
+        // 方案：本轮生成的消息默认展开（__mrAutoOpen），用户手动收/展记入 __mrUser
+        // （优先于默认值），两者都跨重渲染保留；老对话仍默认折叠，避免长对话卡顿。
+        window.__mrUser = window.__mrUser || {};
+        window.__mrAutoOpen = window.__mrAutoOpen || {};
+        (function () {
+            try {
+                var saved = JSON.parse(localStorage.getItem('mr-auto-open') || '[]');
+                if (saved && saved.length) saved.forEach(function (m) { window.__mrAutoOpen[m] = true; });
+            } catch (e) {}
+        })();
+
+        function _mrMsgIdOf(rid) {          // rid 形如 mr-<msgId>-<step>
+            var rest = String(rid).slice(3);
+            var cut = rest.lastIndexOf('-');
+            return cut > 0 ? rest.slice(0, cut) : rest;
+        }
+        function mrOpenState(rid) {         // 渲染时调用：决定该块初始展开还是折叠
+            if (Object.prototype.hasOwnProperty.call(window.__mrUser, rid)) return !!window.__mrUser[rid];
+            return !!window.__mrAutoOpen[_mrMsgIdOf(rid)];
+        }
+        window.toggleMrBox = function (rid, el) {   // 内联 onclick 调用（必须挂 window）
+            var c = document.getElementById(rid);
+            if (!c) return;
+            var open = c.style.display === 'block';
+            c.style.display = open ? 'none' : 'block';
+            window.__mrUser[rid] = !open;
+            if (el) el.innerHTML = open ? '🧠 模型推理 ▸' : '🧠 模型推理 ▾';
+        };
+        window.__mrMarkAuto = function (msgId) {    // 生成结束时调用：本条消息的推理块默认展开
+            if (!msgId) return;
+            window.__mrAutoOpen[msgId] = true;
+            try {
+                localStorage.setItem('mr-auto-open', JSON.stringify(Object.keys(window.__mrAutoOpen).slice(-200)));
+            } catch (e) {}
+        };
+
         function addMessage(role, content, tokens = 0, isSystem = false, thinkingChain = null, type = null, attachments = [], noteRefs = []) {
             const currentBranch = state.branches[state.currentBranchId];
             const messageId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
@@ -17,18 +57,11 @@
 
             currentBranch.messages.push(message);
 
-            // 标记对话有内容
+            // 标记对话有内容（★ 只用于显示/排序，不参与任何删除判定）
+            // 2026-09-30 用户定：取消「临时对话 → 自动转正」这套 —— 对话创建时就已经是
+            // 永久对话，不需要在这里迁移 id；空对话也保留、永不自动删除。
             if (!isSystem && role === 'user') {
                 currentBranch.hasContent = true;
-
-                // 如果是临时对话且有内容，自动保存
-                if (currentBranch.isTemporary && !currentBranch.id.startsWith('branch-')) {
-                    const newBranchId = saveTempConversation(currentBranch);
-                    if (newBranchId) {
-                        // 更新消息中的branchId
-                        message.branchId = newBranchId;
-                    }
-                }
             }
 
             if (tokens > 0) {
@@ -112,7 +145,8 @@
                                return `<div class="agent-step-header">🧠 思考</div><div class="streaming-step-content">${escHtml(step.text||'')}</div>`;
                            case 'model_reasoning': {
                                const rid = 'mr-' + message.id + '-' + (step.step||'0');
-                               return `<div class="agent-reasoning-box"><div class="reasoning-toggle" onclick="var c=document.getElementById('${rid}');c.style.display=c.style.display==='block'?'none':'block';this.innerHTML=c.style.display==='block'?'🧠 模型推理 ▾':'🧠 模型推理 ▸'">🧠 模型推理 ▸</div><div id="${rid}" class="reasoning-content" style="display:none">${escHtml(step.text||'')}</div></div>`;
+                               const _mrOpen = mrOpenState(rid);
+                               return `<div class="agent-reasoning-box"><div class="reasoning-toggle" onclick="toggleMrBox('${rid}',this)">🧠 模型推理 ${_mrOpen?'▾':'▸'}</div><div id="${rid}" class="reasoning-content" style="display:${_mrOpen?'block':'none'}">${escHtml(step.text||'')}</div></div>`;
                            }
                            case 'tool_call': {
                                const icon = step.name==='skill_view'?'📖':'🔧';
@@ -1030,19 +1064,28 @@
 
             const messagesBefore = currentBranch.messages.slice(0, messageIndex + 1);
 
-            // 创建新对话
+            // 创建新对话（★ 2026-09-30：createNewConversation 建的就是**永久**对话，
+            //   不再需要 saveTempConversation 那套「临时对话转正 + 重新分配编号」）
             createNewConversation();
 
-            // 复制消息到新对话
+            // 复制消息到新对话（branchId 改指新对话，避免全局视图把消息归到旧对话）
             const newBranch = state.branches[state.currentBranchId];
-            newBranch.messages = [...messagesBefore];
+            newBranch.messages = messagesBefore.map(function (m) {
+                return Object.assign({}, m, { branchId: newBranch.id });
+            });
             newBranch.hasContent = true;
 
-            // 保存新对话
-            const newBranchId = saveTempConversation(newBranch);
-            if (newBranchId) {
-                addSystemMessageWithDelete(`已从原对话创建新分支，可以在此探索不同的对话方向。`);
+            // 沿用原行为：用第一条用户消息（前 20 字）命名新分支
+            const firstUserMessage = messagesBefore.find(m => m.role === 'user' && m.content);
+            if (firstUserMessage) {
+                const text = String(firstUserMessage.content).trim();
+                newBranch.name = text.substring(0, 20) + (text.length > 20 ? '...' : '');
             }
+
+            saveBranches();
+            renderMessages();
+            updateHistoryList();
+            addSystemMessageWithDelete(`已从原对话创建新分支，可以在此探索不同的对话方向。`);
         }
 
         function deleteMessage(messageId) {
@@ -1126,9 +1169,7 @@
 
             // 处理附件
                  let attachmentsMetadata = [];
-                 let inlineNotes = '';   // 仅存放后端无法提供的内容（OCR 文字、多模态图片标记）
-                 let base64Images = []; // 存储 base64 图片供多模态使用
-                 const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'];
+                 let inlineNotes = '';   // 保底：后端已不需要前端补正文，通常为空
 
                  if (state.documentUpload.pendingAttachments.length > 0) {
                      showToast('正在处理附件...', 'info');
@@ -1152,19 +1193,8 @@
                                  }
                              }
 
-                             // base64 图片 → 多模态通道
-                             if (result && result.startsWith('data:image')) {
-                                 base64Images.push({
-                                     id: att.id,
-                                     name: att.name,
-                                     size: att.size,
-                                     type: att.type,
-                                     icon: att.icon,
-                                     base64: result
-                                 });
-                                 inlineNotes += `\n\n[图片附件: ${att.name} - 已转为多模态格式]`;
-                                 continue;
-                             }
+                             // 图片不再自动转 base64 多模态、不再内嵌 OCR 文字（用户 2026-10-01 定）：
+                             // 图片与文档同权 —— 只带 file_id，模型需要时自己 read_file(file_id=…) 读像素
 
                              if (!fileId) {
                                  // 历史重发但后端文件已被删除等情况：明确提示而不是静默丢弃
@@ -1172,7 +1202,7 @@
                                  continue;
                              }
 
-                             // 只要有 file_id 就交给后端：文档全文由后端按 file_id 注入，前端不再内嵌
+                             // 只要有 file_id 就交给后端：正文/像素一律由模型按需 read_file 自取，前端不做任何内嵌
                              attachmentsMetadata.push({
                                  id: att.id,
                                  name: att.name,
@@ -1182,11 +1212,6 @@
                                  file_id: fileId
                              });
 
-                             // 图片的 OCR 文字后端提取不到，必须随消息正文带给模型
-                             var attExt = (att.name || '').split('.').pop().toLowerCase();
-                             if (result && result.trim() && IMAGE_EXTS.includes(attExt)) {
-                                 inlineNotes += `\n\n[图片 ${att.name} 的 OCR 识别文字]\n${result}\n`;
-                             }
                          } catch (error) {
                              console.error(`处理文件 ${att.name} 失败:`, error);
                              showToast(`文件 ${att.name} 处理失败`, 'error');
@@ -1194,9 +1219,9 @@
                      }
                  }
 
-                 // 组合用户消息：正文只含用户文字 + 少量 inline 标记；文件全文由后端按 file_ids 注入
+                 // 组合用户消息：正文只含用户文字；文件内容由模型按 file_ids 自取
                  const refsMeta = pendingRefs.map(function (r) { return { id: r.id, scope: r.scope, title: r.title }; });
-                 if (!message && attachmentsMetadata.length === 0 && base64Images.length === 0 && refsMeta.length === 0) {
+                 if (!message && attachmentsMetadata.length === 0 && refsMeta.length === 0) {
                      showToast('没有可发送的内容（附件均未成功处理）', 'error');
                      return;
                  }
@@ -1229,7 +1254,6 @@
                  // ⚠️ 必须把附件 file_id 传下去：后端据此注入文件正文（此前漏传 →
                  //    file_ids 恒为空 → 附件内容没进 LLM → 表现为"答非所问/未能生成回答"）
                  await reactAgentLoop(fullMessage, {
-                     images: base64Images.map(function (b) { return b.base64; }),
                      note_refs: refsMeta,
                      fileIds: attachmentsMetadata.map(function (a) { return a.file_id; }).filter(Boolean)
                  });
@@ -1270,3 +1294,13 @@
         }
 
         // ==================== 辅助函数 ====================
+
+// 智能体推理：每步默认收成几行（CSS 限高），点该步标题展开/收起（覆盖 messages.js 与 graph_rag.js 两处渲染）
+document.addEventListener('click', function (e) {
+    var h = e.target.closest && e.target.closest('.reasoning-steps-container .agent-step-header');
+    if (!h) return;
+    var n = h.nextElementSibling;
+    if (!n) return;
+    n.classList.toggle('expanded');
+    h.classList.toggle('open');
+});

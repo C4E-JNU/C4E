@@ -224,6 +224,27 @@
     color: var(--gray, #666);
     padding: 0.1rem 0;
 }
+/* ★ 每步默认收成 ~6 行（思考/结果/工具入参都可能很长，会把屏幕占满，"
+   "用户 2026-10-02："思考过程往往很长，要滑一大片才能看到之前的内容"）。
+   点该步标题展开/收起；正在流式输出的那张卡不在此列（要能看见最新文字）。 */
+.reasoning-steps-container .agent-step-header { cursor: pointer; }
+.reasoning-steps-container .agent-step-header::after { content: " ▾"; opacity: .45; }
+.reasoning-steps-container .agent-step-header.open::after { content: " ▴"; }
+
+.reasoning-steps-container .streaming-step-content,
+.reasoning-steps-container .obs-content,
+.reasoning-steps-container .tool-code {
+    max-height: 6.4em;
+    overflow: hidden;
+}
+
+.reasoning-steps-container .streaming-step-content.expanded,
+.reasoning-steps-container .obs-content.expanded,
+.reasoning-steps-container .tool-code.expanded {
+    max-height: none;
+    overflow: auto;
+}
+
 .reasoning-steps-container .streaming-step-content {
     font-size: var(--font-size-thinking);
     color: var(--text, #333);

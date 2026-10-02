@@ -1105,8 +1105,10 @@
 .nav-container.tight .header-brand { display: none; }
 .nav-container.tight .db-analysis-btn .btn-text,
 .nav-container.overflow .db-analysis-btn .btn-text { display: none; }
-/* tight 时右侧依次堆：主题 → wiki(纯图标) → 窗口三键（三键自己右推，不再借字标的 auto） */
-.nav-container.tight .win-controls { margin-left: auto; }
+/* tight 时右侧依次堆到最右：主题 → wiki(纯图标) → 窗口三键。
+   右推交给这一组的第一件（字标在 tight 下已隐藏，auto 落空）；
+   只给一件 margin-left:auto，否则剩余空间被两个 auto 平分，整组会漂到中间。 */
+.nav-container.tight .theme-slot { margin-left: auto; }
 
 /* ★ 窄空间模式：对话区剩余宽度 < --chat-min 时由 sidebar.js 给 .chat-section 挂 .narrow（宽度驱动，任何外壳同一规则；
    取代旧 @768 手机抽屉 + mobile.js 搬 DOM）。抽屉 = 同一条侧栏改 absolute + transform，不再搬 DOM。 */
