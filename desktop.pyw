@@ -314,6 +314,8 @@ def _install_frame_proc(h) -> None:
 
     GWLP_WNDPROC = -4
     WM_NCCALCSIZE, WM_NCHITTEST, WM_SIZE = 0x0083, 0x0084, 0x0005
+    WM_GETMINMAXINFO = 0x0024
+    MONITOR_DEFAULTTONEAREST = 2
     (HTCLIENT, HTLEFT, HTRIGHT, HTTOP, HTTOPLEFT, HTTOPRIGHT,
      HTBOTTOM, HTBOTTOMLEFT, HTBOTTOMRIGHT) = 1, 10, 11, 12, 13, 14, 15, 16, 17
     # ★ 用户报「四个角的可调整区域太小，很难点出双箭头」→ 边 8px、角 18px。
@@ -324,14 +326,41 @@ def _install_frame_proc(h) -> None:
     class NCCALCSIZE_PARAMS(ctypes.Structure):
         _fields_ = [("rgrc", _RECT * 3), ("lppos", ctypes.c_void_p)]
 
+    class MINMAXINFO(ctypes.Structure):
+        _fields_ = [("ptReserved", _POINT), ("ptMaxSize", _POINT), ("ptMaxPosition", _POINT),
+                    ("ptMinTrackSize", _POINT), ("ptMaxTrackSize", _POINT)]
+
     u = ctypes.windll.user32
     u.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(_RECT)]
+    u.MonitorFromWindow.argtypes = [wintypes.HWND, ctypes.c_uint]
+    u.MonitorFromWindow.restype = ctypes.c_void_p
+    u.GetMonitorInfoW.argtypes = [ctypes.c_void_p, ctypes.POINTER(_MONITORINFO)]
+    u.GetMonitorInfoW.restype = ctypes.c_bool
     u.SetWindowLongPtrW.restype = ctypes.c_void_p
     u.SetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_void_p]
     u.CallWindowProcW.restype = LRESULT
     u.CallWindowProcW.argtypes = [ctypes.c_void_p, wintypes.HWND, ctypes.c_uint, WPARAM, LPARAM]
 
     def proc(hwnd, msg, wparam, lparam):
+        if msg == WM_GETMINMAXINFO:
+            # ★ 「最大化过头」的根因：这个窗口的客户区 == 整个窗口（WM_NCCALCSIZE 不留非客户区），
+            #   而系统仍按 WS_THICKFRAME 的边框厚度算最大化矩形 → 窗口比可用区大一圈，四边各溢出约 8px：
+            #   顶栏被切掉一截、右侧滚动条被挤到看不见、底部输入条也被吃掉一部分（用户截图正是如此）。
+            #   做法（与 Electron/Codex 一致）：先让 WinForms 的原过程填好最小/最大跟踪尺寸（min_size 约束
+            #   不能丢），再把「最大化到哪」直接改成可用区 —— 尺寸用 rcWork 大小、位置用 rcWork 相对显示器
+            #   原点的偏移。最大化后就正好铺满可用区，不再越界。
+            u.CallWindowProcW(old_proc, hwnd, msg, wparam, lparam)
+            mi = ctypes.cast(lparam, ctypes.POINTER(MINMAXINFO)).contents
+            mon = u.MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)
+            info = _MONITORINFO()
+            info.cbSize = ctypes.sizeof(_MONITORINFO)
+            if u.GetMonitorInfoW(mon, ctypes.byref(info)):
+                mr, wr = info.rcMonitor, info.rcWork
+                mi.ptMaxSize.x = wr.right - wr.left
+                mi.ptMaxSize.y = wr.bottom - wr.top
+                mi.ptMaxPosition.x = wr.left - mr.left
+                mi.ptMaxPosition.y = wr.top - mr.top
+            return 0
         if msg == WM_NCCALCSIZE and wparam:
             # ★ 顶部那条粗带的根源就在这里：默认算法会把"标题栏高度"算进顶部非客户区。
             #   这里自己给客户区：四边各留 1px 做 DWM 的细边，其余全给内容 —— 四边就等厚了。
@@ -452,6 +481,43 @@ def _set_frame_color(h) -> None:
                 log("设置窗口边框色失败：属性 %d 返回 0x%08X" % (attr, hr & 0xFFFFFFFF))
     except Exception:
         log("设置窗口边框色异常：\n" + traceback.format_exc())
+
+
+def _enable_webview_input(*_args) -> None:
+    """打开 WebView2 的右键菜单与浏览器快捷键（Ctrl+C/V/X/A）。
+
+    ★ 根因（读 pywebview 6.2.1 源码确认，不是猜）：`webview/platforms/edgechromium.py`
+      的 on_webview_ready 里这两项都跟着 debug 开关走 ——
+          settings.AreBrowserAcceleratorKeysEnabled = _state['debug']
+          settings.AreDefaultContextMenusEnabled   = _state['debug']
+      非 debug 启动（正常双击 C4EAI.exe）→ 右键菜单与 Ctrl+C/V 一起被关掉：页面里选中字也拿不走、
+      右键也没有「复制/粘贴」。Codex / VS Code 这类 Electron 应用默认是开的，所以用户会觉得
+      「exe 里就是不行，别处行」。这里只把这两项打开，devtools / 状态栏保持关闭（不引入调试入口）。
+
+    挂钩时机：窗口的 loaded 事件（此时 WebView2 已就绪）；pywebview 的事件回调跑在子线程上，
+    而改 WinForms/WebView2 设置必须在 UI 线程，所以用 Form.Invoke 切回去。
+    """
+    try:
+        from webview.platforms.winforms import BrowserView
+
+        inst = next(iter(BrowserView.instances.values()), None)
+        if inst is None:
+            log("打开复制粘贴失败：没有窗口实例")
+            return
+
+        def apply() -> None:
+            try:
+                core = inst.browser.webview.CoreWebView2
+                core.Settings.AreDefaultContextMenusEnabled = True
+                core.Settings.AreBrowserAcceleratorKeysEnabled = True
+                log("已打开 WebView2 的右键菜单与 Ctrl+C/V 快捷键")
+            except Exception:
+                log("打开复制粘贴失败：\n" + traceback.format_exc())
+
+        from System import Action
+        inst.Invoke(Action(apply))
+    except Exception:
+        log("打开复制粘贴失败：\n" + traceback.format_exc())
 
 
 def _add_resize_frame() -> None:
@@ -618,6 +684,11 @@ def main() -> None:
     win = webview.create_window("C4EAI", URL, width=_w, height=_h, min_size=(420, 340),
                                 frameless=True, hidden=True, js_api=_WinAPI())
     _win_holder["w"] = win
+    # ★ 复制/粘贴：pywebview 默认把右键菜单与 Ctrl+C/V 都关了（见 _enable_webview_input 的说明）
+    try:
+        win.events.loaded += _enable_webview_input
+    except Exception:
+        log("注册复制粘贴开关失败：\n" + traceback.format_exc())
     kw = {"private_mode": False, "storage_path": PROFILE_DIR}
     # 图标不走 pywebview 的 icon= —— Windows 后端靠 Pillow 读 ico，没装 Pillow 就静默跳过。
     # 统一由 _set_window_icon() 用 Win32 设（见那里的说明）。
