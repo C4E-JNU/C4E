@@ -220,8 +220,6 @@
 
         function closeSettings() {
             settingsPanel.classList.remove('active');
-            settingsPanel.classList.remove('opening');
-            settingsPanel.classList.remove('saved-flash');
             settingsBtn.classList.remove('settings-clicked');
             if (settingsOverlay) settingsOverlay.classList.remove('active');
         }

@@ -109,26 +109,6 @@
             color: var(--primary);
         }
 
-        /* 设置按钮 */
-        .settings-btn {
-            background: transparent;
-            border: 2px solid #e0e7ff;
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            color: var(--primary);
-            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s;
-        }
-
-        .settings-btn:hover {
-            background: #f1f3ff;
-            transform: rotate(30deg);
-        }
-
         #settings-btn {
             transition: transform 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
         }

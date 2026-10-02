@@ -51,7 +51,7 @@
     <link rel="stylesheet" href="css/window.css?v=5">
     <link rel="stylesheet" href="css/components.css?v=10">
     <link rel="stylesheet" href="css/agent.css?v=6">
-    <link rel="stylesheet" href="css/settings.css?v=3">
+    <link rel="stylesheet" href="css/settings.css?v=4">
 
     
 
@@ -193,10 +193,10 @@
         </div>
         <div class="settings-body">
             <nav class="settings-nav" id="settings-nav">
-                <button type="button" class="settings-nav-item active" data-pane="pane-model"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/></svg>模型与参数</button>
-                <button type="button" class="settings-nav-item" data-pane="pane-agent"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v2"/><path d="M15 2v2"/><path d="M9 20v2"/><path d="M15 20v2"/><path d="M2 9h2"/><path d="M2 15h2"/><path d="M20 9h2"/><path d="M20 15h2"/></svg>智能体</button>
-                <button type="button" class="settings-nav-item" data-pane="pane-service"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>连接与服务</button>
-                <button type="button" class="settings-nav-item" data-pane="pane-ui"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13.5" cy="6.5" r=".6"/><circle cx="17.5" cy="10.5" r=".6"/><circle cx="8.5" cy="7.5" r=".6"/><circle cx="6.5" cy="12.5" r=".6"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.83-.44-1.12-.29-.29-.44-.65-.44-1.13A1.64 1.64 0 0 1 14.44 16h2c3.05 0 5.55-2.5 5.55-5.55C21.97 6.01 17.46 2 12 2z"/></svg>界面</button>
+                <button type="button" class="settings-nav-item active" data-pane="pane-model" title="模型与参数"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/></svg><span class="nav-label">模型与参数</span></button>
+                <button type="button" class="settings-nav-item" data-pane="pane-agent" title="智能体"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v2"/><path d="M15 2v2"/><path d="M9 20v2"/><path d="M15 20v2"/><path d="M2 9h2"/><path d="M2 15h2"/><path d="M20 9h2"/><path d="M20 15h2"/></svg><span class="nav-label">智能体</span></button>
+                <button type="button" class="settings-nav-item" data-pane="pane-service" title="连接与服务"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span class="nav-label">连接与服务</span></button>
+                <button type="button" class="settings-nav-item" data-pane="pane-ui" title="界面"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13.5" cy="6.5" r=".6"/><circle cx="17.5" cy="10.5" r=".6"/><circle cx="8.5" cy="7.5" r=".6"/><circle cx="6.5" cy="12.5" r=".6"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.83-.44-1.12-.29-.29-.44-.65-.44-1.13A1.64 1.64 0 0 1 14.44 16h2c3.05 0 5.55-2.5 5.55-5.55C21.97 6.01 17.46 2 12 2z"/></svg><span class="nav-label">界面</span></button>
             </nav>
             <div class="settings-panes">
                 <section class="settings-pane active" id="pane-model">
@@ -325,16 +325,15 @@
                     <h3>智能体</h3>
                         <div class="config-section">
                                                             <div class="config-section-title">Agent 引擎</div>
-                                                            <div class="permission-mode-row">
-                                                                <label class="config-option">
-                                                                    <input type="radio" name="agent-engine" value="custom" id="engine-custom" checked>
-                                                                    <span class="config-option-label">自定义流式 <span class="config-option-desc">裸API手写循环，显示🧠思考</span></span>
-                                                                </label>
-                                                                <label class="config-option">
-                                                                    <input type="radio" name="agent-engine" value="langchain" id="engine-langchain">
-                                                                    <span class="config-option-label">LangChain 流式 <span class="config-option-desc">框架循环，无思考链</span></span>
-                                                                </label>
-                                                            </div>
+                                                                                                                        <label class="config-option">
+                                                                <input type="radio" name="agent-engine" value="custom" id="engine-custom" checked>
+                                                                <span class="config-option-label">自定义流式 <span class="config-option-desc">裸API手写循环，显示🧠思考</span></span>
+                                                            </label>
+                                                            <label class="config-option">
+                                                                <input type="radio" name="agent-engine" value="langchain" id="engine-langchain">
+                                                                <span class="config-option-label">LangChain 流式 <span class="config-option-desc">框架循环，无思考链</span></span>
+                                                            </label>
+                                                        
                                                             <div style="margin-top:0.6rem;">
                                                                 <label class="config-option-label" style="margin-bottom:0.3rem;display:block;">工具循环轮次</label>
                                                                 <select id="agent-max-rounds" class="neo4j-input" style="width:100%;">
@@ -412,20 +411,19 @@
                                                         </div>
                         <div class="config-section">
                                                             <div class="config-section-title">权限模式</div>
-                                                            <div class="permission-mode-row">
-                                                                <label class="config-option">
-                                                                    <input type="radio" name="permission-mode" value="safe" id="perm-safe" checked>
-                                                                    <span class="config-option-label">安全模式 <span class="config-option-desc">仅 workspace</span></span>
-                                                                </label>
-                                                                <label class="config-option">
-                                                                    <input type="radio" name="permission-mode" value="ask" id="perm-ask">
-                                                                    <span class="config-option-label">询问模式 <span class="config-option-desc">可读项目+写技能</span></span>
-                                                                </label>
-                                                                <label class="config-option">
-                                                                    <input type="radio" name="permission-mode" value="full" id="perm-full">
-                                                                    <span class="config-option-label">完全访问 <span class="config-option-desc">任意读写</span></span>
-                                                                </label>
-                                                            </div>
+                                                                                                                        <label class="config-option">
+                                                                <input type="radio" name="permission-mode" value="safe" id="perm-safe" checked>
+                                                                <span class="config-option-label">安全模式 <span class="config-option-desc">仅 workspace</span></span>
+                                                            </label>
+                                                            <label class="config-option">
+                                                                <input type="radio" name="permission-mode" value="ask" id="perm-ask">
+                                                                <span class="config-option-label">询问模式 <span class="config-option-desc">可读项目+写技能</span></span>
+                                                            </label>
+                                                            <label class="config-option">
+                                                                <input type="radio" name="permission-mode" value="full" id="perm-full">
+                                                                <span class="config-option-label">完全访问 <span class="config-option-desc">任意读写</span></span>
+                                                            </label>
+                                                        
                                                         </div>
                         <div class="config-section">
                                                             <div class="config-section-title">工具 <span style="font-size:0.75rem;color:var(--gray);font-weight:normal">（按分组勾选 = LLM 可用；数据来自后端 tools_registry）</span></div>
@@ -868,7 +866,7 @@
     <!-- 前端工具注册表已删除（工具全部由后端提供） -->
     <script src="js/skill_system.js?v=3"></script>
     <script src="js/agent_config.js?v=14"></script>
-    <script src="js/ui.js?v=7"></script>
+    <script src="js/ui.js?v=8"></script>
     <script src="js/bubbles.js?v=5"></script>
     <script src="js/bubble_actions.js?v=3"></script>
     <script src="js/utils.js?v=2"></script>

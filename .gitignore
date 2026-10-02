@@ -89,3 +89,6 @@ frp/frpc
 workspace/frpc.run.toml
 workspace/frpc.log
 C4EAI.exe
+
+# 本地备份（带后缀的变体；*.bak 已在上面）
+*.bak_*

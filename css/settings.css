@@ -451,36 +451,15 @@
 
 #settings-panel .mode-seg .mode-seg-btn { padding: 5px 10px; font-size: 0.75rem; }
 
-/* ── 窄屏（手机 / 极窄窗口）：全屏 + 分类变顶部横向 chips ──────────────── */
+/* ── 窄屏：同一套 UI 的部分调整（不另做一套）───────────────────────────────
+   面板始终是同一个居中模态：不改成底部弹出、不改成全屏另一套布局。
+   只有位置不够时才收元件，顺序：①收分类文字（留图标）②收内边距 ③表单改单列 */
 @media (max-width: 768px) {
-    #settings-panel {
-        left: 0;
-        top: 0;
-        transform: none;
-        width: 100vw;
-        height: 100dvh;
-        border: none;
-        border-radius: 0;
-        box-shadow: none;
-    }
+    #settings-panel .settings-nav { flex: 0 0 132px; padding: 8px 6px; }
 
-    #settings-panel .settings-body { flex-direction: column; }
+    #settings-panel .settings-panes { padding: 14px 14px 22px; }
 
-    #settings-panel .settings-nav {
-        flex: 0 0 auto;
-        flex-direction: row;
-        gap: 6px;
-        padding: 8px 10px;
-        overflow-x: auto;
-        overflow-y: hidden;
-        border-right: none;
-        border-bottom: 1px solid var(--border-color, #e0e0e0);
-    }
-
-    #settings-panel .settings-nav-item { width: auto; white-space: nowrap; }
-
-    #settings-panel .settings-panes { padding: 14px 14px 24px; }
-
+    /* 服务商两列并排放不下 → 单列 */
     #settings-panel .provider-layout { flex-direction: column; gap: 12px; }
 
     #settings-panel .provider-sidebar {
@@ -496,45 +475,10 @@
     #settings-panel .config-group { grid-template-columns: 1fr; }
 }
 
-/* 服务商保存键成功反馈态（原在 layout.css .save-config-btn.success-state） */
-#settings-panel .save-config-btn.success-state,
-#settings-panel .action-btn.success-state {
-    background: var(--success, #10b981);
-    color: #fff;
-    border-color: var(--success, #10b981);
-    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
-    transition: background .3s, box-shadow .3s;
+@media (max-width: 560px) {
+    /* 位置还不够：分类只剩图标（文字收起，悬停/长按仍有 title 提示） */
+    #settings-panel .settings-nav { flex: 0 0 48px; align-items: center; padding: 8px 5px; }
+    #settings-panel .settings-nav-item { width: 36px; justify-content: center; padding: 0; }
+    #settings-panel .settings-nav-item .nav-label { display: none; }
+    #settings-panel .settings-nav-item .ico { width: 16px; height: 16px; }
 }
-
-/* ── 细节收敛（对齐主流设置）─────────────────────────────────────────────
-   1) 头部「保存」收成紧凑主按钮（原 .key-btn 是首页大按钮尺寸 .75rem 1.5rem）
-   2) 已有数字输入框的行不再重复显示蓝色数值（同一数字出现两次）
-   3) 滑杆/下拉不铺满整行（控件宽度上限），说明文字限行宽避免长行难读 */
-#settings-panel .key-btn {
-    height: 30px;
-    padding: 0 14px;
-    font-family: inherit;
-    font-size: 0.78rem;
-    font-weight: 600;
-    border: none;
-    border-radius: 6px;
-    background: var(--primary, #4361ee);
-    color: #fff;
-    cursor: pointer;
-}
-
-#settings-panel .key-btn:hover { background: var(--secondary, #3651d4); }
-
-#settings-panel .setting-item:has(.number-input) .setting-value { display: none; }
-
-#settings-panel .setting-item:has(> select) > .setting-value { display: none; }
-
-#settings-panel .slider {
-    flex: 1 1 100%;
-    max-width: 420px;
-    margin-right: auto;
-}
-
-#settings-panel .setting-desc { max-width: 74ch; }
-
-#settings-panel select { max-width: 300px; }   /* 下拉不铺满整行（含 .config-option 内的 select） */
