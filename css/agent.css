@@ -96,7 +96,14 @@
 }
 
 /* ==================== 推理过程切换按钮 ==================== */
+/* ★ 关键设计（用户 2026-10-02）：大片思考过程占满屏幕时，「收起智能体推理过程」必须仍然点得到。
+   做法 = 让它 sticky 在消息区顶端（气泡还在视野里就一直钉在顶上）；
+   底色必须不透明，否则下滚的文字会从底下透出来；再加一点阴影表示「浮着」。 */
 .agent-reasoning-toggle {
+    position: sticky;
+    top: 0;
+    z-index: 6;
+    box-shadow: 0 4px 10px -6px rgba(0, 0, 0, 0.28);
     padding: 0.35rem 0.6rem;
     margin: 0.15rem 0;
     font-size: var(--font-size-thinking);
@@ -104,14 +111,20 @@
     color: var(--primary, #4361ee);
     cursor: pointer;
     border-radius: 6px;
-    background: rgba(67, 97, 238, 0.04);
+    /* 必须完全不透明：否则下滚的思考正文会从键底下透出来（用户要求的"还点得到"就废了）。
+       三层叠加 = 原来的淡蓝调 + 卡片底色 + 白底，任何主题都不可能透。 */
+    background: linear-gradient(rgba(67, 97, 238, 0.06), rgba(67, 97, 238, 0.06)),
+                linear-gradient(var(--card-bg, #fff), var(--card-bg, #fff)),
+                #ffffff;
     border: 1px solid rgba(67, 97, 238, 0.1);
     user-select: none;
     transition: background 0.2s;
     max-width: fit-content;
 }
 .agent-reasoning-toggle:hover {
-    background: rgba(67, 97, 238, 0.08);
+    background: linear-gradient(rgba(67, 97, 238, 0.12), rgba(67, 97, 238, 0.12)),
+                linear-gradient(var(--card-bg, #fff), var(--card-bg, #fff)),
+                #ffffff;
 }
 
 /* ==================== 推理步骤容器 ==================== */
@@ -138,18 +151,25 @@
     margin-bottom: 0.1rem;
 }
 .agent-reasoning-box .reasoning-toggle {
+    position: sticky;                 /* 同一条设计：模型推理框很长时切换键也要点得到 */
+    top: 0;
+    z-index: 6;
     font-size: var(--font-size-thinking);
     font-weight: 600;
     color: #8b5cf6;
     cursor: pointer;
     padding: 0.1rem 0.3rem;
     border-radius: 3px;
-    background: rgba(139, 92, 246, 0.04);
+    background: linear-gradient(rgba(139, 92, 246, 0.06), rgba(139, 92, 246, 0.06)),
+                linear-gradient(var(--card-bg, #fff), var(--card-bg, #fff)),
+                #ffffff;
     display: inline-block;
     user-select: none;
 }
 .agent-reasoning-box .reasoning-toggle:hover {
-    background: rgba(139, 92, 246, 0.08);
+    background: linear-gradient(rgba(139, 92, 246, 0.14), rgba(139, 92, 246, 0.14)),
+                linear-gradient(var(--card-bg, #fff), var(--card-bg, #fff)),
+                #ffffff;
 }
 .agent-reasoning-box .reasoning-content {
     font-size: var(--font-size-thinking);
