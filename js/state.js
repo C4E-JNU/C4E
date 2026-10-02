@@ -139,6 +139,7 @@
             if (!btn) return;
             if (isEntering) {
                 document.body.classList.add('full-screen-mode');
+                if (window._sbRefit) window._sbRefit();   // 进对话区 → 复测窄空间
                 // 记住"在对话界面"：WebView2 被系统回收后整页重载时，靠它原样回到这里
                 try { localStorage.setItem('c4eai-view-mode', 'chat'); } catch (e) {}
                 btn.classList.add('active');
@@ -146,6 +147,7 @@
             } else {
                 document.body.classList.add('no-scroll-transition');
                 document.body.classList.remove('full-screen-mode');
+                if (window._sbRefit) window._sbRefit();
                 try { localStorage.setItem('c4eai-view-mode', 'home'); } catch (e) {}
                 btn.classList.remove('active');
                 // 退出全屏即回到启动页：滚到顶部，让大 logo 与入口按钮居中呈现

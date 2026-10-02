@@ -92,24 +92,21 @@
                   border-radius: 0;
                   border-right: 1px solid var(--border-color);
                   background: var(--sidebar-bg);
-                  width: 260px;
+                  /* 宽度由 --sb-w 单源供给（variables.css） */
                   /* 固定宽度 */
-                  transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                  transition: width .28s cubic-bezier(0.4, 0, 0.2, 1);   /* ★ 与基线一致：只补间 width（旧 0s 黑名单把动画杀了） */
                   position: relative;
                   z-index: 10;
               }
 
         /* 侧边栏收起 - 全屏/非全屏均生效 */
         .chat-sidebar.collapsed {
-            width: 0;
-            padding: 0;
-            opacity: 0;
-            overflow: hidden;
-            border-right: none;
-            margin: 0;
-            flex: 0 0 0;
-            min-width: 0;
-        }
+              width: 0;                 /* ★ 收起只动 width：内边距恒定、无淡出、不动 flex（体检 P2 收口） */
+              min-width: 0;             /* flex 项自动最小尺寸 = min-content，会顶住 width:0（26px 残条根因） */
+              padding: 0;               /* border-box 宽度下限 = padding+border：不归零永远收不成 0 */
+              overflow: hidden;
+              border-right: none;
+          }
 
         /* 全屏模式下笔记面板 */
         body.full-screen-mode .notes-panel.active {

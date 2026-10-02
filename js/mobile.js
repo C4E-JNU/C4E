@@ -1,201 +1,13 @@
-/* ==================== 手机端交互（侧栏抽屉） ====================
- * 仅 ≤768px 生效；桌面端不受影响（该宽度下 .mobile-menu-btn 被 CSS 隐藏）。
- * 行为（类 DeepSeek）：
- *   · 点汉堡 → 侧栏从左侧滑出 + 半透明遮罩
- *   · 点遮罩 / 点消息区 / 按 Esc / 选了对话 → 关闭抽屉
- *   · 打开抽屉时锁定 body 滚动
- */
+/* ==================== 顶栏外壳 + 顺手小行为 ====================
+ * 2026-10-02 起，本模块只管四件事（布局一律宽度驱动，不再按设备断点）：
+ *   1. 当前对话名 → 顶栏窄空间标题（ui.js 切分支时调 __mobileSyncTitle）
+ *   2. 抽屉搜索框占位文字：窄空间（body.narrow-space，sidebar.js 宽度裁决）换短文案
+ *   3. 顶栏溢出阶梯：ResizeObserver 实测 .nav-container 宽度 → tight/overflow 类
+ *      （tight ≲520px：左只留 logo+对话名、右 wiki 只留图标；overflow：只收 wiki 字样）
+ *   4. 主题浮层开关（.theme-slot.open 唯一真相；旧的 ⋯ 面板已废） */
 (function () {
     'use strict';
 
-    // ★ 桌面外壳（C4EAI.exe 启动时 <html> 带 .shell-desktop）里本模块必须完全不工作。
-    //   它用 matchMedia('(max-width:768px)') 判断"是不是手机"，而窗口最小化时 WebView2
-    //   报的假视口（157x25）会命中 —— 更致命的是抽屉打开时它把 #chat-sidebar 搬到
-    //   document.body 下（adoptSidebar），一搬走，css/layout.css 里那条
-    //     .chat-sidebar:not(.collapsed) ~ .sidebar-resizer { display: block }
-    //   的兄弟关系就永久失效 —— 拖动键从此再也不出现（用户反馈的"拖动键没能正常化"）。
-    // ⋯ 面板（主题色唯一入口）：全宽度通用的开关。放最前 —— 桌面外壳里同样可用。
-    (function bindMoreUniversal(){
-        var btn = document.getElementById('mobile-more-btn');
-        if (btn && !btn.dataset.bound) {
-            btn.dataset.bound = '1';
-            btn.addEventListener('click', function(e){
-                e.preventDefault(); e.stopPropagation();
-                document.body.classList.toggle('mobile-more-open');
-            });
-        }
-        document.addEventListener('pointerdown', function(e){
-            if (!document.body.classList.contains('mobile-more-open')) return;
-            var t = e.target;
-            if (t.closest && (t.closest('#mobile-more-sheet') || t.closest('#mobile-more-btn'))) return;
-            document.body.classList.remove('mobile-more-open');
-        }, true);
-        document.addEventListener('keydown', function(e){
-            if (e.key === 'Escape') document.body.classList.remove('mobile-more-open');
-        });
-    
-        // 顶栏溢出阶梯（全宽度通用）：位置不够时 Shared Wiki 只留 🗄️ 图标；回升后自动恢复
-        (function headerOverflowLadder(){
-            var nav = document.querySelector('.nav-container');
-            var btn = document.getElementById('db-analysis-btn');
-            var txt = btn && btn.querySelector('.btn-text');
-            if (!nav || !btn || !txt || !('ResizeObserver' in window)) return;
-            var applying = false;
-            var ro = new ResizeObserver(function(){
-                if (applying) return;
-                applying = true;
-                txt.style.display = '';                       // 先恢复再量（防单向塌陷）
-                if (nav.scrollWidth > nav.clientWidth + 1) txt.style.display = 'none';
-                applying = false;
-            });
-            ro.observe(nav);
-        })();
-    })();
-
-    if (document.documentElement.classList.contains('shell-desktop')) return;
-
-    var MQ = '(max-width: 768px)';
-    var OPEN_CLS = 'mobile-drawer-open';
-
-    function isMobile() {
-        try { return window.matchMedia(MQ).matches; } catch (e) { return false; }
-    }
-
-    function drawerOpen() {
-        return document.body.classList.contains(OPEN_CLS);
-    }
-
-    /** 侧栏在 DOM 里的老家（.chat-section 内）。家园页那一块是 display:none，
-     *  而且 .chat-section 是层叠上下文（position:relative + z-index:2000），会把
-     *  position:fixed 的侧栏困住、永远压在 body::before 遮罩(2900) 之下 —— 用户看到的
-     *  就是"点了只暗屏、抽屉不出来"。纯 CSS 盖不住 → 打开时把侧栏搬到 body 下，
-     *  关掉时原样搬回（DOM 搬家不影响它自己与子节点上的监听器）。 */
-    var sbHome = null;
-
-    function adoptSidebar() {
-        var sb = document.getElementById('chat-sidebar');
-        if (!sb || sb.parentElement === document.body) return;
-        sbHome = { parent: sb.parentElement, next: sb.nextElementSibling };
-        document.body.appendChild(sb);
-        void sb.offsetWidth;               // 强制重排，让 translateX 的过渡从屏外开始
-    }
-
-    function restoreSidebar() {
-        var sb = document.getElementById('chat-sidebar');
-        if (!sb || !sbHome || !sbHome.parent) return;
-        if (sbHome.next && sbHome.next.parentElement === sbHome.parent) {
-            sbHome.parent.insertBefore(sb, sbHome.next);
-        } else {
-            sbHome.parent.appendChild(sb);
-        }
-        sbHome = null;
-    }
-
-    function openDrawer() {
-        if (!isMobile()) return;
-        closeSheet();                      // 抽屉与 ⋯ 面板不叠加
-        adoptSidebar();
-        document.body.classList.add(OPEN_CLS);
-        // 打开抽屉时锁滚动，避免背景跟着滑
-        document.body.style.overflow = 'hidden';
-        var b = document.getElementById('mobile-menu-btn');
-        if (b) { b.textContent = '✕'; b.setAttribute('aria-label', '关闭对话管理'); }
-    }
-
-    function closeDrawer() {
-        document.body.classList.remove(OPEN_CLS);
-        restoreSidebar();
-        document.body.style.overflow = '';
-        var b = document.getElementById('mobile-menu-btn');
-        if (b) { b.textContent = '☰'; b.setAttribute('aria-label', '打开对话管理'); }
-    }
-
-    function toggleDrawer() {
-        if (drawerOpen()) closeDrawer(); else openDrawer();
-    }
-
-    window.__mobileOpenDrawer = openDrawer;
-    window.__mobileCloseDrawer = closeDrawer;
-    window.__mobileIsDrawerOpen = drawerOpen;
-
-    function bind() {
-        var btn = document.getElementById('mobile-menu-btn');
-        if (btn && !btn.dataset.bound) {
-            btn.dataset.bound = '1';
-            btn.addEventListener('click', function (e) {
-                e.preventDefault();
-                e.stopPropagation();
-                toggleDrawer();
-            });
-        }
-
-        // 点遮罩（body::before 区域）或消息区 → 关闭
-        // 用 pointerdown 捕获阶段，避免被其它监听吞掉
-        document.addEventListener('pointerdown', function (e) {
-            if (!drawerOpen()) return;
-            var t = e.target;
-            // 点在抽屉内部（sidebar / 笔记面板 / 数据库面板）不关
-            if (t.closest && (t.closest('.chat-sidebar') ||
-                              t.closest('.notes-panel') ||
-                              t.closest('#database-panel') ||
-                              t.closest('#mobile-menu-btn') ||
-                              t.closest('#auth-login-overlay') ||
-                              t.closest('#auth-admin-overlay'))) {
-                return;
-            }
-            closeDrawer();
-        }, true);
-
-        // Esc 关闭（复用现有键盘习惯）
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && drawerOpen()) closeDrawer();
-        });
-
-        // 选了某个对话 / 新建对话 → 自动收起抽屉（手机上更顺手）
-        var list = document.getElementById('history-list');
-        if (list && !list.dataset.mobileBound) {
-            list.dataset.mobileBound = '1';
-            list.addEventListener('click', function (e) {
-                if (!isMobile()) return;
-                var it = e.target.closest && e.target.closest('.history-item, .branch-item, .new-chat-btn');
-                if (it) setTimeout(closeDrawer, 180);   // 稍等让切换动作先执行
-            });
-        }
-        var nb = document.getElementById('new-chat-btn');
-        if (nb && !nb.dataset.mobileBound) {
-            nb.dataset.mobileBound = '1';
-            nb.addEventListener('click', function () {
-                if (isMobile()) setTimeout(closeDrawer, 180);
-            });
-        }
-
-        // 从桌面宽度缩到手机宽度时，清掉可能残留的打开态
-        try {
-            var mql = window.matchMedia(MQ);
-            var onChange = function (ev) {
-                if (!ev.matches) {          // 变宽（回桌面）
-                    document.body.classList.remove(OPEN_CLS);
-                    restoreSidebar();
-                    document.body.style.overflow = '';
-                    var b2 = document.getElementById('mobile-menu-btn');
-                    if (b2) b2.textContent = '☰';
-                }
-            };
-            if (mql.addEventListener) mql.addEventListener('change', onChange);
-            else if (mql.addListener) mql.addListener(onChange);
-        } catch (e) {}
-
-        // 切到横屏 / 旋转 → 关抽屉（避免布局怪异）
-        window.addEventListener('orientationchange', function () {
-            setTimeout(closeDrawer, 100);
-        });
-    
-        bindMore();
-    }
-
-    // ==================== 方案 A（2026-09-27）：顶栏 ☰ + 对话标题 + ⋯ ====================
-
-    /** 顶栏标题 = 当前对话名（ui.js 的 renderMessages 每轮会调一次） */
     function syncTitle() {
         var el = document.getElementById('mobile-chat-title');
         if (!el) return;
@@ -206,41 +18,55 @@
     }
     window.__mobileSyncTitle = syncTitle;
 
-    function sheetOpen() { return document.body.classList.contains('mobile-more-open'); }
-    function openSheet() { if (isMobile()) document.body.classList.add('mobile-more-open'); }
-    function closeSheet() { document.body.classList.remove('mobile-more-open'); }
-    window.__mobileOpenSheet = openSheet;
-    window.__mobileCloseSheet = closeSheet;
-
-    /** 把桌面顶栏那组控件（主题圆点 / 数据库 / 登录）整块**搬进** ⋯ 面板；
-     *  回到桌面宽度再搬回去。移动 DOM 而不是复制 —— 事件监听、auth.js 渲染的
-     *  登录芯片都在原位照旧工作（用户偏好：复用现成机制，不新建平行的一套）。 */
-    
-
-    /** 抽屉搜索框：手机端占位文字太长会被截断（"搜索（点击C4E图标可以收起该区域）"），
-     *  这里换成短的；回到桌面宽度再还原。 */
+    /** 抽屉搜索框：窄空间占位文字太长会被截断，换短的；回宽还原。 */
     function syncSearchPlaceholder() {
         var el = document.getElementById('history-search');
         if (!el) return;
         if (!el.dataset.fullPh) el.dataset.fullPh = el.getAttribute('placeholder') || '';
-        el.setAttribute('placeholder', isMobile() ? '搜索对话…' : el.dataset.fullPh);
+        var narrow = document.body.classList.contains('narrow-space');
+        el.setAttribute('placeholder', narrow ? '搜索对话…' : el.dataset.fullPh);
     }
 
-    function bindMore() {
+    /** 顶栏溢出阶梯：唯一真相 = .nav-container 的实测宽度（任何外壳同一规则）。 */
+    function bindHeaderFit() {
+        var nav = document.querySelector('.nav-container');
+        if (!nav || !window.ResizeObserver) { if (nav) nav.classList.add('tight'); return; }
+        var ro = new ResizeObserver(function () {
+            var w = nav.clientWidth;
+            nav.classList.toggle('tight', w < 520);
+            nav.classList.toggle('overflow', nav.scrollWidth > w + 1);
+        });
+        ro.observe(nav);
+    }
+
+    /** 主题浮层：开关 = .theme-slot.open（点外 / Esc 关）。 */
+    function bindThemePopover() {
+        var slot = document.querySelector('.theme-slot');
+        var btn = document.getElementById('theme-btn');
+        if (!slot || !btn) return;
+        btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            slot.classList.toggle('open');
+        });
+        document.addEventListener('click', function (e) {
+            if (!slot.contains(e.target)) slot.classList.remove('open');
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') slot.classList.remove('open');
+        });
+    }
+
+    function bind() {
+        syncTitle();
         syncSearchPlaceholder();
-        if (window.matchMedia) {
-            var mql = window.matchMedia('(max-width: 768px)');
-            var onResize = function() { syncSearchPlaceholder(); };
-            if (mql.addEventListener) mql.addEventListener('change', onResize);
-            else if (mql.addListener) mql.addListener(onResize);
-        }
+        bindHeaderFit();
+        bindThemePopover();
         window.addEventListener('orientationchange', syncSearchPlaceholder);
     }
-
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', bind);
     } else {
-        setTimeout(bind, 400);   // 等主流程 init() 之后
+        bind();
     }
 })();

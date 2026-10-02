@@ -40,16 +40,16 @@
     <!-- 本地样式文件 -->
     <link rel="stylesheet" href="css/variables.css?v=6">
     <link rel="stylesheet" href="css/reset.css?v=4">
-    <link rel="stylesheet" href="css/layout.css?v=29">
+    <link rel="stylesheet" href="css/layout.css?v=33">
     <link rel="stylesheet" href="css/sidebar.css?v=11">
     <link rel="stylesheet" href="css/messages.css?v=2">
-    <link rel="stylesheet" href="css/input.css?v=9">
+    <link rel="stylesheet" href="css/input.css?v=13">
     <link rel="stylesheet" href="css/modals.css?v=4">
     <link rel="stylesheet" href="css/xiaoe.css?v=7">
-    <link rel="stylesheet" href="css/mobile.css?v=29" id="css-mobile">
+    <link rel="stylesheet" href="css/mobile.css?v=31" id="css-mobile">
     <link rel="stylesheet" href="css/remote.css?v=1">
     <link rel="stylesheet" href="css/window.css?v=5">
-    <link rel="stylesheet" href="css/components.css?v=8">
+    <link rel="stylesheet" href="css/components.css?v=9">
     <link rel="stylesheet" href="css/agent.css?v=5">
 
     
@@ -77,51 +77,57 @@
     <!-- 导航栏 -->
     <header>
         <div class="container nav-container">
-            <!-- 手机端汉堡按钮（桌面端 CSS 隐藏） -->
-            <button class="mobile-menu-btn" id="mobile-menu-btn" title="对话管理" aria-label="打开对话管理">☰</button>
-            <!-- 手机端：当前对话标题（桌面端 CSS 隐藏；方案 A 顶栏 = ☰ + 标题 + ⋯） -->
-            <div class="mobile-chat-title" id="mobile-chat-title"></div>
+            <!-- ☰：窄空间抽屉开关（sidebar.js 宽度驱动；desktop 隐藏见 layout.css 末段） -->
+            <button type="button" class="mobile-menu-btn" id="mobile-menu-btn" title="对话管理" aria-label="打开对话管理">☰</button>
             <div class="logo-area">
-                <div class="c4e-art-logo"><img src="assets/icons/c4e-logo.png" alt="C4E"></div>
-                
+                <div class="c4e-art-logo"><img src="assets/icons/c4e-ring-v5.png" alt="C4E"></div>
             </div>
-            <div class="nav-controls">
-                
-
-                <!-- 数据库按钮（直达数据库面板） -->
-                <button class="db-analysis-btn" id="db-analysis-btn">
-                    🗄️ <span class="btn-text">Shared Wiki</span>
+            <!-- 窄空间：logo 后跟当前对话名（.nav-container.tight 时显示） -->
+            <div class="mobile-chat-title" id="mobile-chat-title"></div>
+            <!-- 主题按键：点开色板浮层（唯一入口；旧的 ⋯ 面板已废） -->
+            <div class="theme-slot">
+                <button type="button" class="theme-btn" id="theme-btn" title="主题" aria-label="切换主题">
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true">
+                        <path d="M8 1.6a6.4 6.4 0 100 12.8c1 0 1.7-.8 1.7-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.6-.5-1.1 0-.9.7-1.6 1.6-1.6h1.6A3.1 3.1 0 0014.4 6C14 3.4 11.3 1.6 8 1.6z"/>
+                        <circle cx="4.8" cy="6" r="1" fill="currentColor" stroke="none"/>
+                        <circle cx="8" cy="4.4" r="1" fill="currentColor" stroke="none"/>
+                        <circle cx="11.2" cy="6" r="1" fill="currentColor" stroke="none"/>
+                    </svg>
                 </button>
-                <!-- 登录/账号芯片插槽（auth.js 渲染） -->
-
-                
+                <div class="theme-popover" id="theme-popover">
+                    <div class="global-theme-switcher header-theme-switcher">
+                        <div class="theme-dot active" data-theme="default" title="经典蓝" onclick="setGlobalTheme('default')"></div>
+                        <div class="theme-dot" data-theme="midnight" title="深夜黑" onclick="setGlobalTheme('midnight')"></div>
+                        <div class="theme-dot" data-theme="emerald" title="翡翠绿" onclick="setGlobalTheme('emerald')"></div>
+                        <div class="theme-dot" data-theme="warm" title="琥珀护眼" onclick="setGlobalTheme('warm')"></div>
+                        <div class="theme-dot" data-theme="cyber" title="赛博2077" onclick="setGlobalTheme('cyber')"></div>
+                        <div class="theme-dot" data-theme="pink" title="樱花粉" onclick="setGlobalTheme('pink')"></div>
+                        <div class="theme-dot" data-theme="macaron-green" title="梦境绿" onclick="setGlobalTheme('macaron-green')"></div>
+                        <div class="theme-dot" data-theme="macaron-violet" title="梦境紫" onclick="setGlobalTheme('macaron-violet')"></div>
+                        <div class="theme-dot" data-theme="macaron-pink" title="梦境粉" onclick="setGlobalTheme('macaron-pink')"></div>
+                        <div class="theme-dot" data-theme="macaron-blue" title="梦境蓝" onclick="setGlobalTheme('macaron-blue')"></div>
+                    </div>
+                </div>
             </div>
-            <!-- 手机端「⋯」：把桌面顶栏那组控件（主题/数据库/登录）整块搬进来（见 js/mobile.js） -->
-            <button class="mobile-more-btn" id="mobile-more-btn" aria-label="更多" title="更多">⋯</button>
-                <!-- 桌面版窗口按钮：和上面那排控件同一条顶栏（浏览器打开时整块隐藏，见 js/window_controls.js） -->
-                <div class="win-controls" id="win-controls">
+            <!-- Shared Wiki（直达数据库面板）：简笔画书形图标，字样由溢出阶梯收 -->
+            <button type="button" class="db-analysis-btn" id="db-analysis-btn">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true">
+                    <path d="M8 3.4C6.6 2.2 4.4 1.9 1.6 1.9v10c2.8 0 5 .3 6.4 1.5 1.4-1.2 3.6-1.5 6.4-1.5v-10c-2.8 0-5 .3-6.4 1.5z"/>
+                    <path d="M8 3.4v10"/>
+                </svg>
+                <span class="btn-text">Shared Wiki</span>
+            </button>
+            <!-- 右侧字标：空间挤压（.tight）时收起只留 logo —— 溢出阶梯见 js/mobile.js -->
+            <div class="header-brand" id="header-brand">
+                <span class="brand-name">C4EAI</span>
+                <span class="brand-sub">江南大学环境计算组</span>
+            </div>
+            <!-- 桌面外壳（exe）窗口三键：浏览器无 .desktop-app 整块隐藏，字标自动右推 -->
+            <div class="win-controls" id="win-controls">
                     <button class="win-btn" id="win-min" type="button" title="最小化" aria-label="最小化"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5.5h10" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
                     <button class="win-btn" id="win-max" type="button" title="最大化" aria-label="最大化"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
                     <button class="win-btn" id="win-close" type="button" title="关闭" aria-label="关闭"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0.5 0.5l9 9M9.5 0.5l-9 9" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
                 </div>
-            <div class="mobile-more-sheet" id="mobile-more-sheet"><div class="global-theme-switcher header-theme-switcher">
-                    <div class="theme-dot active" data-theme="default" title="经典蓝" onclick="setGlobalTheme('default')">
-                    </div>
-                    <div class="theme-dot" data-theme="midnight" title="深夜黑" onclick="setGlobalTheme('midnight')">
-                    </div>
-                    <div class="theme-dot" data-theme="emerald" title="翡翠绿" onclick="setGlobalTheme('emerald')"></div>
-                    <div class="theme-dot" data-theme="warm" title="琥珀护眼" onclick="setGlobalTheme('warm')"></div>
-                    <div class="theme-dot" data-theme="cyber" title="赛博2077" onclick="setGlobalTheme('cyber')"></div>
-                    <div class="theme-dot" data-theme="pink" title="樱花粉" onclick="setGlobalTheme('pink')"></div>
-                    <div class="theme-dot" data-theme="macaron-green" title="梦境绿"
-                        onclick="setGlobalTheme('macaron-green')"></div>
-                    <div class="theme-dot" data-theme="macaron-violet" title="梦境紫"
-                        onclick="setGlobalTheme('macaron-violet')"></div>
-                    <div class="theme-dot" data-theme="macaron-pink" title="梦境粉"
-                        onclick="setGlobalTheme('macaron-pink')"></div>
-                    <div class="theme-dot" data-theme="macaron-blue" title="梦境蓝"
-                        onclick="setGlobalTheme('macaron-blue')"></div>
-                </div></div>
         </div>
     </header>
 
@@ -535,7 +541,7 @@
                     <!-- 顶部标题行: 点击 C4E 图标可折叠搜索/过滤区 -->
                     <div class="sidebar-top-bar">
                         <div class="sidebar-top-bar-title" onclick="toggleSidebarHeader()" style="display: flex; align-items: center; cursor: pointer; flex:1; user-select:none;">
-                            <div class="c4e-sidebar-art-logo"><img src="assets/icons/c4e-logo.png" alt="C4E"></div>
+                            <div class="c4e-sidebar-art-logo"><img src="assets/icons/c4e-ring-v5.png" alt="C4E"></div>
                             <h3 class="sidebar-title" style="margin: 0;">Quine</h3>
                         </div>
                         <div class="sidebar-actions">
@@ -859,7 +865,7 @@
 
 
     <!-- 脚本文件 (按依赖顺序) -->
-    <script src="js/state.js?v=19"></script>
+    <script src="js/state.js?v=20"></script>
     <!-- 个人设置后端存储（必须在其它模块之前：hydrate 要把后端设置灌回缓存） -->
     <script src="js/user_settings.js?v=2"></script>
     <script src="js/user_chats.js?v=6"></script>
@@ -871,7 +877,7 @@
     <script src="js/auth.js?v=24"></script>
     <script src="js/api.js?v=14"></script>
     <script src="js/database.js?v=21"></script>
-    <script src="js/sidebar.js?v=27"></script>
+    <script src="js/sidebar.js?v=31"></script>
     <script src="js/branching.js?v=19"></script>
     <script src="js/provider.js?v=9"></script>
     <script src="js/messages.js?v=10"></script>
@@ -890,7 +896,7 @@
     <script src="js/utils.js?v=2"></script>
     <script src="js/main.js?v=6"></script>
     <script src="js/xiaoe.js?v=8"></script>
-    <script src="js/mobile.js?v=8"></script>
+    <script src="js/mobile.js?v=10"></script>
     <script src="js/vendor/qrcode.min.js"></script>
     <script src="js/remote.js?v=2"></script>
     <script src="js/window_controls.js?v=6"></script>

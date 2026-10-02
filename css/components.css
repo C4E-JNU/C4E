@@ -213,15 +213,7 @@
         }
 
         /* 响应式设计 */
-        @media (max-width: 1024px) {
-            .chat-section {
-                flex-direction: column;
-            }
-
-            .chat-sidebar {
-                width: 100%;
-                height: 300px;
-            }
+        /* ★ @1024「侧栏变顶栏」换皮块已删：换窄走 .chat-section.narrow（宽度驱动），不再按断点切形态 */
         }
 
         @media (max-width: 768px) {

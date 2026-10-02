@@ -10,7 +10,7 @@
 
 /* 方案 A（2026-09-27）：手机端专用元素 —— 桌面端一律不显示（手机规则在下面 @media 里） */
 /* 手机端专用元素 —— 非手机外壳一律不显示（⋯ 面板已全宽度通用，不在此列） */
-.mobile-chat-title, .mobile-menu-btn, .mobile-item-more, .empty-chat-cta { display: none !important; }
+.mobile-item-more, .empty-chat-cta { display: none !important; }
 
 @media (max-width: 768px) {
 
@@ -18,17 +18,6 @@
     /* ★ 顶栏统一后 @768 只剩窄边距/小间距；高度由 --header-h 单源供给（variables.css），不写死 */
     html:not(.shell-desktop) .nav-container{ padding: 0 8px; gap: 6px; }
     /* 汉堡按钮 */
-    html:not(.shell-desktop) .mobile-menu-btn{
-        display: inline-flex !important;
-        align-items: center;
-        justify-content: center;
-        width: 36px; height: 36px;
-        border: none; background: none; cursor: pointer;
-        font-size: 1.3rem; color: var(--text-secondary, #555);
-        flex: 0 0 auto; border-radius: 8px;
-        padding: 0; line-height: 1;
-    }
-    html:not(.shell-desktop) .mobile-menu-btn:active{ background: var(--hover, #f0f2f5); }
 
     /* ========== ② 主体：去掉长滚动，让对话区占满 ========== */
     html:not(.shell-desktop) html, html:not(.shell-desktop) body{
@@ -277,53 +266,6 @@
         font-size: .92rem !important;
     }
 
-    /* ========== ③ 侧栏抽屉（默认隐藏，汉堡按钮滑出） ========== */
-    html:not(.shell-desktop) .chat-sidebar{
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        bottom: 0 !important;
-        width: 82vw !important;
-        max-width: 320px !important;
-        height: 100vh !important;
-        height: 100dvh !important;
-        z-index: 3000 !important;
-        transform: translateX(-102%) !important;
-        transition: transform .26s cubic-bezier(.4, 0, .2, 1) !important;
-        box-shadow: 2px 0 18px rgba(0, 0, 0, .18) !important;
-        border-radius: 0 !important;
-        margin: 0 !important;
-        overflow-y: auto !important;
-        -webkit-overflow-scrolling: touch;
-    }
-    /* 打开状态。⚠️ 必须把 app 自己那套桌面规则一起盖回来，否则手机上只会出现遮罩、看不见抽屉：
-     *   ① .chat-sidebar.collapsed（input.css）= width:0 + opacity:0 + padding:0 + （还可能 display:none）
-     *      —— 家园页的侧栏就是收起的，光有 translateX(0) 也还是个 0 宽的框（用户报的"暗屏，没打开"）
-     *   ② .chat-section 是 position:relative + z-index:2000 → 层叠上下文，把 position:fixed 的侧栏困在里面，
-     *      抽屉永远压在遮罩(2900)之下 → 只看得到"暗屏"；而且家园页 .chat-section 还是 display:none，
-     *      侧栏整个 0×0。这两个都是**结构性的**，纯 CSS 盖不住 → mobile.js 在打开时把侧栏搬到 body 下
-     *      （关抽屉时原样搬回），于是 position:fixed + z-index:3200 在根层叠上下文里直接生效。 */
-    html:not(.shell-desktop) body.mobile-drawer-open .chat-sidebar{
-        display: flex !important;
-        width: 82vw !important;
-        max-width: 320px !important;
-        opacity: 1 !important;
-        /* 顶栏（46px）压在抽屉之上，好让 ✕ 能点到 → 抽屉内容从它下面开始 */
-        padding: 3.4rem 1.5rem 1.5rem !important;
-        overflow-y: auto !important;
-        transform: translateX(0) !important;
-        z-index: 3200 !important;
-    }
-    /* 遮罩层（点空白关闭抽屉） */
-    html:not(.shell-desktop) body.mobile-drawer-open::before{
-        content: '';
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, .38);
-        z-index: 2900;
-    }
-    /* 拖拽分隔条在手机上无意义 */
-    html:not(.shell-desktop) .sidebar-resizer{ display: none !important; }
 
     /* 「返回主页」按钮：手机端也要有（用户要求；点它退出全屏回主页） */
     html:not(.shell-desktop) #full-screen-toggle{
@@ -488,16 +430,6 @@
     html:not(.shell-desktop) .history-group .group-message-count{ flex: 0 0 auto !important; }
     html:not(.shell-desktop) .history-group .group-actions{ flex: 1 0 100% !important; justify-content: flex-start !important; }
 
-    html:not(.shell-desktop) .mobile-chat-title{
-        display: block !important;
-        flex: 1 1 auto !important;
-        min-width: 0 !important;
-        padding: 0 6px !important;
-        font-size: 15px !important;
-        font-weight: 600 !important;
-        color: var(--dark, #212529) !important;
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
     /* 消息区：顶部呼吸留白 + 底部避开小e（原来首条贴 y=0、小e 压正文） */
     html:not(.shell-desktop) #messages-container{ padding-top: 12px !important; padding-bottom: 96px !important; }
     /* 正文：手机端不低于 15px（对话字号默认值 0.75rem=12px 在手机上太小） */
@@ -551,8 +483,6 @@
 
 /* ========== 超窄屏（≤380px）进一步压缩 ========== */
 @media (max-width: 380px) {
-    html:not(.shell-desktop) .chat-sidebar{ width: 90vw !important; }
-}
 
 /* ========== 横屏手机（矮屏）：压缩竖向留白 ========== */
 @media (max-width: 900px) and (max-height: 480px) {

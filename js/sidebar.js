@@ -5,7 +5,7 @@
         var _SB_KEY = 'c4eai-sidebar-width';   // localStorage: 历史侧栏宽度(px)
         var _SB_DEFAULT = 300;
         var _SB_MIN = 240;
-        var _CHAT_MIN = 360;                   // 对话区容忍的最小宽度（原 _sbMaxWidth 里那个 360）
+        var _CHAT_MIN = 480;                   // 对话区最小可呼吸宽度（= variables.css --chat-min；低于它侧栏让位，宽度驱动）
         var _SB_FOCUS_SLACK = 24;              // 拖过分界多少像素才算"我要全屏看对话管理"（防边界抖）
 
         var _sbFocusBack = 0;                  // 进专注前的侧栏宽度
@@ -27,6 +27,12 @@
         function _sbStoreWidth(w) {
             try { localStorage.setItem(_SB_KEY, String(Math.round(w))); } catch (e) {}
         }
+        // 宽度唯一真源 = --sb-w（variables.css）。唯一合法的写宽度入口：
+        // 收起/展开/恢复只切类，永不写 inline width（体检 P3 收口，消灭「先 1/4 再变肥」两段跳）。
+        function _sbSetW(w) {
+            try { document.documentElement.style.setProperty('--sb-w', Math.round(w) + 'px'); } catch (e) {}
+        }
+        var _sbDrawerIntent = false;           // 窄空间下用户主动开抽屉的意图：尺寸变化前不自动收回
         // 侧栏可用最大宽度 = 区域宽 - 对话区容忍最小宽度
         function _sbMaxWidth() {
             var sec = _sbSection();
@@ -94,12 +100,11 @@
             if (sb.classList.contains('collapsed')) {
                 // 收起 → 展开：回到用户拖好的宽度
                 sb.classList.remove('collapsed');
-                sb.style.width = _sbSavedWidth() + 'px';
+                _sbSetW(_sbSavedWidth());
                 btn.classList.remove('active');
             } else {
                 // 展开 → 收起
                 sb.classList.add('collapsed');
-                sb.style.width = '';                 // 让 .collapsed width:0 生效
                 btn.classList.add('active');
             }
             _sbPlaceDivider();
@@ -125,17 +130,17 @@
         function _sbEnterFocus() {
             var sb = _sbEl(), sec = _sbSection();
             if (!sb || !sec || _sbInFocus()) return;
-            _sbFocusBack = parseFloat(sb.style.width) || _sbSavedWidth();
+            _sbFocusBack = sb.getBoundingClientRect().width || _sbSavedWidth();
             sec.classList.add('focus-manage');       // CSS：对话区 display:none
-            sb.style.width = '100%';                 // 侧栏铺满（宽度仍归 JS 管，不写死 CSS）
+            /* 铺满宽度由 CSS 类管：.chat-section.focus-manage .chat-sidebar{width:100%}（layout.css），不抢 --sb-w */
             _sbPlaceDivider();                       // 拖动键留在右边界，随时能拖回来
         }
         function _sbExitFocus(loadPending) {
             var sb = _sbEl(), sec = _sbSection();
             if (!sb || !sec || !_sbInFocus()) return;
             sec.classList.remove('focus-manage');
-            sb.style.width = Math.min(_sbFocusBack || _SB_DEFAULT, _sbMaxWidth()) + 'px';
-            _sbStoreWidth(parseFloat(sb.style.width) || _SB_DEFAULT);
+            _sbSetW(Math.min(_sbFocusBack || _SB_DEFAULT, _sbMaxWidth()));
+            _sbStoreWidth(_sbSavedWidth());   // _sbSetW 刚写过，存档与 --sb-w 同步
             _sbPlaceDivider();
             var pending = _sbFocusPending;
             _sbFocusPending = null;
@@ -148,30 +153,38 @@
         // 窗口重新变宽 → 自动弹回来（只弹"我自动收的"那次，用户自己收的不动）。
         function _sbFitToWindow() {
             var sb = _sbEl(), sec = _sbSection();
+            if (!sec || !sec.clientWidth) return;   // 对话区未布局（落地页 display:none）时宽度不可测，不裁决
             _sbSyncMinimized();                            // 顺手问一次（异步返回后若已恢复会再调一次本函数）
             if (_sbMinimized) return;                      // 最小化中：尺寸是假的，别做布局决定
             if (!sb || !sec || !sec.clientWidth) return;   // 落地页/未布局：等下一次尺寸变化
             if (!_sbInFocus()) {
-                if (sec.clientWidth < _SB_MIN + _CHAT_MIN) {
+                if ((function () {
+                        // 窄空间模式（宽度驱动，与外壳/设备无关）：剩余对话区 < _CHAT_MIN → 挂 .narrow，
+                        // 侧栏让位（自动收起），重开 = 覆盖式抽屉（layout.css 末段）
+                        var _cur = sb.classList.contains('collapsed') ? 0 : _sbSavedWidth();
+                        var _narrow = (sec.clientWidth - _cur) < _CHAT_MIN;
+                        sec.classList.toggle('narrow', _narrow);
+                        if (!_narrow) { sec.classList.remove('drawer-open'); _sbDrawerIntent = false; }
+                        try { document.body.classList.toggle('narrow-space', _narrow); } catch (e) {}
+                        return _narrow && !_sbDrawerIntent;
+                    })()) {
                     if (!sb.classList.contains('collapsed')) {
-                        _sbAutoBack = parseFloat(sb.style.width) ||
-                                      sb.getBoundingClientRect().width || _sbSavedWidth();
+                        _sbAutoBack = sb.getBoundingClientRect().width || _sbSavedWidth();
                         sb.dataset.autoCollapsed = '1';
                         sb.classList.add('collapsed');
-                        sb.style.width = '';
                     }
                 } else if (sb.dataset.autoCollapsed === '1' && sb.dataset.userCollapsed !== '1') {
                     delete sb.dataset.autoCollapsed;
                     sb.classList.remove('collapsed');
                     // 回到"被自动收起之前"的那个宽度（不是上一次持久化的值 —— 否则窗口一缩一放，
                     // 侧栏宽度就自己跳成别的数）
-                    sb.style.width = Math.min(_sbAutoBack || _sbSavedWidth(), _sbMaxWidth()) + 'px';
-                    _sbStoreWidth(parseFloat(sb.style.width) || _SB_DEFAULT);
+                    _sbSetW(Math.min(_sbAutoBack || _sbSavedWidth(), _sbMaxWidth()));
+                    _sbStoreWidth(_sbSavedWidth());   // _sbSetW 刚写过，存档与 --sb-w 同步
                     _sbAutoBack = 0;
                 }
                 if (!sb.classList.contains('collapsed')) {
-                    var mw = _sbMaxWidth(), cur = parseFloat(sb.style.width) || _sbSavedWidth();
-                    if (cur > mw) { sb.style.width = mw + 'px'; _sbStoreWidth(mw); }
+                    var mw = _sbMaxWidth(), cur = _sbSavedWidth();
+                    if (cur > mw) { _sbSetW(mw); _sbStoreWidth(mw); }
                 }
             }
             _sbPlaceDivider();
@@ -187,7 +200,7 @@
             var btn = document.getElementById('sidebar-toggle-btn');
             if (btn) btn.addEventListener('click', _sbUserToggle);
             if (sb && !sb.classList.contains('collapsed')) {
-                sb.style.width = Math.min(_sbSavedWidth(), _sbMaxWidth()) + 'px';
+                _sbSetW(Math.min(_sbSavedWidth(), _sbMaxWidth()));
             }
 
             var rs = _sbResizer(), sec = _sbSection();
@@ -199,7 +212,7 @@
                     // 专注态下从"上限"起步（继续往左拖才是回收）
                     var startW = _sbInFocus() ? _sbMaxWidth()
                         : (sb.classList.contains('collapsed') ? 0
-                           : (parseFloat(sb.style.width) || sb.getBoundingClientRect().width));
+                           : sb.getBoundingClientRect().width);
                     var prevTr = sb.style.transition;
                     sb.style.transition = 'none';     // 拖动中禁用过渡，避免卡顿
                     rs.classList.add('rs-active');
@@ -208,10 +221,10 @@
                         var base = startW + (ev.clientX - startX), limit = _sbMaxWidth();
                         if (!_sbInFocus()) {
                             if (base - limit > _SB_FOCUS_SLACK) { _sbEnterFocus(); return; }
-                            sb.style.width = Math.max(_SB_MIN, Math.min(limit, base)) + 'px';
+                            _sbSetW(Math.max(_SB_MIN, Math.min(limit, base)));
                         } else if (base - limit < -_SB_FOCUS_SLACK) {
                             _sbExitFocus(false);                       // 先退专注，宽度在 mouseup 时结算
-                            startW = parseFloat(sb.style.width) || _sbMaxWidth();
+                            startW = sb.getBoundingClientRect().width;
                             startX = ev.clientX;
                             return;
                         }
@@ -224,7 +237,7 @@
                         sb.style.transition = prevTr;
                         rs.classList.remove('rs-active');
                         if (!_sbInFocus()) {
-                            var fw = parseFloat(sb.style.width);
+                            var fw = sb.getBoundingClientRect().width;
                             if (fw && fw >= _SB_MIN) _sbStoreWidth(fw);
                             if (_sbFocusPending) {                     // 刚从专注拖回来 → 补加载
                                 var pd = _sbFocusPending; _sbFocusPending = null;
@@ -245,7 +258,34 @@
                 setTimeout(_sbFitToWindow, 60);
                 setTimeout(_sbFitToWindow, 300);
                 _sbSyncMinimized();                        // 启动先问一次，别等第一次 resize
+            _sbFitToWindow();                        // ★ 启动即定窄空间归属（窗口一开就是 700px 也得进 narrow）
+            window._sbRefit = _sbFitToWindow;       // 视图切换（进/出对话）后外部可触发复测
             }
+        })();
+
+        // ==================== 窄空间抽屉开关（☰，宽度驱动，全外壳通用；事件委托版，DOM 时序无关） ====================
+        (function _sbBindDrawerToggle() {
+            document.addEventListener('click', function (e) {
+                var sec = _sbSection();
+                if (!sec) return;
+                var t = e.target;
+                // ☰ / ✕ 开关
+                if (t.closest && t.closest('#mobile-menu-btn')) {
+                    e.preventDefault(); e.stopPropagation();
+                    var open = sec.classList.toggle('drawer-open');
+                    _sbDrawerIntent = open;
+                    var b = document.getElementById('mobile-menu-btn');
+                    if (b) b.textContent = open ? '✕' : '☰';
+                    return;
+                }
+                // 点遮罩（抽屉外任意处）关闭
+                if (!sec.classList.contains('drawer-open')) return;
+                if (t.closest && (t.closest('#chat-sidebar') || t.closest('.notes-panel') || t.closest('#database-panel'))) return;
+                sec.classList.remove('drawer-open');
+                _sbDrawerIntent = false;
+                var b2 = document.getElementById('mobile-menu-btn');
+                if (b2) b2.textContent = '☰';
+            });
         })();
 
 

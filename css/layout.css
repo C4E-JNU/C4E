@@ -19,7 +19,8 @@
 
         .nav-container {
             display: flex;
-            justify-content: space-between;
+            justify-content: flex-start;
+            gap: 8px;
             align-items: center;
             height: 100%;
         }
@@ -28,18 +29,6 @@
 
         
 
-        .header-logo {
-            height: 28px;
-            width: auto;
-            object-fit: contain;
-            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
-            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s;
-        }
-
-        .header-logo:hover {
-            transform: scale(1.05);
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-        }
 
         /* 品牌标记：C4E 图形 LOGO ＋ 一圈圆环（环色跟随主题 --primary）
            注意：容器原本是"渐变字裁剪"，放图片后必须把 background-clip 复位，
@@ -47,13 +36,12 @@
         .c4e-art-logo,
         .c4e-sidebar-art-logo {
             background: none;
-            border: 2px solid var(--primary);
+            border: none;   /* 新 logo 自带圆环，不再描边 */
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             box-shadow: none;
-            transition: border-color 0.3s ease;
             flex-shrink: 0;
             user-select: none;
             overflow: hidden;
@@ -67,8 +55,8 @@
 
         .c4e-art-logo img,
         .c4e-sidebar-art-logo img {
-            width: 72%;
-            height: auto;
+            width: 100%;
+            height: 100%;
             object-fit: contain;
             display: block;
         }
@@ -953,14 +941,15 @@
 
         /* 右侧侧滑栏 */
         .chat-sidebar {
-            width: 300px;
+            width: var(--sb-w);
+            transition: width .28s cubic-bezier(.4, 0, .2, 1), padding .28s cubic-bezier(.4, 0, .2, 1);   /* ★ 平推：唯一被补间的属性是 width */
             background: var(--sidebar-bg);
             border-radius: 16px;
             box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
             /* 上下不对称：顶部收紧到 12px（原来四边都 24px，「对话管理」那行离顶太远），
                底部留 16px 给账号行呼吸 */
             padding: 12px 12px 16px;
-            height: 600px;
+            height: auto;   /* 拉伸填满（原 600px 写死 = 体检 P3 多主人之一） */
             display: flex;
             flex-direction: column;
             position: relative;
@@ -1323,15 +1312,55 @@
         }
 
 
-/* ★ ⋯ 面板（主题色唯一入口）：全宽度通用。开关 = body.mobile-more-open（唯一真相）。
-   顶栏是 sticky/fixed，天然是面板的包含块（top:100% 落到顶栏正下方）。 */
-.mobile-more-sheet { position: absolute; top: 100%; right: 8px; z-index: 2600; display: none;
-    min-width: 200px; max-width: calc(100vw - 16px); background: var(--card-bg, #fff);
-    border: 1px solid var(--border-color); border-radius: 12px; padding: 10px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, .12); box-sizing: border-box; }
-body.mobile-more-open .mobile-more-sheet { display: block; }
-.mobile-more-sheet .global-theme-switcher { width: 100%; flex-wrap: wrap; box-sizing: border-box; }
-/* ⋯ 按钮本体：全宽度通用（不再只在手机出现） */
-.mobile-more-btn { display: inline-flex; align-items: center; justify-content: center;
-    width: 34px; height: 34px; border: 1px solid var(--border-color); border-radius: 8px;
-    background: transparent; font-size: 15px; line-height: 1; color: inherit; cursor: pointer; flex: 0 0 auto; }
+/* ★ 主题浮层：开关 = .theme-slot.open（唯一真相）。顶栏是包含块，top:100% 落到顶栏正下方。 */
+.theme-slot { position: relative; flex: 0 0 auto; }
+.theme-btn { width: 34px; height: 34px; border: 1px solid var(--border-color); border-radius: 8px;
+    background: transparent; color: inherit; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; }
+.theme-btn:hover { background: rgba(127, 127, 127, .12); }
+.theme-popover { position: absolute; top: calc(100% + 6px); left: 0; z-index: 2600; display: none;
+    background: var(--card-bg, #fff); border: 1px solid var(--border-color); border-radius: 12px;
+    padding: 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, .12); box-sizing: border-box; }
+.theme-slot.open .theme-popover { display: block; }
+.theme-popover .global-theme-switcher { margin-right: 0; flex-wrap: wrap; max-width: 220px; }
+
+/* 右侧字标：C4EAI + 江南大学环境计算组（margin-left:auto 右推；exe 三键之后贴边） */
+.header-brand { margin-left: auto; display: flex; align-items: baseline; gap: 8px;
+    white-space: nowrap; flex: 0 0 auto; }
+.header-brand .brand-name { font-weight: 700; font-size: .95rem; }
+.header-brand .brand-sub { font-size: .72rem; opacity: .6; }
+
+/* 窄空间标题（logo 后跟当前对话名）：默认藏，.tight 才放出来 */
+.mobile-chat-title { display: none; min-width: 0; max-width: 38vw; padding: 0 4px;
+    font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nav-container.tight .mobile-chat-title { display: block; flex: 0 1 auto; }
+
+/* ★ 顶栏溢出阶梯（唯一真相 = .nav-container 实测宽度，js/mobile.js ResizeObserver 挂类）：
+   tight（≲520px，手机程度）→ 左只留 logo+对话名，右 wiki 只留图标，字标/主题收；
+   overflow（装不下但还没到 tight）→ 只收 wiki 字样。 */
+.nav-container.tight .header-brand,
+.nav-container.tight .theme-slot { display: none; }
+.nav-container.tight .db-analysis-btn .btn-text,
+.nav-container.overflow .db-analysis-btn .btn-text { display: none; }
+
+/* ★ 窄空间模式：对话区剩余宽度 < --chat-min 时由 sidebar.js 给 .chat-section 挂 .narrow（宽度驱动，任何外壳同一规则；
+   取代旧 @768 手机抽屉 + mobile.js 搬 DOM）。抽屉 = 同一条侧栏改 absolute + transform，不再搬 DOM。 */
+#mobile-menu-btn { display: none; }
+body.narrow-space #mobile-menu-btn { display: inline-flex !important; }   /* ★ 汉堡在 header，不在 .chat-section 里，得挂 body 类 */
+.chat-section.narrow .sidebar-resizer,
+.chat-section.narrow .sidebar-toggle-btn { display: none; }   /* 窄空间由 ☰ 全权开合，箭头/拖条退场 */
+.chat-section.narrow .chat-sidebar {
+    position: absolute; top: 0; bottom: 0; left: 0; z-index: 3000;
+    width: min(320px, 82vw); height: auto;
+    transform: translateX(-105%);
+    transition: transform .28s cubic-bezier(.4, 0, .2, 1);   /* 抽屉只补间 transform（合成器动画，不重排） */
+    box-shadow: 2px 0 18px rgba(0, 0, 0, .18);
+    border-radius: 0;
+}
+.chat-section.narrow.drawer-open .chat-sidebar { transform: translateX(0); }
+.chat-section.narrow.drawer-open::after {   /* 遮罩：伪元素，关闭 = 移除类 */
+    content: ''; position: fixed; inset: 0; z-index: 2900;
+    background: rgba(20, 24, 40, .35);
+}
+/* 专注模式（侧栏铺满）：宽度归 CSS 类，不抢 --sb-w */
+.chat-section.focus-manage .chat-sidebar { width: 100%; }
