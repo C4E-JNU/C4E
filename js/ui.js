@@ -7,20 +7,9 @@
 
             updateReasoningRail();   // 清空后先让浮动键隐藏，渲染完再按实际情况显示
 
-            // 无当前对话（null 或指向不存在的对话）→ 显示空态引导，不崩
+            // 无当前对话（null 或指向不存在的对话）→ 对话区留空，不崩
+            // （2026-10-03 用户要求：删掉对话区空态引导卡与其按钮，不要这个功能）
             if (!currentBranch) {
-                const emptyMsg = document.createElement('div');
-                emptyMsg.className = 'message assistant';
-                emptyMsg.dataset.id = 'empty';
-                emptyMsg.innerHTML = `
-                    <div class="message-content">
-                        <div class="empty-state-icon">💬</div>
-                        <div class="empty-state-title">还没有对话</div>
-                        <div class="empty-state-sub">点下面的按钮开始新的聊天</div>
-                        <button class="empty-chat-cta" onclick="createNewConversation()">＋ 新建对话</button>
-                    </div>
-                `;
-                messagesContainer.appendChild(emptyMsg);
                 return;
             }
 

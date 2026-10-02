@@ -96,28 +96,6 @@
             }
         }
 
-
-        /* 现代化对话空状态 */
-        /* 空态文案与「新建对话」按钮（单一设计：exe/浏览器/任意宽度同一套） */
-        .empty-state-title { text-align: center; font-size: 1.1rem; }
-        .empty-state-sub { text-align: center; color: var(--gray); margin-top: 0.4rem; }
-        .empty-chat-cta {
-            align-self: center;
-            margin-top: 0.9rem;
-            height: 32px;
-            padding: 0 14px;
-            font-family: inherit;
-            font-size: 0.82rem;
-            font-weight: 600;
-            color: var(--primary);                    /* 方案 B：同一套（淡主题底 + 主题色文字） */
-            background: var(--primary-soft);
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: background-color .16s;
-        }
-        .empty-chat-cta:hover { background: color-mix(in srgb, var(--primary) 20%, transparent); }
-
         .empty-state {
             padding: 3rem 1rem;
             text-align: center;

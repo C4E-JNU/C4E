@@ -223,6 +223,8 @@ grep -q "_sbApplyWidth" js/sidebar.js || { echo "FAIL: 侧栏缺唯一宽度贴�
 grep -q "var(--primary-soft)" css/sidebar.css || { echo "FAIL: 新建对话键未用方案 B（淡主题底）"; exit 1; }
 ! grep -q "primary-gradient" css/sidebar.css || { echo "FAIL: 新建对话键又用回实心渐变"; exit 1; }
 grep -q "color-mix" css/sidebar.css || { echo "FAIL: 新建对话键 hover 未用主题色加深"; exit 1; }
+# ★ 对话区空态卡「还没有对话 / 点下面的按钮开始新的聊天 + 按钮」已按用户要求删除（2026-10-03「完全删除，不要那个功能」），别复活
+! grep -rq --exclude='*.bak*' "empty-chat-cta\|点下面的按钮开始新的聊天" index.html js/ css/ || { echo "FAIL: 对话区空态卡/CTA 复活（用户已要求删除）"; exit 1; }
 
 # ── CSS 残渣体检（2026-10-02）——改前端必看：死样式 / 括号残渣 ──
 for a in scripts/css_audit.py scripts/css_class_audit.py; do
