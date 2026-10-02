@@ -161,8 +161,9 @@
                 if ((function () {
                         // 窄空间模式（宽度驱动，与外壳/设备无关）：剩余对话区 < _CHAT_MIN → 挂 .narrow，
                         // 侧栏让位（自动收起），重开 = 覆盖式抽屉（layout.css 末段）
-                        var _cur = sb.classList.contains('collapsed') ? 0 : _sbSavedWidth();
-                        var _narrow = (sec.clientWidth - _cur) < _CHAT_MIN;
+                        // 判据 = 侧栏占位宽度（--sb-w 真源）：collapsed 是结果不是输入；
+                        // 按收起后 0 算 → 自动收起瞬间剩余宽度"够用" → 窄空间被误判 false 关抽屉
+                        var _narrow = (sec.clientWidth - _sbSavedWidth()) < _CHAT_MIN;
                         sec.classList.toggle('narrow', _narrow);
                         if (!_narrow) { sec.classList.remove('drawer-open'); _sbDrawerIntent = false; }
                         try { document.body.classList.toggle('narrow-space', _narrow); } catch (e) {}
@@ -263,19 +264,21 @@
             }
         })();
 
-        // ==================== 窄空间抽屉开关（☰，宽度驱动，全外壳通用；事件委托版，DOM 时序无关） ====================
+        // ==================== 召唤对话管理（点顶栏 C4E logo；宽度驱动，全外壳通用；事件委托版，DOM 时序无关） ====================
         (function _sbBindDrawerToggle() {
             document.addEventListener('click', function (e) {
                 var sec = _sbSection();
                 if (!sec) return;
                 var t = e.target;
-                // ☰ / ✕ 开关
-                if (t.closest && t.closest('#mobile-menu-btn')) {
+                // 点顶栏 C4E logo = 召唤对话管理：窄空间开/关抽屉；桌面把收起的侧栏展开
+                if (t.closest && t.closest('.c4e-art-logo')) {
                     e.preventDefault(); e.stopPropagation();
-                    var open = sec.classList.toggle('drawer-open');
-                    _sbDrawerIntent = open;
-                    var b = document.getElementById('mobile-menu-btn');
-                    if (b) b.textContent = open ? '✕' : '☰';
+                    if (sec.classList.contains('narrow')) {
+                        _sbDrawerIntent = sec.classList.toggle('drawer-open');
+                    } else {
+                        var _sbx = _sbEl();
+                        if (_sbx && _sbx.classList.contains('collapsed')) toggleSidebar();
+                    }
                     return;
                 }
                 // 点遮罩（抽屉外任意处）关闭
@@ -283,8 +286,6 @@
                 if (t.closest && (t.closest('#chat-sidebar') || t.closest('.notes-panel') || t.closest('#database-panel'))) return;
                 sec.classList.remove('drawer-open');
                 _sbDrawerIntent = false;
-                var b2 = document.getElementById('mobile-menu-btn');
-                if (b2) b2.textContent = '☰';
             });
         })();
 

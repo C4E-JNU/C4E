@@ -185,6 +185,7 @@ grep -q "theme-btn" index.html || { echo "FAIL: index.html 顶栏缺主题按键
 ! grep -q "mobile-more" css/layout.css || { echo "FAIL: layout.css 残留 ⋯ 面板样式"; exit 1; }
 grep -q "nav-container.tight" css/layout.css || { echo "FAIL: layout.css 缺顶栏 tight 阶梯"; exit 1; }
 grep -q "bindHeaderFit" js/mobile.js || { echo "FAIL: mobile.js 缺顶栏溢出阶梯"; exit 1; }
+! grep -q "mobile-menu-btn" index.html css/layout.css css/mobile.css js/sidebar.js || { echo "FAIL: ☰ 按钮残留"; exit 1; }
 ! grep -q "placeNavControls" js/mobile.js || { echo "FAIL: mobile.js placeNavControls 复活"; exit 1; }
 
 # ── 侧栏平推（2026-10-02）守卫 ──

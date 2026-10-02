@@ -1338,17 +1338,17 @@
 /* ★ 顶栏溢出阶梯（唯一真相 = .nav-container 实测宽度，js/mobile.js ResizeObserver 挂类）：
    tight（≲520px，手机程度）→ 左只留 logo+对话名，右 wiki 只留图标，字标/主题收；
    overflow（装不下但还没到 tight）→ 只收 wiki 字样。 */
-.nav-container.tight .header-brand,
-.nav-container.tight .theme-slot { display: none; }
+.nav-container.tight .header-brand { display: none; }
 .nav-container.tight .db-analysis-btn .btn-text,
 .nav-container.overflow .db-analysis-btn .btn-text { display: none; }
+/* tight 时右侧依次堆：主题 → wiki(纯图标) → 窗口三键（三键自己右推，不再借字标的 auto） */
+.nav-container.tight .win-controls { margin-left: auto; }
 
 /* ★ 窄空间模式：对话区剩余宽度 < --chat-min 时由 sidebar.js 给 .chat-section 挂 .narrow（宽度驱动，任何外壳同一规则；
    取代旧 @768 手机抽屉 + mobile.js 搬 DOM）。抽屉 = 同一条侧栏改 absolute + transform，不再搬 DOM。 */
-#mobile-menu-btn { display: none; }
-body.narrow-space #mobile-menu-btn { display: inline-flex !important; }   /* ★ 汉堡在 header，不在 .chat-section 里，得挂 body 类 */
+
 .chat-section.narrow .sidebar-resizer,
-.chat-section.narrow .sidebar-toggle-btn { display: none; }   /* 窄空间由 ☰ 全权开合，箭头/拖条退场 */
+.chat-section.narrow .sidebar-toggle-btn { display: none; }   /* 窄空间由顶栏 logo 全权开合，箭头/拖条退场 */
 .chat-section.narrow .chat-sidebar {
     position: absolute; top: 0; bottom: 0; left: 0; z-index: 3000;
     width: min(320px, 82vw); height: auto;
