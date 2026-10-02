@@ -744,6 +744,7 @@
         }
 
         .chat-container {
+            position: relative;   /* 浮动「收起思考」键的定位上下文（对话区右侧留白） */
             background: var(--card-bg);
             border-radius: 16px;
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);

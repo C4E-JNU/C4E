@@ -95,45 +95,28 @@
     background: rgba(67, 97, 238, 0.08);
 }
 
-/* ==================== 推理过程切换按钮 ==================== */
-/* ★ 关键设计（用户 2026-10-02）：大片思考过程占满屏幕时，「收起智能体推理过程」必须仍然点得到。
-   做法 = 让它 sticky 在消息区顶端（气泡还在视野里就一直钉在顶上）；
-   底色必须不透明，否则下滚的文字会从底下透出来；再加一点阴影表示「浮着」。 */
-.agent-reasoning-toggle {
-    position: sticky;
-    top: 0;
-    z-index: 6;
-    box-shadow: 0 4px 10px -6px rgba(0, 0, 0, 0.28);
-    padding: 0.35rem 0.6rem;
-    margin: 0.15rem 0;
-    font-size: var(--font-size-thinking);
+/* 推理区包层：只管「这一组思考是收起还是展开」这一个状态。
+   控件本体不在消息里，而是对话区右侧那颗浮动键（.reasoning-rail-btn）——
+   这样大片思考铺满屏幕时它也不压正文、不会被滚走（用户 2026-10-02 定的方案 A）。 */
+.agent-reasoning-block.collapsed .reasoning-steps-container {
+    display: none;
+}
+
+/* 收起态留下的那一行轻提示：点它只展开这一条消息的思考 */
+.reasoning-collapsed-hint {
+    display: none;
+    font-size: var(--font-size-thinking, 0.8rem);
     font-weight: 600;
     color: var(--primary, #4361ee);
+    opacity: 0.75;
     cursor: pointer;
-    border-radius: 6px;
-    /* 必须完全不透明：否则下滚的思考正文会从键底下透出来（用户要求的"还点得到"就废了）。
-       三层叠加 = 原来的淡蓝调 + 卡片底色 + 白底，任何主题都不可能透。 */
-    background: linear-gradient(rgba(67, 97, 238, 0.06), rgba(67, 97, 238, 0.06)),
-                linear-gradient(var(--card-bg, #fff), var(--card-bg, #fff)),
-                #ffffff;
-    border: 1px solid rgba(67, 97, 238, 0.1);
+    padding: 0.2rem 0;
     user-select: none;
-    transition: background 0.2s;
-    max-width: fit-content;
 }
-.agent-reasoning-toggle:hover {
-    background: linear-gradient(rgba(67, 97, 238, 0.12), rgba(67, 97, 238, 0.12)),
-                linear-gradient(var(--card-bg, #fff), var(--card-bg, #fff)),
-                #ffffff;
+.reasoning-collapsed-hint:hover { opacity: 1; }
+.agent-reasoning-block.collapsed .reasoning-collapsed-hint {
+    display: inline-block;
 }
-
-/* 推理区包层：sticky 的作用域就是它（推理区自身的高度）。
-   不包这层的话，sticky 会被约束在整条消息气泡里 —— 正文/表格很长时，
-   收起键会一路跟着你滚到底，用户 2026-10-02 指出过。 */
-.agent-reasoning-block {
-    position: relative;
-}
-
 /* ==================== 推理步骤容器 ==================== */
 #ephemeral-steps {
     display: flex;

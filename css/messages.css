@@ -41,6 +41,40 @@
             scroll-behavior: smooth;
         }
 
+        /* 对话区右侧的「收起思考」浮动键：只在有思考时出现，故意做小、贴右侧留白。
+           窄屏（<560px）退化成纯图标圆钮 —— 那时右侧留白本来就不够放文字。 */
+        .reasoning-rail-btn {
+            position: absolute;
+            right: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 5;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            height: 24px;
+            padding: 0 8px;
+            font-family: inherit;
+            font-size: 11px;
+            font-weight: 600;
+            line-height: 1;
+            color: var(--primary, #4361ee);
+            background: var(--card-bg, #fff);
+            border: 1px solid var(--border-color, #e5e7eb);
+            border-radius: 999px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.10);
+            cursor: pointer;
+        }
+        .reasoning-rail-btn:hover {
+            background: rgba(67, 97, 238, 0.06);
+            border-color: rgba(67, 97, 238, 0.35);
+        }
+        .reasoning-rail-btn[hidden] { display: none; }
+        @media (max-width: 560px) {
+            .reasoning-rail-btn { width: 24px; padding: 0; justify-content: center; right: 8px; }
+            .reasoning-rail-btn .rrb-label { display: none; }
+        }
+
         .message {
             margin-bottom: 1.5rem;
             position: relative;

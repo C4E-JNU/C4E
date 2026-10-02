@@ -185,7 +185,7 @@
                        }
                    }).join('\n');
                    const containerId = 'rs-' + message.id;
-                   reasoningStepsHtml = `<div class="agent-reasoning-block"><div class="agent-reasoning-toggle" onclick="var c=document.getElementById('${containerId}');var t=this;if(c.style.display==='none'){c.style.display='block';t.innerHTML='🧠 收起智能体推理过程 ▾';t.classList.remove('collapsed')}else{c.style.display='none';t.innerHTML='🧠 查看智能体推理过程 ▸';t.classList.add('collapsed')}">🧠 收起智能体推理过程 ▾</div><div id="${containerId}" class="reasoning-steps-container">${stepsHtml}</div></div>`;
+                   reasoningStepsHtml = `<div class="agent-reasoning-block"><div id="${containerId}" class="reasoning-steps-container">${stepsHtml}</div><div class="reasoning-collapsed-hint" onclick="this.parentElement.classList.remove('collapsed');updateReasoningRail()">🧠 思考过程已收起 · 点开</div></div>`;
                }
 
                // 附件显示 (仅用户消息)
@@ -1304,3 +1304,29 @@ document.addEventListener('click', function (e) {
     n.classList.toggle('expanded');
     h.classList.toggle('open');
 });
+
+// ==================== 对话区右侧「收起思考」浮动键 ====================
+// 控件本体不在消息里（否则大片思考铺满屏幕时会压正文/被滚走）：
+// 它钉在对话区右侧留白，垂直居中；没有思考块时自己隐藏。
+function updateReasoningRail() {
+    var btn = document.getElementById('reasoning-rail-btn');
+    if (!btn) return;
+    var blocks = document.querySelectorAll('#messages-container .agent-reasoning-block');
+    if (!blocks.length) { btn.hidden = true; return; }
+    var anyOpen = Array.prototype.some.call(blocks, function (b) { return !b.classList.contains('collapsed'); });
+    btn.hidden = false;
+    btn.querySelector('.rrb-label').textContent = anyOpen ? '收起思考' : '展开思考';
+    btn.title = anyOpen ? '收起智能体推理' : '展开智能体推理';
+}
+window.updateReasoningRail = updateReasoningRail;
+
+(function () {
+    var btn = document.getElementById('reasoning-rail-btn');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+        var blocks = document.querySelectorAll('#messages-container .agent-reasoning-block');
+        var anyOpen = Array.prototype.some.call(blocks, function (b) { return !b.classList.contains('collapsed'); });
+        Array.prototype.forEach.call(blocks, function (b) { b.classList.toggle('collapsed', anyOpen); });
+        updateReasoningRail();
+    });
+})();

@@ -5,6 +5,8 @@
 
             messagesContainer.innerHTML = '';
 
+            updateReasoningRail();   // 清空后先让浮动键隐藏，渲染完再按实际情况显示
+
             // 无当前对话（null 或指向不存在的对话）→ 显示空态引导，不崩
             if (!currentBranch) {
                 const emptyMsg = document.createElement('div');
@@ -178,6 +180,7 @@
 
             scrollToBottomIfFollowing();
             updateHistoryList();
+            updateReasoningRail();   // 渲染完按实际有无思考块决定显示/文案
         }
 
         // ==================== 设置面板（模态：左分类 / 右内容） ====================

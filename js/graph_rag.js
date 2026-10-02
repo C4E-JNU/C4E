@@ -100,24 +100,22 @@ async function reactAgentLoop(userQuestion, options /* {fileIds:[], note_refs:[]
     var liveContent = document.createElement('div');
     liveContent.className = 'message-content';
 
-    // 单个推理容器（框内顶部，可折叠）
-    var reasoningToggle = document.createElement('div');
-    reasoningToggle.className = 'agent-reasoning-toggle';
-    reasoningToggle.textContent = '🧠 收起智能体推理过程 ▾';
+    // 推理容器（框内）。收起/展开由对话区右侧那颗浮动键统一控制，
+    // 这里只留「收起态的一行提示」，点了展开这一条。
     var reasoningContainer = document.createElement('div');
     reasoningContainer.className = 'reasoning-steps-container';
-    reasoningToggle.onclick = function() {
-        var collapsed = reasoningContainer.style.display === 'none';
-        reasoningContainer.style.display = collapsed ? 'block' : 'none';
-        reasoningToggle.textContent = collapsed ? '🧠 收起智能体推理过程 ▾' : '🧠 查看智能体推理过程 ▸';
-    };
-    // sticky 作用域 = 推理区本身（不是整条消息）：否则正文很长时收起键会一直跟着滚
+    var reasoningHint = document.createElement('div');
+    reasoningHint.className = 'reasoning-collapsed-hint';
+    reasoningHint.textContent = '🧠 思考过程已收起 · 点开';
     var reasoningBlock = document.createElement('div');
     reasoningBlock.className = 'agent-reasoning-block';
-    reasoningBlock.appendChild(reasoningToggle);
+    reasoningHint.onclick = function () {
+        reasoningBlock.classList.remove('collapsed');
+        updateReasoningRail();
+    };
     reasoningBlock.appendChild(reasoningContainer);
+    reasoningBlock.appendChild(reasoningHint);
     liveContent.appendChild(reasoningBlock);
-
     var answerDiv = document.createElement('div');
     liveContent.appendChild(answerDiv);
 
@@ -150,6 +148,7 @@ async function reactAgentLoop(userQuestion, options /* {fileIds:[], note_refs:[]
 
     liveEl.appendChild(liveContent);
     messagesContainer.appendChild(liveEl);
+    updateReasoningRail();   // 有思考块了 → 右侧浮动键出现
     scrollToBottomIfFollowing();
 
     // 实时渲染辅助
