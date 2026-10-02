@@ -83,10 +83,7 @@
         const dbChars = document.getElementById('db-chars');
         const dbUpdated = document.getElementById('db-updated');
 
-        // 智能体配置相关元素
-        const agentConfigToggle = document.getElementById('agent-config-toggle');
-        const agentConfigPanel = document.getElementById('agent-config-panel');
-        const closeAgentConfig = document.getElementById('close-agent-config');
+        // 智能体配置已并入设置面板（见 agent_config.js / ui.js），不再有独立面板元素
         const neo4jStatusDot = document.getElementById('neo4j-status-dot');
         // MinerU 配置面板元素
         const panelMineruToken = document.getElementById('panel-mineru-token');
@@ -121,6 +118,8 @@
         const contextSlider = document.getElementById('context-length');
         const maxTokensInput = document.getElementById('max-tokens');
         const expectedContextTokensInput = document.getElementById('expected-context-tokens');
+        const contextWindowInput = document.getElementById('context-window');
+        const contextBudgetInput = document.getElementById('context-budget');
         const streamingToggle = document.getElementById('streaming-toggle');
 
         // 设置值显示元素

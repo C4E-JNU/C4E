@@ -28,7 +28,7 @@
                 welcomeMsg.dataset.id = 'welcome';
                 welcomeMsg.innerHTML = `
                     <div class="message-content">
-                        您好！我是RAGAgent，基于多模型的智能助手。<br>
+                        您好！我是 <b>Quine</b>（C4EAI Quine Agent）—— 实验室通用智能体，文献管理与共享 wiki 方向。<br>
                         请开始新的对话。
                     </div>
                 `;
@@ -180,34 +180,42 @@
             updateHistoryList();
         }
 
-        // ==================== 设置面板 ====================
+        // ==================== 设置面板（模态：左分类 / 右内容） ====================
+        function _settingsShowPane(paneId) {
+            document.querySelectorAll('#settings-panel .settings-pane').forEach(p => {
+                p.classList.toggle('active', p.id === paneId);
+            });
+            const nav = document.getElementById('settings-nav');
+            if (nav) nav.querySelectorAll('.settings-nav-item').forEach(b => {
+                b.classList.toggle('active', b.dataset.pane === paneId);
+            });
+        }
+
+        function bindSettingsNav() {
+            const nav = document.getElementById('settings-nav');
+            if (nav) {
+                nav.addEventListener('click', (e) => {
+                    const btn = e.target.closest('.settings-nav-item');
+                    if (btn && btn.dataset.pane) _settingsShowPane(btn.dataset.pane);
+                });
+            }
+            if (settingsOverlay) settingsOverlay.addEventListener('click', closeSettings);
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && settingsPanel.classList.contains('active')) closeSettings();
+            });
+        }
+
         function openSettings() {
-            // 二次点击收起（与智能体配置的 toggle 行为一致）
-            if (settingsPanel.classList.contains('active')) {
-                closeSettings();
-                return;
-            }
-            // 首次打开时把面板移入输入区（紧跟智能体配置，并列显示）
-            if (!settingsPanel.dataset.relocated) {
-                const ap = document.getElementById('agent-config-panel');
-                if (ap) {
-                    ap.insertAdjacentElement('afterend', settingsPanel);
-                } else {
-                    const inputArea = document.querySelector('.input-area');
-                    if (inputArea) inputArea.appendChild(settingsPanel);
-                }
-                settingsPanel.dataset.relocated = '1';
-            }
+            if (settingsPanel.classList.contains('active')) { closeSettings(); return; }
             settingsPanel.classList.add('active');
-            if (settingsOverlay) settingsOverlay.classList.remove('active'); // 内联卡片不需要遮罩
-            settingsPanel.classList.remove('opening');
-            // 与智能体配置互斥
-            const ap2 = document.getElementById('agent-config-panel');
-            if (ap2) ap2.classList.remove('active');
+            if (settingsOverlay) settingsOverlay.classList.add('active');
+            const cur = document.querySelector('#settings-nav .settings-nav-item.active') ||
+                        document.querySelector('#settings-nav .settings-nav-item');
+            if (cur && cur.dataset.pane) _settingsShowPane(cur.dataset.pane);
+            // 打开即回填智能体/连接与服务两个分类（state → UI）
+            if (typeof window.loadAgentConfigPanes === 'function') window.loadAgentConfigPanes();
             settingsBtn.classList.add('settings-clicked');
-            setTimeout(() => {
-                settingsBtn.classList.remove('settings-clicked');
-            }, 450);
+            setTimeout(() => { settingsBtn.classList.remove('settings-clicked'); }, 450);
         }
 
         function closeSettings() {
@@ -217,7 +225,6 @@
             settingsBtn.classList.remove('settings-clicked');
             if (settingsOverlay) settingsOverlay.classList.remove('active');
         }
-
         // ==================== UI更新 ====================
         function updateUI() {
             updateModelStatus();
@@ -254,6 +261,10 @@
                     }
                     expandedMessageArea.classList.add('active');
                     expandBtn.classList.add('active');
+                    // 展开时把主输入框里已有的内容带进来（否则「小框打字 → 点展开」大框是空的）
+                    expandedTextarea.value = messageInput.value;
+                    expandedTextarea.selectionStart = expandedTextarea.selectionEnd = expandedTextarea.value.length;
+                    if (typeof updateSendButtonState === 'function') updateSendButtonState();
                     setTimeout(() => expandedTextarea.focus(), 100);
                 }
             });
@@ -345,7 +356,9 @@
             // 展开模式：文本同步
             // 主输入框变化 → 同步到展开框
             messageInput.addEventListener('input', () => {
-                if (expandedMessageArea.classList.contains('active')) {
+                // 无条件镜像：展开框始终跟随主输入框。
+                // （原来只在展开框 active 时同步，导致「小框输入→点展开」丢内容）
+                if (expandedTextarea.value !== messageInput.value) {
                     expandedTextarea.value = messageInput.value;
                 }
             });

@@ -30,11 +30,13 @@
     /** 顶栏溢出阶梯：唯一真相 = .nav-container 的实测宽度（任何外壳同一规则）。 */
     function bindHeaderFit() {
         var nav = document.querySelector('.nav-container');
-        if (!nav || !window.ResizeObserver) { if (nav) nav.classList.add('tight'); return; }
+        if (!nav || !window.ResizeObserver) { if (nav) nav.classList.add('tight'); document.body.classList.add('win-tight'); return; }
         var ro = new ResizeObserver(function () {
             var w = nav.clientWidth;
             nav.classList.toggle('tight', w < 520);
             nav.classList.toggle('overflow', nav.scrollWidth > w + 1);
+            // 同一测量、同一阈值：输入条也照这个判据收（模型 → 按钮、token 收起）
+            document.body.classList.toggle('win-tight', w < 520);
         });
         ro.observe(nav);
     }

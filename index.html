@@ -43,14 +43,14 @@
     <link rel="stylesheet" href="css/layout.css?v=34">
     <link rel="stylesheet" href="css/sidebar.css?v=11">
     <link rel="stylesheet" href="css/messages.css?v=2">
-    <link rel="stylesheet" href="css/input.css?v=14">
+    <link rel="stylesheet" href="css/input.css?v=15">
     <link rel="stylesheet" href="css/modals.css?v=4">
     <link rel="stylesheet" href="css/xiaoe.css?v=7">
-    <link rel="stylesheet" href="css/mobile.css?v=33" id="css-mobile">
+    <link rel="stylesheet" href="css/mobile.css?v=34" id="css-mobile">
     <link rel="stylesheet" href="css/remote.css?v=1">
     <link rel="stylesheet" href="css/window.css?v=5">
-    <link rel="stylesheet" href="css/components.css?v=9">
-    <link rel="stylesheet" href="css/agent.css?v=5">
+    <link rel="stylesheet" href="css/components.css?v=10">
+    <link rel="stylesheet" href="css/agent.css?v=6">
 
     
 
@@ -182,276 +182,409 @@
     </div>
 
     <!-- 设置面板和遮罩 -->
+        <!-- 设置：模态框，左分类 / 右内容（原「智能体配置」内联卡已整块并入本面板，无第二套壳） -->
+    <div class="settings-overlay" id="settings-overlay"></div>
     <div class="settings-panel" id="settings-panel">
-        <!-- 头部结构与「智能体配置」面板完全一致（用户 2026-09-25 定：用智能体配置那套样式） -->
-        <div class="config-panel-header">
-            <span class="config-panel-title">⚙️ 设置</span>
-            <button class="config-save-btn" id="save-settings">保存</button>
-            <button class="close-panel-btn" id="close-settings">×</button>
+        <div class="settings-head">
+            <span class="settings-title">⚙️ 设置</span>
+            <button class="key-btn" id="save-settings">保存</button>
+            <button class="close-panel-btn" id="close-settings" title="关闭">×</button>
         </div>
-        <div class="settings-content">
-            <div class="settings-group">
-                <h3>模型参数</h3>
+        <div class="settings-body">
+            <nav class="settings-nav" id="settings-nav">
+                <button type="button" class="settings-nav-item active" data-pane="pane-model">模型与参数</button>
+                <button type="button" class="settings-nav-item" data-pane="pane-agent">智能体</button>
+                <button type="button" class="settings-nav-item" data-pane="pane-service">连接与服务</button>
+                <button type="button" class="settings-nav-item" data-pane="pane-ui">界面</button>
+            </nav>
+            <div class="settings-panes">
+                <section class="settings-pane active" id="pane-model">
+                    <h3>模型与参数</h3>
+                        <div class="setting-item">
+                                                       <label class="setting-label">
+                                                           温度 (Temperature)
+                                                <span class="setting-value" id="temp-value">0.7</span>
+                                            </label>
+                                            <input type="range" min="0" max="2" step="0.1" value="0.7" class="slider" id="temperature">
+                                            <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
+                                                控制随机性：较低值更确定性，较高值更有创造性
+                                            </div>
+                                        </div>
+                        <div class="setting-item">
+                                            <label class="setting-label">
+                                                上下文轮次
+                                                <span class="setting-value" id="context-value">10</span>
+                                            </label>
+                                            <input type="range" min="1" max="50" step="1" value="10" class="slider" id="context-length">
+                                            <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
+                                                模型记住的对话轮次数量
+                                            </div>
+                                        </div>
+                        <div class="setting-item">
+                                             <label class="setting-label">
+                                                 最大输出 Token 数
+                                                 <span class="setting-value" id="max-tokens-value">65536</span>
+                                             </label>
+                                             <input type="number" min="100" max="393216" step="100" value="65536" class="number-input"
+                                                 id="max-tokens">
+                                             <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
+                                                 每次请求发给模型的 max_tokens：单次回答最多能生成多少 token，超了会被服务端截断。<br>
+                                                 DeepSeek 官方合法范围 1~393216（384K）；不传时默认「非思考 8K / 思考 64K」。思考模式下思维链也占这份额度，所以设太小会让正文很短（甚至为空）。<br>
+                                                 ⚠️ 填大不会让回答变长（何时停由模型决定），但超过服务端真实上限会被 400 拒收。想要长代码/长报告，建议 64K 以上。<br>
+                                                 该值还参与「清理触发线」计算（用来预留输出空间）。回答被截断且正夹着工具调用时，本轮会中止并提示调大它。
+                                             </div>
+                                         </div>
+                        <div class="setting-item">
+                                             <label class="setting-label">
+                                                 模型上下文窗口 context window
+                                                 <span class="setting-value" id="context-window-value">262144</span>
+                                             </label>
+                                             <input type="number" min="1024" max="2000000" step="1000" value="262144" class="number-input"
+                                                 id="context-window">
+                                             <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
+                                                 模型一次最多能接收的 token 数（hard limit，由模型本身决定，如 256K / 1M）。<br>
+                                                 它只用于计算「什么时候开始清理旧工具结果」，本机不会因为超过此值而报错、截断或中断对话；真的超过模型能力时，只由模型服务端报错（那才是真的超上下文）。<br>
+                                                 👉 填真实值最稳：填小 → 更早开始清理（保守，不报错）；填大 → 更晚清理，超了交给服务端。<br>
+                                                 👉 本值不与所选模型自动绑定，请按实际调用的模型填（256K 填 262144，1M 填 1048576）。
+                                             </div>
+                                         </div>
+                        <div class="setting-item">
+                                             <label class="setting-label">
+                                                 清理触发线 context budget
+                                                 <span class="setting-value" id="context-budget-value">0（自动）</span>
+                                             </label>
+                                             <input type="number" min="0" max="2000000" step="1000" value="0" class="number-input"
+                                                 id="context-budget">
+                                             <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
+                                                 发送给模型的 token 估算量（或 API 真实用量）达到此值时，开始把较早的工具结果替换成占位符——只动工具结果，你和 AI 的正文、技能正文永不清。<br>
+                                                 0 = 自动：(上下文窗口 − 输出预留) × 75%，并保底 ≥ 1024。<br>
+                                                 ⚠️ 设得过大＝几乎不清理，上下文会一路涨到模型窗口，最终由服务端报错；设得过小＝频繁清理（可能每轮都在清旧工具结果）。
+                                             </div>
+                                         </div>
+                        <div class="setting-item">
+                                             <label class="setting-label">
+                                                 预期输入Token数（阈值）
+                                                 <span class="setting-value" id="expected-context-tokens-value">4000</span>
+                                             </label>
+                                             <input type="number" min="100" max="32000" step="100" value="4000" class="number-input"
+                                                 id="expected-context-tokens">
+                                             <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
+                                                当前发送给LLM的Token数超过此值时，界面红字加粗警告（仅提示，不影响输入）
+                                            </div>
+                                        </div>
+                        <div class="setting-item provider-settings-block">
+                                            <label class="setting-label">🔌 模型与服务商配置</label>
+                                        <div class="models-content-wrapper">
+                                            <div class="provider-layout">
+                                                <!-- 左侧服务商列表 -->
+                                                <div class="provider-sidebar" id="provider-list">
+                                                    <!-- JS动态生成 -->
+                                                </div>
 
-                            <!-- 文件打开方式设置（三选一：后端打开 / 浏览器新标签 / 应用内浮窗） -->
+                                                <!-- 右侧配置区域 -->
+                                                <div class="provider-content" id="provider-config-area">
+                                                    <div class="provider-header">
+                                                        <div class="provider-title">
+                                                            <span id="current-provider-icon">🚀</span>
+                                                            <span id="current-provider-name">DeepSeek</span>
+                                                        </div>
+                                                        <button class="action-btn" id="delete-provider-btn"
+                                                            style="display: none; background: var(--error); color: white;">删除服务商</button>
+                                                    </div>
+
+                                                    <!-- 配置表单 -->
+                                                    <div class="config-group">
+                                                        <div class="form-group-item">
+                                                            <label class="form-label">API 域名 (Base URL)</label>
+                                                            <input type="text" class="form-input" id="provider-endpoint"
+                                                                placeholder="例如: https://api.openai.com/v1">
+                                                        </div>
+                                                        <div class="form-group-item">
+                                                            <label class="form-label">API 密钥 (API Key)</label>
+                                                            <input type="password" class="form-input" id="provider-apikey" placeholder="sk-...">
+                                                        </div>
+                                                    </div>
+                                                    <div style="display: flex; justify-content: flex-end;">
+                                                        <button class="save-config-btn" id="save-provider-config">保存当前配置</button>
+                                                    </div>
+
+                                                    <!-- 模型列表 -->
+                                                    <div>
+                                                        <h4 style="margin-bottom: 1rem; color: var(--dark);">可用模型</h4>
+                                                        <div class="models-grid-compact" id="provider-models-list">
+                                                            <!-- JS动态生成 -->
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        </div>
+                </section>
+                <section class="settings-pane" id="pane-agent">
+                    <h3>智能体</h3>
+                        <div class="config-section">
+                                                            <div class="config-section-title">⚙️ Agent 引擎</div>
+                                                            <div class="permission-mode-row">
+                                                                <label class="config-option">
+                                                                    <input type="radio" name="agent-engine" value="custom" id="engine-custom" checked>
+                                                                    <span class="config-option-label">⚡ 自定义流式 <span class="config-option-desc">裸API手写循环，显示🧠思考</span></span>
+                                                                </label>
+                                                                <label class="config-option">
+                                                                    <input type="radio" name="agent-engine" value="langchain" id="engine-langchain">
+                                                                    <span class="config-option-label">🧠 LangChain 流式 <span class="config-option-desc">框架循环，无思考链</span></span>
+                                                                </label>
+                                                            </div>
+                                                            <div style="margin-top:0.6rem;">
+                                                                <label class="config-option-label" style="margin-bottom:0.3rem;display:block;">🔁 工具循环轮次</label>
+                                                                <select id="agent-max-rounds" class="neo4j-input" style="width:100%;">
+                                                                    <option value="8">8 轮</option>
+                                                                    <option value="20">20 轮</option>
+                                                                    <option value="50">50 轮</option>
+                                                                    <option value="0">无限</option>
+                                                                </select>
+                                                            </div>
+                                                        </div>
+                        <div class="config-section">
+                                                            <div class="config-section-title">🤖 子智能体</div>
+                                                            <label class="config-option" style="margin-bottom:.5rem;">
+                                                                <input type="checkbox" id="subagent-enabled" checked>
+                                                                <span class="config-option-label">启用子智能体
+                                                                    <span class="config-option-desc">主智能体可派子智能体并行处理独立子任务（需在下方工具区勾选 delegate_task）</span>
+                                                                </span>
+                                                            </label>
+                                                            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem .6rem;">
+                                                                <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">轮次/个（0=无限）
+                                                                    <input type="number" id="subagent-rounds" min="0" step="1" value="0" title="每个子智能体的工具循环上限；0 = 无限（用户 2026-09-27：不要锁死）"
+                                                                           class="neo4j-input" style="width:100%;box-sizing:border-box;">
+                                                                </label>
+                                                                <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">并发上限
+                                                                    <input type="number" id="subagent-parallel" min="1" max="8" step="1" value="8"
+                                                                           class="neo4j-input" style="width:100%;box-sizing:border-box;">
+                                                                </label>
+                                                                <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">最多子任务
+                                                                    <input type="number" id="subagent-maxtasks" min="1" max="8" step="1" value="8"
+                                                                           class="neo4j-input" style="width:100%;box-sizing:border-box;">
+                                                                </label>
+                                                            </div>
+                                                            <div style="font-size:.72rem;color:var(--gray);line-height:1.5;margin-top:.4rem;">
+                                                                <b>轮次/个</b>＝每个子智能体内部最多跑几轮工具循环；<br>
+                                                                <b>并发上限</b>＝同时最多并行运行几个子智能体（其余排队等待）；<br>
+                                                                <b>最多子任务</b>＝一次 delegate 最多接受几个子任务，超出的会被丢弃。
+                                                            </div>
+                                                            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem .6rem;margin-top:.6rem;">
+                                                                <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">催促(秒)
+                                                                    <input type="number" id="subagent-nudge" min="0" max="604800" step="10" value="0"
+                                                                           class="neo4j-input" style="width:100%;box-sizing:border-box;">
+                                                                </label>
+                                                                <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">警告(秒)
+                                                                    <input type="number" id="subagent-warn" min="0" max="604800" step="10" value="0"
+                                                                           class="neo4j-input" style="width:100%;box-sizing:border-box;">
+                                                                </label>
+                                                                <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">终止(秒)
+                                                                    <input type="number" id="subagent-abort" min="0" max="604800" step="10" value="86400"
+                                                                           class="neo4j-input" style="width:100%;box-sizing:border-box;">
+                                                                </label>
+                                                            </div>
+                                                            <div style="font-size:.72rem;color:var(--gray);line-height:1.5;margin-top:.4rem;">
+                                                                子智能体三级超时（秒，0=关闭该级，每个子智能体独立计时）：催促→注入「尽快收尾」；警告→注入「立即给结论」；终止→中断并返回已完成部分。
+                                                            </div>
+                                                        </div>
+                        <div class="config-section">
+                                                            <div class="config-section-title">⏱️ 超时保护（主智能体）</div>
+                                                            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem .6rem;">
+                                                                <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">催促(秒)
+                                                                    <input type="number" id="timeout-nudge" min="0" max="604800" step="10" value="0"
+                                                                           class="neo4j-input" style="width:100%;box-sizing:border-box;">
+                                                                </label>
+                                                                <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">警告(秒)
+                                                                    <input type="number" id="timeout-warn" min="0" max="604800" step="10" value="0"
+                                                                           class="neo4j-input" style="width:100%;box-sizing:border-box;">
+                                                                </label>
+                                                                <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">终止(秒)
+                                                                    <input type="number" id="timeout-abort" min="0" max="604800" step="10" value="86400"
+                                                                           class="neo4j-input" style="width:100%;box-sizing:border-box;">
+                                                                </label>
+                                                            </div>
+                                                            <div style="font-size:.72rem;color:var(--gray);line-height:1.5;margin-top:.4rem;">
+                                                                主智能体三级超时（秒，0=关闭该级）：催促→注入「尽快收尾」；警告→注入「立即作答」；终止→强制结束并返回超时说明。
+                                                            </div>
+                                                        </div>
+                        <div class="config-section">
+                                                            <div class="config-section-title">🔐 权限模式</div>
+                                                            <div class="permission-mode-row">
+                                                                <label class="config-option">
+                                                                    <input type="radio" name="permission-mode" value="safe" id="perm-safe" checked>
+                                                                    <span class="config-option-label">🔒 安全模式 <span class="config-option-desc">仅 workspace</span></span>
+                                                                </label>
+                                                                <label class="config-option">
+                                                                    <input type="radio" name="permission-mode" value="ask" id="perm-ask">
+                                                                    <span class="config-option-label">❓ 询问模式 <span class="config-option-desc">可读项目+写技能</span></span>
+                                                                </label>
+                                                                <label class="config-option">
+                                                                    <input type="radio" name="permission-mode" value="full" id="perm-full">
+                                                                    <span class="config-option-label">⚡ 完全访问 <span class="config-option-desc">任意读写</span></span>
+                                                                </label>
+                                                            </div>
+                                                        </div>
+                        <div class="config-section">
+                                                            <div class="config-section-title">🛠️ 工具 <span style="font-size:0.75rem;color:var(--gray);font-weight:normal">（按分组勾选 = LLM 可用；数据来自后端 tools_registry）</span></div>
+                                                            <div id="tools-groups-container" style="min-height:2rem;">
+                                                                <!-- 由 agent_config.js 从后端 /api/tools 按分组动态渲染 -->
+                                                                <div style="font-size:0.8rem;color:var(--gray);padding:0.25rem 0;">加载中...</div>
+                                                            </div>
+                                                         </div>
+                        <div class="config-section">
+                                                        <div class="config-section-title">📖 Skill</div>
+                                                        <div id="skills-config-container">
+                                                            <!-- 由 JS 从 skills/index.json 动态生成 -->
+                                                            <div style="font-size:0.8rem;color:var(--gray);padding:0.25rem 0;">加载中...</div>
+                                                        </div>
+                                                        </div>
+                </section>
+                <section class="settings-pane" id="pane-service">
+                    <h3>连接与服务</h3>
+                        <div class="config-section">
+                                                            <div class="config-section-title">🔗 Neo4j 连接 <div class="neo4j-status-dot" id="neo4j-status-dot" title="Neo4j 连接状态"></div></div>
+                                                            <div class="neo4j-connect-form">
+                                                                <input type="text" class="neo4j-input" id="panel-neo4j-uri" placeholder="neo4j+s://..." value="">
+                                                                <div class="neo4j-row">
+                                                                    <input type="text" class="neo4j-input" id="panel-neo4j-user" placeholder="用户名" value="">
+                                                                    <input type="password" class="neo4j-input" id="panel-neo4j-pass" placeholder="密码">
+                                                                </div>
+                                                                <button class="neo4j-connect-btn" id="panel-neo4j-connect">🔌 连接</button>
+                                                                <span class="neo4j-connect-msg" id="panel-neo4j-msg"></span>
+                                                            </div>
+                                                        </div>
+                        <div class="config-section">
+                                                            <div class="config-section-title">📄 MinerU 解析配置 <span style="font-size:0.75rem;color:var(--gray);font-weight:normal">（PDF→Markdown，随保存提交）</span></div>
+                                                            <div class="neo4j-connect-form">
+                                                                <input type="password" class="neo4j-input" id="panel-mineru-token" placeholder="MinerU API Token / Key" autocomplete="off">
+                                                                <div class="neo4j-row" style="margin-top:6px;">
+                                                                    <button class="neo4j-connect-btn" id="panel-mineru-save" style="background:var(--primary);color:#fff;">💾 保存 Token</button>
+                                                                    <span class="neo4j-connect-msg" id="panel-mineru-msg"></span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                </section>
+                <section class="settings-pane" id="pane-ui">
+                    <h3>界面</h3>
+                        <div class="setting-item">
+                                                        <label class="setting-label">
+                                                            文件打开方式
+                                                            <span class="setting-value" id="file-open-mode-value">后端打开</span>
+                                                        </label>
+                                                        <div class="mode-seg" id="file-open-mode-group">
+                                                            <button type="button" class="mode-seg-btn" data-mode="backend">后端打开</button>
+                                                            <button type="button" class="mode-seg-btn" data-mode="browser">浏览器新标签</button>
+                                                            <button type="button" class="mode-seg-btn" data-mode="float">应用内浮窗</button>
+                                                        </div>
+                                                        <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
+                                                            后端打开：用本机默认应用（Word/Excel/看图器）打开；浏览器新标签：新标签页预览/下载；应用内浮窗：在页面内浮窗预览，不跳出应用
+                                                        </div>
+                                                    </div>
+                        <div class="setting-item">
+                                                        <label class="setting-label">
+                                                            小e 桌宠
+                                                            <span class="setting-value" id="xiaoe-enabled-value">已开启</span>
+                                                        </label>
+                                                        <div style="margin-top: 0.5rem;">
+                                                            <label class="switch">
+                                                                <input type="checkbox" id="toggle-xiaoe" checked>
+                                                                <span class="slider-round"></span>
+                                                            </label>
+                                                        </div>
+                                                        <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
+                                                            页面上那只云朵团。点它聊天（问功能/用法），双击敲打、连点发飙、拖着玩、右键换天气；60 秒不理它会睡着。小e 不保存任何记录，关掉即忘
+                                                        </div>
+                                                    </div>
+                    <div class="settings-group">
+                        <h3>界面字号</h3>
                             <div class="setting-item">
-                                <label class="setting-label">
-                                    文件打开方式
-                                    <span class="setting-value" id="file-open-mode-value">后端打开</span>
-                                </label>
-                                <div class="mode-seg" id="file-open-mode-group">
-                                    <button type="button" class="mode-seg-btn" data-mode="backend">后端打开</button>
-                                    <button type="button" class="mode-seg-btn" data-mode="browser">浏览器新标签</button>
-                                    <button type="button" class="mode-seg-btn" data-mode="float">应用内浮窗</button>
-                                </div>
-                                <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
-                                    后端打开：用本机默认应用（Word/Excel/看图器）打开；浏览器新标签：新标签页预览/下载；应用内浮窗：在页面内浮窗预览，不跳出应用
-                                </div>
-                            </div>
-
-                            <!-- 桌宠小e 开关 -->
+                                                    <label class="setting-label">
+                                                        对话管理字号
+                                                        <span class="setting-value" id="font-conv-value">0.9</span>
+                                                    </label>
+                                                    <input type="range" min="0.6" max="1.6" step="0.05" value="0.9" class="slider" id="font-size-conv">
+                                                    <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">侧边栏的对话名称列表</div>
+                                                </div>
                             <div class="setting-item">
-                                <label class="setting-label">
-                                    小e 桌宠
-                                    <span class="setting-value" id="xiaoe-enabled-value">已开启</span>
-                                </label>
-                                <div style="margin-top: 0.5rem;">
-                                    <label class="switch">
-                                        <input type="checkbox" id="toggle-xiaoe" checked>
-                                        <span class="slider-round"></span>
-                                    </label>
-                                </div>
-                                <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
-                                    页面上那只云朵团。点它聊天（问功能/用法），双击敲打、连点发飙、拖着玩、右键换天气；60 秒不理它会睡着。小e 不保存任何记录，关掉即忘
-                                </div>
-                            </div>
-
-                           <div class="setting-item">
-                               <label class="setting-label">
-                                   温度 (Temperature)
-                        <span class="setting-value" id="temp-value">0.7</span>
-                    </label>
-                    <input type="range" min="0" max="2" step="0.1" value="0.7" class="slider" id="temperature">
-                    <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
-                        控制随机性：较低值更确定性，较高值更有创造性
+                                                    <label class="setting-label">
+                                                        历史记录字号
+                                                        <span class="setting-value" id="font-history-value">0.8</span>
+                                                    </label>
+                                                    <input type="range" min="0.5" max="1.5" step="0.05" value="0.8" class="slider" id="font-size-history">
+                                                    <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">侧边栏每条历史消息的预览文字</div>
+                                                </div>
+                            <div class="setting-item">
+                                                    <label class="setting-label">
+                                                        对话回复消息字号
+                                                        <span class="setting-value" id="font-messages-value">0.95</span>
+                                                    </label>
+                                                    <input type="range" min="0.6" max="1.8" step="0.05" value="0.95" class="slider" id="font-size-messages">
+                                                    <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">聊天区 AI/用户回复气泡内的文字</div>
+                                                </div>
+                            <div class="setting-item">
+                                                    <label class="setting-label">
+                                                        笔记字号
+                                                        <span class="setting-value" id="font-notes-value">0.9</span>
+                                                    </label>
+                                                    <input type="range" min="0.6" max="1.8" step="0.05" value="0.9" class="slider" id="font-size-notes">
+                                                    <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">笔记卡片的标题与正文</div>
+                                                </div>
+                            <div class="setting-item">
+                                                    <label class="setting-label">
+                                                        思考链/推理字号
+                                                        <span class="setting-value" id="font-thinking-value">0.7</span>
+                                                    </label>
+                                                    <input type="range" min="0.5" max="1.8" step="0.05" value="0.7" class="slider" id="font-size-thinking">
+                                                    <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">聊天区思考链与推理内容的文字</div>
+                                                </div>
+                            <div class="setting-item">
+                                                    <label class="setting-label">
+                                                        微提示/轻提示字号
+                                                        <span class="setting-value" id="font-toast-value">0.85</span>
+                                                    </label>
+                                                    <input type="range" min="0.5" max="1.8" step="0.05" value="0.85" class="slider" id="font-size-toast">
+                                                    <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">右上角自动消失的轻提示（如"已复制"）</div>
+                                                </div>
+                            <div class="setting-item">
+                                                    <label class="setting-label">
+                                                        弹窗浮层字号
+                                                        <span class="setting-value" id="font-popup-value">0.85</span>
+                                                    </label>
+                                                    <input type="range" min="0.5" max="1.8" step="0.05" value="0.85" class="slider" id="font-size-popup">
+                                                    <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">简单操作的小浮层（如重命名/编辑气泡）</div>
+                                                </div>
+                            <div class="setting-item">
+                                                    <label class="setting-label">
+                                                        大模态框字号
+                                                        <span class="setting-value" id="font-modal-value">0.9</span>
+                                                    </label>
+                                                    <input type="range" min="0.5" max="1.8" step="0.05" value="0.9" class="slider" id="font-size-modal">
+                                                    <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">居中大模态框（如添加模型/服务商/数据库）</div>
+                                                </div>
+                            <div class="setting-item">
+                                                    <label class="setting-label">
+                                                        浮动编辑器字号
+                                                        <span class="setting-value" id="font-edit-value">0.9</span>
+                                                    </label>
+                                                    <input type="range" min="0.5" max="1.8" step="0.05" value="0.9" class="slider" id="font-size-edit">
+                                                    <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">编辑消息/笔记的浮动 Markdown 编辑器</div>
+                                                </div>
+                            <div class="setting-item">
+                                                    <div class="font-tier-btns">
+                                                        <button class="config-secondary-btn" id="reset-font-small-btn" onclick="resetFontTier('small')">重置为小字号</button>
+                                                        <button class="config-secondary-btn" id="reset-font-medium-btn" onclick="resetFontTier('medium')">重置为中字号</button>
+                                                        <button class="config-secondary-btn" id="reset-font-large-btn" onclick="resetFontTier('large')">重置为大字号</button>
+                                                    </div>
+                                                    <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">小字号为默认：对话管理 0.85 / 历史 0.65 / 回复 0.75 / 笔记 0.75 / 思考链 0.7 / 编辑器 0.9 / 模态框 0.9 / 浮层 0.85 / 提示 0.85，每级递增 0.15</div>
+                                                </div>
                     </div>
-                </div>
-
-                <div class="setting-item">
-                    <label class="setting-label">
-                        上下文轮次
-                        <span class="setting-value" id="context-value">10</span>
-                    </label>
-                    <input type="range" min="1" max="50" step="1" value="10" class="slider" id="context-length">
-                    <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
-                        模型记住的对话轮次数量
-                    </div>
-                </div>
-
-                <div class="setting-item">
-                     <label class="setting-label">
-                         最大输出 Token 数
-                         <span class="setting-value" id="max-tokens-value">65536</span>
-                     </label>
-                     <input type="number" min="100" max="393216" step="100" value="65536" class="number-input"
-                         id="max-tokens">
-                     <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
-                         每次请求发给模型的 max_tokens：单次回答最多能生成多少 token，超了会被服务端截断。<br>
-                         DeepSeek 官方合法范围 1~393216（384K）；不传时默认「非思考 8K / 思考 64K」。思考模式下思维链也占这份额度，所以设太小会让正文很短（甚至为空）。<br>
-                         ⚠️ 填大不会让回答变长（何时停由模型决定），但超过服务端真实上限会被 400 拒收。想要长代码/长报告，建议 64K 以上。<br>
-                         该值还参与「清理触发线」计算（用来预留输出空间）。回答被截断且正夹着工具调用时，本轮会中止并提示调大它。
-                     </div>
-                 </div>
-
-                <div class="setting-item">
-                     <label class="setting-label">
-                         模型上下文窗口 context window
-                         <span class="setting-value" id="context-window-value">262144</span>
-                     </label>
-                     <input type="number" min="1024" max="2000000" step="1000" value="262144" class="number-input"
-                         id="context-window">
-                     <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
-                         模型一次最多能接收的 token 数（hard limit，由模型本身决定，如 256K / 1M）。<br>
-                         它只用于计算「什么时候开始清理旧工具结果」，本机不会因为超过此值而报错、截断或中断对话；真的超过模型能力时，只由模型服务端报错（那才是真的超上下文）。<br>
-                         👉 填真实值最稳：填小 → 更早开始清理（保守，不报错）；填大 → 更晚清理，超了交给服务端。<br>
-                         👉 本值不与所选模型自动绑定，请按实际调用的模型填（256K 填 262144，1M 填 1048576）。
-                     </div>
-                 </div>
-
-                <div class="setting-item">
-                     <label class="setting-label">
-                         清理触发线 context budget
-                         <span class="setting-value" id="context-budget-value">0（自动）</span>
-                     </label>
-                     <input type="number" min="0" max="2000000" step="1000" value="0" class="number-input"
-                         id="context-budget">
-                     <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
-                         发送给模型的 token 估算量（或 API 真实用量）达到此值时，开始把较早的工具结果替换成占位符——只动工具结果，你和 AI 的正文、技能正文永不清。<br>
-                         0 = 自动：(上下文窗口 − 输出预留) × 75%，并保底 ≥ 1024。<br>
-                         ⚠️ 设得过大＝几乎不清理，上下文会一路涨到模型窗口，最终由服务端报错；设得过小＝频繁清理（可能每轮都在清旧工具结果）。
-                     </div>
-                 </div>
-
-                <div class="setting-item">
-                     <label class="setting-label">
-                         预期输入Token数（阈值）
-                         <span class="setting-value" id="expected-context-tokens-value">4000</span>
-                     </label>
-                     <input type="number" min="100" max="32000" step="100" value="4000" class="number-input"
-                         id="expected-context-tokens">
-                     <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
-                        当前发送给LLM的Token数超过此值时，界面红字加粗警告（仅提示，不影响输入）
-                    </div>
-                </div>
-
-                 </div>
-
-                <div class="settings-group">
-                    <h3>界面字号</h3>
-
-                    <div class="setting-item">
-                        <label class="setting-label">
-                            对话管理字号
-                            <span class="setting-value" id="font-conv-value">0.9</span>
-                        </label>
-                        <input type="range" min="0.6" max="1.6" step="0.05" value="0.9" class="slider" id="font-size-conv">
-                        <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">侧边栏的对话名称列表</div>
-                    </div>
-
-                    <div class="setting-item">
-                        <label class="setting-label">
-                            历史记录字号
-                            <span class="setting-value" id="font-history-value">0.8</span>
-                        </label>
-                        <input type="range" min="0.5" max="1.5" step="0.05" value="0.8" class="slider" id="font-size-history">
-                        <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">侧边栏每条历史消息的预览文字</div>
-                    </div>
-
-                    <div class="setting-item">
-                        <label class="setting-label">
-                            对话回复消息字号
-                            <span class="setting-value" id="font-messages-value">0.95</span>
-                        </label>
-                        <input type="range" min="0.6" max="1.8" step="0.05" value="0.95" class="slider" id="font-size-messages">
-                        <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">聊天区 AI/用户回复气泡内的文字</div>
-                    </div>
-
-                    <div class="setting-item">
-                        <label class="setting-label">
-                            笔记字号
-                            <span class="setting-value" id="font-notes-value">0.9</span>
-                        </label>
-                        <input type="range" min="0.6" max="1.8" step="0.05" value="0.9" class="slider" id="font-size-notes">
-                        <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">笔记卡片的标题与正文</div>
-                    </div>
-
-                    <div class="setting-item">
-                        <label class="setting-label">
-                            思考链/推理字号
-                            <span class="setting-value" id="font-thinking-value">0.7</span>
-                        </label>
-                        <input type="range" min="0.5" max="1.8" step="0.05" value="0.7" class="slider" id="font-size-thinking">
-                        <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">聊天区思考链与推理内容的文字</div>
-                    </div>
-
-                    <div class="setting-item">
-                        <label class="setting-label">
-                            微提示/轻提示字号
-                            <span class="setting-value" id="font-toast-value">0.85</span>
-                        </label>
-                        <input type="range" min="0.5" max="1.8" step="0.05" value="0.85" class="slider" id="font-size-toast">
-                        <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">右上角自动消失的轻提示（如"已复制"）</div>
-                    </div>
-
-                    <div class="setting-item">
-                        <label class="setting-label">
-                            弹窗浮层字号
-                            <span class="setting-value" id="font-popup-value">0.85</span>
-                        </label>
-                        <input type="range" min="0.5" max="1.8" step="0.05" value="0.85" class="slider" id="font-size-popup">
-                        <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">简单操作的小浮层（如重命名/编辑气泡）</div>
-                    </div>
-
-                    <div class="setting-item">
-                        <label class="setting-label">
-                            大模态框字号
-                            <span class="setting-value" id="font-modal-value">0.9</span>
-                        </label>
-                        <input type="range" min="0.5" max="1.8" step="0.05" value="0.9" class="slider" id="font-size-modal">
-                        <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">居中大模态框（如添加模型/服务商/数据库）</div>
-                    </div>
-
-                    <div class="setting-item">
-                        <label class="setting-label">
-                            浮动编辑器字号
-                            <span class="setting-value" id="font-edit-value">0.9</span>
-                        </label>
-                        <input type="range" min="0.5" max="1.8" step="0.05" value="0.9" class="slider" id="font-size-edit">
-                        <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">编辑消息/笔记的浮动 Markdown 编辑器</div>
-                    </div>
-
-                    <div class="setting-item">
-                        <div class="font-tier-btns">
-                            <button class="config-secondary-btn" id="reset-font-small-btn" onclick="resetFontTier('small')">重置为小字号</button>
-                            <button class="config-secondary-btn" id="reset-font-medium-btn" onclick="resetFontTier('medium')">重置为中字号</button>
-                            <button class="config-secondary-btn" id="reset-font-large-btn" onclick="resetFontTier('large')">重置为大字号</button>
-                        </div>
-                        <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">小字号为默认：对话管理 0.85 / 历史 0.65 / 回复 0.75 / 笔记 0.75 / 思考链 0.7 / 编辑器 0.9 / 模态框 0.9 / 浮层 0.85 / 提示 0.85，每级递增 0.15</div>
-                    </div>
-
-                </div>
-
-                <!-- 模型与服务商配置（原首页 models-section 搬入设置面板；内部 id 未变 → provider.js 零改动） -->
-                <div class="setting-item provider-settings-block">
-                    <label class="setting-label">🔌 模型与服务商配置</label>
-                <div class="models-content-wrapper">
-                    <div class="provider-layout">
-                        <!-- 左侧服务商列表 -->
-                        <div class="provider-sidebar" id="provider-list">
-                            <!-- JS动态生成 -->
-                        </div>
-
-                        <!-- 右侧配置区域 -->
-                        <div class="provider-content" id="provider-config-area">
-                            <div class="provider-header">
-                                <div class="provider-title">
-                                    <span id="current-provider-icon">🚀</span>
-                                    <span id="current-provider-name">DeepSeek</span>
-                                </div>
-                                <button class="action-btn" id="delete-provider-btn"
-                                    style="display: none; background: var(--error); color: white;">删除服务商</button>
-                            </div>
-
-                            <!-- 配置表单 -->
-                            <div class="config-group">
-                                <div class="form-group-item">
-                                    <label class="form-label">API 域名 (Base URL)</label>
-                                    <input type="text" class="form-input" id="provider-endpoint"
-                                        placeholder="例如: https://api.openai.com/v1">
-                                </div>
-                                <div class="form-group-item">
-                                    <label class="form-label">API 密钥 (API Key)</label>
-                                    <input type="password" class="form-input" id="provider-apikey" placeholder="sk-...">
-                                </div>
-                            </div>
-                            <div style="display: flex; justify-content: flex-end;">
-                                <button class="save-config-btn" id="save-provider-config">保存当前配置</button>
-                            </div>
-
-                            <!-- 模型列表 -->
-                            <div>
-                                <h4 style="margin-bottom: 1rem; color: var(--dark);">可用模型</h4>
-                                <div class="models-grid-compact" id="provider-models-list">
-                                    <!-- JS动态生成 -->
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                </div>
-
+                </section>
+            </div>
         </div>
     </div>
+
 
     <!-- 主内容区 -->
     <main class="container">
@@ -645,158 +778,7 @@
                         </div>
 
                         <!-- 智能体配置面板 -->
-                        <div class="agent-config-panel" id="agent-config-panel">
-                            <div class="config-panel-header">
-                                <span class="config-panel-title">🧠 智能体配置</span>
-                                <div class="neo4j-status-dot" id="neo4j-status-dot" title="Neo4j 连接状态"></div>
-                                <button class="config-save-btn" id="save-agent-config" onclick="saveAgentConfig()" title="保存并收起">保存</button>
-                                <button class="close-panel-btn" id="close-agent-config">×</button>
-                            </div>
-                            <div class="config-panel-body">
-                                <div class="config-section">
-                                    <div class="config-section-title">⚙️ Agent 引擎</div>
-                                    <div class="permission-mode-row">
-                                        <label class="config-option">
-                                            <input type="radio" name="agent-engine" value="custom" id="engine-custom" checked>
-                                            <span class="config-option-label">⚡ 自定义流式 <span class="config-option-desc">裸API手写循环，显示🧠思考</span></span>
-                                        </label>
-                                        <label class="config-option">
-                                            <input type="radio" name="agent-engine" value="langchain" id="engine-langchain">
-                                            <span class="config-option-label">🧠 LangChain 流式 <span class="config-option-desc">框架循环，无思考链</span></span>
-                                        </label>
-                                    </div>
-                                    <div style="margin-top:0.6rem;">
-                                        <label class="config-option-label" style="margin-bottom:0.3rem;display:block;">🔁 工具循环轮次</label>
-                                        <select id="agent-max-rounds" class="neo4j-input" style="width:100%;">
-                                            <option value="8">8 轮</option>
-                                            <option value="20">20 轮</option>
-                                            <option value="50">50 轮</option>
-                                            <option value="0">无限</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <!-- 子智能体（delegate_task）配置 -->
-                                <div class="config-section">
-                                    <div class="config-section-title">🤖 子智能体</div>
-                                    <label class="config-option" style="margin-bottom:.5rem;">
-                                        <input type="checkbox" id="subagent-enabled" checked>
-                                        <span class="config-option-label">启用子智能体
-                                            <span class="config-option-desc">主智能体可派子智能体并行处理独立子任务（需在下方工具区勾选 delegate_task）</span>
-                                        </span>
-                                    </label>
-                                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem .6rem;">
-                                        <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">轮次/个（0=无限）
-                                            <input type="number" id="subagent-rounds" min="0" step="1" value="0" title="每个子智能体的工具循环上限；0 = 无限（用户 2026-09-27：不要锁死）"
-                                                   class="neo4j-input" style="width:100%;box-sizing:border-box;">
-                                        </label>
-                                        <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">并发上限
-                                            <input type="number" id="subagent-parallel" min="1" max="8" step="1" value="8"
-                                                   class="neo4j-input" style="width:100%;box-sizing:border-box;">
-                                        </label>
-                                        <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">最多子任务
-                                            <input type="number" id="subagent-maxtasks" min="1" max="8" step="1" value="8"
-                                                   class="neo4j-input" style="width:100%;box-sizing:border-box;">
-                                        </label>
-                                    </div>
-                                    <div style="font-size:.72rem;color:var(--gray);line-height:1.5;margin-top:.4rem;">
-                                        <b>轮次/个</b>＝每个子智能体内部最多跑几轮工具循环；<br>
-                                        <b>并发上限</b>＝同时最多并行运行几个子智能体（其余排队等待）；<br>
-                                        <b>最多子任务</b>＝一次 delegate 最多接受几个子任务，超出的会被丢弃。
-                                    </div>
-                                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem .6rem;margin-top:.6rem;">
-                                        <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">催促(秒)
-                                            <input type="number" id="subagent-nudge" min="0" max="604800" step="10" value="0"
-                                                   class="neo4j-input" style="width:100%;box-sizing:border-box;">
-                                        </label>
-                                        <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">警告(秒)
-                                            <input type="number" id="subagent-warn" min="0" max="604800" step="10" value="0"
-                                                   class="neo4j-input" style="width:100%;box-sizing:border-box;">
-                                        </label>
-                                        <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">终止(秒)
-                                            <input type="number" id="subagent-abort" min="0" max="604800" step="10" value="86400"
-                                                   class="neo4j-input" style="width:100%;box-sizing:border-box;">
-                                        </label>
-                                    </div>
-                                    <div style="font-size:.72rem;color:var(--gray);line-height:1.5;margin-top:.4rem;">
-                                        子智能体三级超时（秒，0=关闭该级，每个子智能体独立计时）：催促→注入「尽快收尾」；警告→注入「立即给结论」；终止→中断并返回已完成部分。
-                                    </div>
-                                </div>
-                                <!-- 主智能体超时保护（原在设置面板；id 未变 → branching.js 读写零改动） -->
-                                <div class="config-section">
-                                    <div class="config-section-title">⏱️ 超时保护（主智能体）</div>
-                                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem .6rem;">
-                                        <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">催促(秒)
-                                            <input type="number" id="timeout-nudge" min="0" max="604800" step="10" value="0"
-                                                   class="neo4j-input" style="width:100%;box-sizing:border-box;">
-                                        </label>
-                                        <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">警告(秒)
-                                            <input type="number" id="timeout-warn" min="0" max="604800" step="10" value="0"
-                                                   class="neo4j-input" style="width:100%;box-sizing:border-box;">
-                                        </label>
-                                        <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">终止(秒)
-                                            <input type="number" id="timeout-abort" min="0" max="604800" step="10" value="86400"
-                                                   class="neo4j-input" style="width:100%;box-sizing:border-box;">
-                                        </label>
-                                    </div>
-                                    <div style="font-size:.72rem;color:var(--gray);line-height:1.5;margin-top:.4rem;">
-                                        主智能体三级超时（秒，0=关闭该级）：催促→注入「尽快收尾」；警告→注入「立即作答」；终止→强制结束并返回超时说明。
-                                    </div>
-                                </div>
-                                <div class="config-section">
-                                    <div class="config-section-title">🔐 权限模式</div>
-                                    <div class="permission-mode-row">
-                                        <label class="config-option">
-                                            <input type="radio" name="permission-mode" value="safe" id="perm-safe" checked>
-                                            <span class="config-option-label">🔒 安全模式 <span class="config-option-desc">仅 workspace</span></span>
-                                        </label>
-                                        <label class="config-option">
-                                            <input type="radio" name="permission-mode" value="ask" id="perm-ask">
-                                            <span class="config-option-label">❓ 询问模式 <span class="config-option-desc">可读项目+写技能</span></span>
-                                        </label>
-                                        <label class="config-option">
-                                            <input type="radio" name="permission-mode" value="full" id="perm-full">
-                                            <span class="config-option-label">⚡ 完全访问 <span class="config-option-desc">任意读写</span></span>
-                                        </label>
-                                    </div>
-                                </div>
-                                <div class="config-section">
-                                    <div class="config-section-title">🔗 Neo4j 连接</div>
-                                    <div class="neo4j-connect-form">
-                                        <input type="text" class="neo4j-input" id="panel-neo4j-uri" placeholder="neo4j+s://..." value="">
-                                        <div class="neo4j-row">
-                                            <input type="text" class="neo4j-input" id="panel-neo4j-user" placeholder="用户名" value="">
-                                            <input type="password" class="neo4j-input" id="panel-neo4j-pass" placeholder="密码">
-                                        </div>
-                                        <button class="neo4j-connect-btn" id="panel-neo4j-connect">🔌 连接</button>
-                                        <span class="neo4j-connect-msg" id="panel-neo4j-msg"></span>
-                                    </div>
-                                </div>
-                                <div class="config-section">
-                                    <div class="config-section-title">📄 MinerU 解析配置 <span style="font-size:0.75rem;color:var(--gray);font-weight:normal">（PDF→Markdown，随保存提交）</span></div>
-                                    <div class="neo4j-connect-form">
-                                        <input type="password" class="neo4j-input" id="panel-mineru-token" placeholder="MinerU API Token / Key" autocomplete="off">
-                                        <div class="neo4j-row" style="margin-top:6px;">
-                                            <button class="neo4j-connect-btn" id="panel-mineru-save" style="background:var(--primary);color:#fff;">💾 保存 Token</button>
-                                            <span class="neo4j-connect-msg" id="panel-mineru-msg"></span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="config-section">
-                                    <div class="config-section-title">🛠️ 工具 <span style="font-size:0.75rem;color:var(--gray);font-weight:normal">（按分组勾选 = LLM 可用；数据来自后端 tools_registry）</span></div>
-                                    <div id="tools-groups-container" style="min-height:2rem;">
-                                        <!-- 由 agent_config.js 从后端 /api/tools 按分组动态渲染 -->
-                                        <div style="font-size:0.8rem;color:var(--gray);padding:0.25rem 0;">加载中...</div>
-                                    </div>
-                                 </div>
-                                <div class="config-section">
-                                <div class="config-section-title">📖 Skill</div>
-                                <div id="skills-config-container">
-                                    <!-- 由 JS 从 skills/index.json 动态生成 -->
-                                    <div style="font-size:0.8rem;color:var(--gray);padding:0.25rem 0;">加载中...</div>
-                                </div>
-                                </div>
-                                </div>
-                        </div>
+                        
 
                         <!-- 展开的消息输入区域 -->
                         <div class="expanded-message-area" id="expanded-message-area">
@@ -836,10 +818,6 @@
                                     <span id="context-size-text">0</span>
                                 </div>
 
-                                <!-- 智能体配置按钮 -->
-                                <button class="tool-icon-btn agent-config-btn" id="agent-config-toggle" title="智能体配置">
-                                    <span>🧠</span>
-                                </button>
 
                                 <!-- 设置按钮 -->
                                 <button class="tool-icon-btn" id="settings-btn" title="设置">
@@ -869,15 +847,15 @@
     <script src="js/user_settings.js?v=2"></script>
     <script src="js/user_chats.js?v=6"></script>
     <script src="js/events.js?v=1"></script>
-    <script src="js/dom.js?v=5"></script>
+    <script src="js/dom.js?v=6"></script>
     <script src="js/settings.js?v=11"></script>
     <script src="js/image_tools.js?v=3"></script>
     <script src="js/file_preview.js?v=12"></script>
     <script src="js/auth.js?v=24"></script>
-    <script src="js/api.js?v=14"></script>
+    <script src="js/api.js?v=15"></script>
     <script src="js/database.js?v=21"></script>
     <script src="js/sidebar.js?v=33"></script>
-    <script src="js/branching.js?v=19"></script>
+    <script src="js/branching.js?v=20"></script>
     <script src="js/provider.js?v=9"></script>
     <script src="js/messages.js?v=10"></script>
     <script src="js/editing.js?v=3"></script>
@@ -888,14 +866,14 @@
     <script src="js/subagent_view.js?v=3"></script>
     <!-- 前端工具注册表已删除（工具全部由后端提供） -->
     <script src="js/skill_system.js?v=3"></script>
-    <script src="js/agent_config.js?v=13"></script>
-    <script src="js/ui.js?v=6"></script>
+    <script src="js/agent_config.js?v=14"></script>
+    <script src="js/ui.js?v=7"></script>
     <script src="js/bubbles.js?v=5"></script>
     <script src="js/bubble_actions.js?v=3"></script>
     <script src="js/utils.js?v=2"></script>
     <script src="js/main.js?v=6"></script>
     <script src="js/xiaoe.js?v=8"></script>
-    <script src="js/mobile.js?v=10"></script>
+    <script src="js/mobile.js?v=11"></script>
     <script src="js/vendor/qrcode.min.js"></script>
     <script src="js/remote.js?v=2"></script>
     <script src="js/window_controls.js?v=6"></script>

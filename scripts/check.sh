@@ -186,6 +186,12 @@ grep -q "theme-btn" index.html || { echo "FAIL: index.html 顶栏缺主题按键
 grep -q "nav-container.tight" css/layout.css || { echo "FAIL: layout.css 缺顶栏 tight 阶梯"; exit 1; }
 grep -q "bindHeaderFit" js/mobile.js || { echo "FAIL: mobile.js 缺顶栏溢出阶梯"; exit 1; }
 ! grep -q "mobile-menu-btn" index.html css/layout.css css/mobile.css js/sidebar.js || { echo "FAIL: ☰ 按钮残留"; exit 1; }
+! grep -rq --exclude='*.bak*' --exclude-dir=node_modules "agent-config-panel\|agent-config-toggle" index.html js/ css/ || { echo "FAIL: 智能体配置独立面板残留（应已并入设置）"; exit 1; }
+grep -q "settings-nav" index.html || { echo "FAIL: 设置面板缺左分类 settings-nav"; exit 1; }
+grep -q "settings-pane" index.html || { echo "FAIL: 设置面板缺右侧内容区 settings-pane"; exit 1; }
+grep -q "pane-agent" index.html || { echo "FAIL: 设置面板缺「智能体」分类"; exit 1; }
+grep -q "win-tight" css/input.css js/mobile.js || { echo "FAIL: 输入条窄屏判据 win-tight 缺失"; exit 1; }
+! grep -q "settings-content" index.html || { echo "FAIL: 旧设置内容区残留"; exit 1; }
 ! grep -q "placeNavControls" js/mobile.js || { echo "FAIL: mobile.js placeNavControls 复活"; exit 1; }
 
 # ── 侧栏平推（2026-10-02）守卫 ──

@@ -180,46 +180,9 @@ if (_sr) state.settings.subagentMaxRounds = Math.max(0, parseInt(_sr.value) || 0
     try { setUserSetting('ai-settings', JSON.stringify(state.settings)); } catch (e) { /* ignore */ }
 }
 
+// 智能体相关控件已整块并入设置面板（「智能体」/「连接与服务」两个分类）：
+// 本函数只做一次性控件绑定；面板显隐完全归设置面板，不再有第二套壳。
 function initAgentConfigPanel() {
-    if (!agentConfigToggle) return;
-
-    // ── 打开/关闭面板 ──────────────────────────────
-    agentConfigToggle.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (fileUploadPanel && fileUploadPanel.classList.contains('active')) {
-            hideUploadPanel();
-        }
-        if (expandedMessageArea && expandedMessageArea.classList.contains('active')) {
-            collapseExpandMode();
-        }
-        agentConfigPanel.classList.toggle('active');
-        // 与设置面板互斥
-        const sp = document.getElementById('settings-panel');
-        if (sp) sp.classList.remove('active');
-        // 打开时从已保存配置重新同步 UI（丢弃未保存的改动）
-        loadToolsConfigFromState();
-        loadPermissionModeFromState();
-        loadAgentEngineFromState();
-        loadSubagentConfigToPanel();
-        loadTimeoutConfigToPanel();
-        syncNeo4jConfigToPanel();
-        renderSkillsCheckboxes();  // 动态加载技能列表
-        loadMineruConfigToPanel();  // 预填 MinerU Token
-    });
-
-    // MinerU Token：打开面板时从后端读入预填
-    function loadMineruConfigToPanel() {
-        if (!panelMineruToken) return;
-        fetch(BACKEND_API_URL + '/api/config/mineru')
-            .then(r => r.json())
-            .then(function (d) {
-                if (panelMineruToken) panelMineruToken.value = d.token || '';
-                if (panelMineruMsg) panelMineruMsg.textContent = d.configured ? '✅ 已配置' : '';
-            })
-            .catch(function () {
-                if (panelMineruMsg) panelMineruMsg.textContent = '读取失败';
-            });
-    }
     // 保存 MinerU Token 到后端
     if (panelMineruSave) {
         panelMineruSave.addEventListener('click', function () {
@@ -241,26 +204,39 @@ function initAgentConfigPanel() {
         });
     }
 
-    if (closeAgentConfig) {
-        closeAgentConfig.addEventListener('click', () => {
-            agentConfigPanel.classList.remove('active');
-        });
-    }
+    // 工具开关：仅 UI 勾选，不实时保存（点设置面板「保存」统一提交）
 
-    document.addEventListener('click', (e) => {
-        if (agentConfigPanel && agentConfigPanel.classList.contains('active')) {
-            if (!agentConfigPanel.contains(e.target) && e.target !== agentConfigToggle && !agentConfigToggle.contains(e.target)) {
-                agentConfigPanel.classList.remove('active');
-            }
-        }
-    });
-
-    // 工具开关事件：仅 UI 勾选，不实时保存（点击「保存」按钮统一提交）
-
-    // 加载当前配置到 UI
+    // 首次加载当前配置到 UI
     loadToolsConfigFromState();
     initPermissionModeControls();
 }
+
+// MinerU Token：从后端读入预填（打开设置面板时调用）
+function loadMineruConfigToPanel() {
+    if (!panelMineruToken) return;
+    fetch(BACKEND_API_URL + '/api/config/mineru')
+        .then(r => r.json())
+        .then(function (d) {
+            if (panelMineruToken) panelMineruToken.value = d.token || '';
+            if (panelMineruMsg) panelMineruMsg.textContent = d.configured ? '✅ 已配置' : '';
+        })
+        .catch(function () {
+            if (panelMineruMsg) panelMineruMsg.textContent = '读取失败';
+        });
+}
+
+// 设置面板每次打开：把 state 回填到「智能体 / 连接与服务」两个分类
+function loadAgentConfigPanes() {
+    loadToolsConfigFromState();
+    loadPermissionModeFromState();
+    loadAgentEngineFromState();
+    loadSubagentConfigToPanel();
+    loadTimeoutConfigToPanel();
+    syncNeo4jConfigToPanel();
+    renderSkillsCheckboxes();
+    loadMineruConfigToPanel();
+}
+window.loadAgentConfigPanes = loadAgentConfigPanes;
 
 function loadToolsConfigFromState() {
     const cfg = state.agentConfig;
@@ -317,10 +293,7 @@ function saveAgentConfig() {
     if (_ta) state.settings.timeoutAbort = Math.max(0, parseInt(_ta.value) || 0);
     try { setUserSetting('ai-settings', JSON.stringify(state.settings)); } catch (e) { /* ignore */ }
 
-    // 收起面板
-    if (agentConfigPanel) agentConfigPanel.classList.remove('active');
-    const btn = document.getElementById('save-agent-config');
-    if (btn && typeof showActionFeedback === 'function') showActionFeedback('配置已保存', 'success', btn);
+    // 面板收起与「已保存」提示统一由设置面板的保存流程处理（branching.js saveSettings）
 }
 
 function loadAgentConfigFromLocal() {

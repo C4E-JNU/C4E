@@ -8,10 +8,23 @@
 
                         temperatureSlider.value = state.settings.temperature;
                         contextSlider.value = state.settings.contextLength;
-                        maxTokensInput.value = state.settings.maxTokens;
+                        maxTokensInput.value = state.settings.maxTokens ?? 65536;
                         if (expectedContextTokensInput) expectedContextTokensInput.value = state.settings.expectedContextTokens ?? 4000;
                         const expTokensVal = document.getElementById('expected-context-tokens-value');
                         if (expTokensVal) expTokensVal.textContent = expectedContextTokensInput.value;
+
+                        // 上下文窗口（hard limit，仅用于算清理触发线，本机不据此报错）
+                        if (contextWindowInput) {
+                            contextWindowInput.value = state.settings.contextWindow ?? 262144;
+                            const _cwv = document.getElementById('context-window-value');
+                            if (_cwv) _cwv.textContent = contextWindowInput.value;
+                        }
+                        // 清理触发线（context budget；0 = 自动）
+                        if (contextBudgetInput) {
+                            contextBudgetInput.value = state.settings.contextBudget ?? 0;
+                            const _cbv = document.getElementById('context-budget-value');
+                            if (_cbv) _cbv.textContent = (parseInt(contextBudgetInput.value) > 0) ? contextBudgetInput.value : '0（自动）';
+                        }
                   
                   
                         // 加载文件打开方式设置（三选一，读 state 渲染）
@@ -108,7 +121,12 @@
                 function saveSettings() {
               state.settings.temperature = parseFloat(temperatureSlider.value);
               state.settings.contextLength = parseInt(contextSlider.value);
-              state.settings.maxTokens = parseInt(maxTokensInput.value);
+              // 输出上限：放开到 100~1000000（支持大输出模型），下限 100 防止算出异常值
+              state.settings.maxTokens = Math.max(100, parseInt(maxTokensInput.value) || 65536);
+              // hard limit：模型上下文窗口。只用于计算清理触发线，本机绝不据此报错/截断
+              if (contextWindowInput) state.settings.contextWindow = Math.max(1024, parseInt(contextWindowInput.value) || 262144);
+              // 清理触发线（token）；0 = 自动 (window − 输出预留) × 75%
+              if (contextBudgetInput) state.settings.contextBudget = Math.max(0, parseInt(contextBudgetInput.value) || 0);
               if (expectedContextTokensInput) state.settings.expectedContextTokens = parseInt(expectedContextTokensInput.value) || 4000;
 
               // 保存超时保护三级（子智能体设置由「智能体配置」面板保存）
@@ -169,6 +187,9 @@
                   }
               }
 
+              // 智能体配置（引擎/轮次/权限/工具/Skill/子智能体）与设置同一颗「保存」提交
+              if (typeof saveAgentConfig === 'function') saveAgentConfig();
+
               showActionFeedback('设置已保存', 'success', saveSettingsBtn);
 
             updateTokenDisplay();  // 保存后立即刷新 Token 显示
@@ -188,20 +209,30 @@
                 }
             }
             let maxCounter = 0;
-            for (const branchId in state.branches) {
-                if (branchId !== 'main' && branchId.startsWith('branch-')) {
+            const _bumpMax = (branchId) => {
+                if (branchId && branchId !== 'main' && branchId.startsWith('branch-')) {
                     const num = parseInt(branchId.replace('branch-', ''));
                     if (!isNaN(num) && num > maxCounter) {
                         maxCounter = num;
                     }
                 }
+            };
+            for (const branchId in state.branches) _bumpMax(branchId);
+            // ★ 墓碑占用的编号也必须计入（2026-09-30 修）：对话被移走/删掉后编号会从
+            //   state.branches 里消失，若只按活着的对话算，计数器会**退回旧号**，新建对话
+            //   就会复用被墓碑占着的 branch-N → 一同步就被墓碑判为「更旧的副本」删掉，
+            //   于是「新建的对话自动消失」，而且计数值卡住不动、永远建不成。
+            if (typeof _chatsDeleted !== 'undefined' && _chatsDeleted) {
+                for (const branchId in _chatsDeleted) _bumpMax(branchId);
             }
             state.branchCounter = maxCounter + 1;
             // 恢复上次打开的对话（若存在且有效）；否则保持无对话(null)，让用户新建/选择
             const prevBranchId = localStorage.getItem(window.identityKey('ai-current-branch'));
             // 只恢复真实对话（branch-*），不创建任何“默认对话”占位
+            // ★ 2026-09-30：去掉原先的 !isTemporary 条件 —— 已无「临时对话」概念，
+            //   只要该 branch-* 存在就恢复（空对话同样恢复）。
             if (prevBranchId && prevBranchId.startsWith('branch-')
-                && state.branches[prevBranchId] && !state.branches[prevBranchId].isTemporary) {
+                && state.branches[prevBranchId]) {
                 state.currentBranchId = prevBranchId;
             } else {
                 state.currentBranchId = null;
@@ -353,7 +384,9 @@
                 var nextBranchId = null;
                 for (var vi = 0; vi < visibleIds.length; vi++) {
                     var cand = visibleIds[vi];
-                    if (cand !== targetBranchId && state.branches[cand] && !state.branches[cand].isTemporary) {
+                    // ★ 2026-09-30：去掉 !isTemporary 条件（已无「临时对话」概念），
+                    //   存在的 branch-* 都可以作为下一跳（空对话也算）。
+                    if (cand !== targetBranchId && state.branches[cand]) {
                         nextBranchId = cand;
                         break;
                     }
@@ -396,7 +429,7 @@
             const dataStr = JSON.stringify(chatData, null, 2);
             const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
 
-            const exportFileDefaultName = `RAGAgent-${branch.name}-${new Date().toISOString().split('T')[0]}.json`;
+            const exportFileDefaultName = `Quine-${branch.name}-${new Date().toISOString().split('T')[0]}.json`;
 
             const linkElement = document.createElement('a');
             linkElement.setAttribute('href', dataUri);

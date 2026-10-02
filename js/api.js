@@ -156,6 +156,7 @@
             settingsBtn.addEventListener('click', openSettings);
             closeSettingsBtn.addEventListener('click', closeSettings);
             saveSettingsBtn.addEventListener('click', saveSettings);
+            bindSettingsNav();   // 设置面板左分类切换/遮罩关闭/Esc
 
             // 设置滑块事件
             temperatureSlider.addEventListener('input', (e) => {
@@ -169,6 +170,18 @@
 
             maxTokensInput.addEventListener('input', (e) => {
                 maxTokensValue.textContent = e.target.value;
+            });
+
+            // 上下文窗口（hard limit）：只影响清理时机的计算
+            if (contextWindowInput) contextWindowInput.addEventListener('input', (e) => {
+                const v = document.getElementById('context-window-value');
+                if (v) v.textContent = e.target.value || '262144';
+            });
+
+            // 清理触发线（context budget）：0 = 自动
+            if (contextBudgetInput) contextBudgetInput.addEventListener('input', (e) => {
+                const v = document.getElementById('context-budget-value');
+                if (v) v.textContent = (parseInt(e.target.value) > 0) ? e.target.value : '0（自动）';
             });
 
             expectedContextTokensInput.addEventListener('input', (e) => {
@@ -247,14 +260,9 @@
 
         // ==================== 新建对话功能 ====================
         function createNewConversation() {
-            // 检查是否有当前对话且是否有内容
-            const currentBranch = state.branches[state.currentBranchId];
-
-            // 如果当前是临时对话且有内容，先保存它
-            if (currentBranch && currentBranch.isTemporary && currentBranch.hasContent) {
-                saveTempConversation(currentBranch);
-            }
-
+            // ★ 2026-09-30 用户定：取消「临时对话 / 空草稿 / 默认占位」三种概念 ——
+            //   新建对话 = 直接创建一条 **永久** 对话；空对话也保留在侧栏，永不自动删除。
+            //   （只有小e 的对话是临时的：内存态、走 /api/xiaoe/*、不落盘，不在此列。）
             // 创建新的永久对话（即使空对话也保存到侧边栏）
             // 计算可用的最小命名序号：扫描已有分支名，取最小空缺
             var existingNumbers = [];
@@ -283,7 +291,6 @@
                 totalTokens: 0,
                 sessionTokens: 0,
                 hasContent: false,
-                isTemporary: false,
                 notes: []
             };
 
@@ -308,46 +315,16 @@
             showActionFeedback('新建对话已创建', 'success', feedbackTarget);
         }
 
-        function saveTempConversation(branch) {
-            if (!branch.hasContent || branch.messages.length === 0) {
-                // 如果没有内容，删除临时对话
-                delete state.branches[branch.id];
-                return;
-            }
-
-            // 生成对话名称（使用第一条用户消息的前20个字符）
-            let conversationName = '新对话';
-            const firstUserMessage = branch.messages.find(msg => msg.role === 'user');
-            if (firstUserMessage && firstUserMessage.content) {
-                const preview = firstUserMessage.content.substring(0, 20);
-                conversationName = preview + (firstUserMessage.content.length > 20 ? '...' : '');
-            }
-
-            // 创建正式对话ID
-            const newBranchId = `branch-${state.branchCounter}`;
-            state.branchCounter++;
-
-            // 复制对话数据
-            state.branches[newBranchId] = {
-                ...branch,
-                id: newBranchId,
-                name: conversationName,
-                isTemporary: false
-            };
-
-            // 删除临时对话
-            delete state.branches[branch.id];
-
-            // 切换到新对话
-            state.currentBranchId = newBranchId;
-
-            saveBranches();
-            updateHistoryList();
-            // 如果笔记面板打开，同步更新
-            syncNotesPanel();
-
-            return newBranchId;
-        }
+        // ── saveTempConversation 已于 2026-09-30 删除 ─────────────────────────────
+        // 旧职能有两件：
+        //   ① 把「临时对话」转成正式编号的永久对话（branch-N）并改名；
+        //   ② ★ 若该对话「没有内容」，就 delete 掉它 —— 这是全项目**唯一**会自动删掉
+        //      空对话的代码路径。
+        // 用户 2026-09-30 定「不要临时对话/草稿/占位概念，空对话永不自动删除」，它彻底
+        // 失去存在意义，故删掉整段，防止「悄悄删掉空对话」再次被走到。
+        // 原两处调用点均已改写为直接创建/填充永久对话：
+        //   · api.js   createNewConversation()      —— 建的就是永久对话，无需先保存临时对话
+        //   · messages.js branchFromMessage()       —— 直接给新对话填消息并命名，不再转正
 
         // ==================== 统一API调用函数 ====================
 
