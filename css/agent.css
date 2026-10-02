@@ -127,6 +127,13 @@
                 #ffffff;
 }
 
+/* 推理区包层：sticky 的作用域就是它（推理区自身的高度）。
+   不包这层的话，sticky 会被约束在整条消息气泡里 —— 正文/表格很长时，
+   收起键会一路跟着你滚到底，用户 2026-10-02 指出过。 */
+.agent-reasoning-block {
+    position: relative;
+}
+
 /* ==================== 推理步骤容器 ==================== */
 #ephemeral-steps {
     display: flex;

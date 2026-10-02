@@ -185,7 +185,7 @@
                        }
                    }).join('\n');
                    const containerId = 'rs-' + message.id;
-                   reasoningStepsHtml = `<div class="agent-reasoning-toggle" onclick="var c=document.getElementById('${containerId}');var t=this;if(c.style.display==='none'){c.style.display='block';t.innerHTML='🧠 收起智能体推理过程 ▾';t.classList.remove('collapsed')}else{c.style.display='none';t.innerHTML='🧠 查看智能体推理过程 ▸';t.classList.add('collapsed')}">🧠 收起智能体推理过程 ▾</div><div id="${containerId}" class="reasoning-steps-container">${stepsHtml}</div>`;
+                   reasoningStepsHtml = `<div class="agent-reasoning-block"><div class="agent-reasoning-toggle" onclick="var c=document.getElementById('${containerId}');var t=this;if(c.style.display==='none'){c.style.display='block';t.innerHTML='🧠 收起智能体推理过程 ▾';t.classList.remove('collapsed')}else{c.style.display='none';t.innerHTML='🧠 查看智能体推理过程 ▸';t.classList.add('collapsed')}">🧠 收起智能体推理过程 ▾</div><div id="${containerId}" class="reasoning-steps-container">${stepsHtml}</div></div>`;
                }
 
                // 附件显示 (仅用户消息)

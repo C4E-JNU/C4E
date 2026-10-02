@@ -54,9 +54,8 @@ function getModelBaseUrl(endpoint) {
 }
 
 // ── 主 ReAct 循环（后端模式）────────────────────
-async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} */) {
+async function reactAgentLoop(userQuestion, options /* {fileIds:[], note_refs:[]} */) {
     options = options || {};
-    const optsImages = options.images || [];
     const overrideFileIds = options.fileIds || null;
     // 引用的笔记/数据库条目：优先用本次传入；重新生成/续写时从上一条用户消息里恢复
     let noteRefs = options.note_refs || null;
@@ -112,17 +111,42 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
         reasoningContainer.style.display = collapsed ? 'block' : 'none';
         reasoningToggle.textContent = collapsed ? '🧠 收起智能体推理过程 ▾' : '🧠 查看智能体推理过程 ▸';
     };
-    liveContent.appendChild(reasoningToggle);
-    liveContent.appendChild(reasoningContainer);
+    // sticky 作用域 = 推理区本身（不是整条消息）：否则正文很长时收起键会一直跟着滚
+    var reasoningBlock = document.createElement('div');
+    reasoningBlock.className = 'agent-reasoning-block';
+    reasoningBlock.appendChild(reasoningToggle);
+    reasoningBlock.appendChild(reasoningContainer);
+    liveContent.appendChild(reasoningBlock);
 
     var answerDiv = document.createElement('div');
     liveContent.appendChild(answerDiv);
 
-    // 等待提示
+    // 运行中状态行：转圈 + 当前动作 + 已运行秒数。
+    // 全程保留（不再「一连上 SSE 就删掉」）——否则工具调用/模型思考那几十秒里界面毫无动静，
+    // 看起来就像卡死。只有流结束、用户停止或异常时才移除。
     var stepIndicator = document.createElement('div');
     stepIndicator.className = 'message step-indicator';
-    stepIndicator.innerHTML = '<div class="agent-step-header">⏳ 智能体思考中...</div>';
+    stepIndicator.innerHTML = '<div class="agent-step-header q-live-header">' +
+        '<span class="q-spinner"></span><span class="q-live-text">智能体思考中...</span>' +
+        '<span class="q-live-elapsed"></span></div>';
     liveContent.appendChild(stepIndicator);
+    var liveTextEl = stepIndicator.querySelector('.q-live-text');
+    var liveElapsedEl = stepIndicator.querySelector('.q-live-elapsed');
+    var liveT0 = 0, liveTimer = null;
+    function liveTick() {
+        if (!liveT0 || !liveElapsedEl) return;
+        var s = Math.round((Date.now() - liveT0) / 1000);
+        liveElapsedEl.textContent = s >= 60 ? (Math.floor(s / 60) + 'm' + (s % 60) + 's') : (s + 's');
+    }
+    function showLiveStatus(text) {
+        if (text && liveTextEl && liveTextEl.textContent !== text) liveTextEl.textContent = text;
+        if (!liveT0) { liveT0 = Date.now(); liveTick(); liveTimer = setInterval(liveTick, 1000); }
+        if (!stepIndicator.parentNode) liveContent.appendChild(stepIndicator);
+    }
+    function hideLiveStatus() {
+        if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+        if (stepIndicator.parentNode) stepIndicator.parentNode.removeChild(stepIndicator);
+    }
 
     liveEl.appendChild(liveContent);
     messagesContainer.appendChild(liveEl);
@@ -168,12 +192,14 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
         finalizeReasoning();
         reasoningSteps.push({ type: 'tool_call', name: name, input: input || '' });
         appendStepNode('<div class="agent-step-header">🔧 调用: ' + escHtml(name) + '</div>' + (input ? '<pre class="tool-code">' + escHtml(input) + '</pre>' : ''));
+        showLiveStatus('🔧 正在执行 ' + name + ' …');
         currentRound++;
         liveScroll();
     }
     function handleToolResult(name, content) {
         reasoningSteps.push({ type: 'tool_result', name: name, content: (content || '').substring(0, 500) });
         appendStepNode('<div class="agent-step-header">👁️ 结果</div><div class="obs-content">' + escHtml((content || '').substring(0, 500)) + '</div>');
+        showLiveStatus('📥 ' + name + ' 已返回，继续推理…');
         liveScroll();
     }
 
@@ -185,6 +211,9 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
         reasoningSteps.push({ type: 'timeout_notice', level: level, text: text || '', elapsed: elapsed || 0 });
         appendStepNode('<div class="agent-step-header" style="color:' + color + ';">' + icon + ' ' + label +
             (elapsed ? '（' + elapsed + 's）' : '') + '</div><div class="obs-content">' + escHtml(text || '') + '</div>');
+        if (level !== 'abort') {
+            showLiveStatus(icon + ' ' + label + (elapsed ? '（' + elapsed + 's）' : '') + '，仍在处理…');
+        }
         liveScroll();
     }
 
@@ -193,7 +222,7 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
     var _SA_ROLE_NAMES = { contradiction: '矛盾核查', extraction: '数据提取', verify: '数据核查' };
     function _subagentCardHtml(idx, info) {
         var badge = info.running
-            ? '<span style="color:#e6a23c;">● 运行中…</span>'
+            ? '<span style="color:#e6a23c;"><span class="q-spinner q-spinner-sm"></span>运行中…</span>'
             : (info.ok ? '<span style="color:#2e9e4f;">✅ 完成' + (info.seconds ? '（' + info.seconds + 's）' : '') + '</span>'
                        : '<span style="color:#e02020;">⚠️ 失败</span>');
         var role = info.role ? '<span style="font-size:.75rem;color:#8a6d3b;background:rgba(230,162,60,.15);border-radius:4px;padding:1px 6px;margin-left:4px;">' + (_SA_ROLE_NAMES[info.role] || info.role) + '</span>' : '';
@@ -290,7 +319,10 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
                 else if (st.type === 'tool_call') txt = '🔧 调用 ' + (st.name || '') + '…';
                 else if (st.type === 'tool_result') txt = '📥 ' + (st.name || '') + ' 返回';
                 else if (st.type === 'notice') txt = '⚠️ ' + (st.text || '').slice(0, 80);
-                if (txt) live.textContent = txt;
+                if (txt) {
+                    live.textContent = txt;
+                    showLiveStatus('🤖 子智能体 ' + (idx + 1) + '　' + txt);
+                }
             }
         }
         liveScroll();
@@ -302,9 +334,8 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
         if (options.skipLastHistory !== false && recentHistory.length > 0) {
             recentHistory = recentHistory.slice(0, -1);
         }
-        // 收集上下文窗口内所有用户消息引用的附件 file_id：
-        //   allIds  = 窗口内全部（历史附件仅作引用说明，模型可 read_file 自取）
-        //   freshIds = 最后一条用户消息的附件（当轮上传 → 后端注入完整文本）
+        // 收集本对话全部用户消息引用的附件 file_id（当轮/历史、文档/图片一视同仁）：
+        //   一律只传 id —— 正文与像素由模型按需 read_file(file_id=…) 自取（用户 2026-10-01 定）
         var _collectFileIds = function () {
             var msgs = state.branches[state.currentBranchId]?.messages || [];
             // 收集**本对话全部**用户消息引用的附件（不再只扫最近 contextLength*2+1 条）。
@@ -312,26 +343,20 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
             // file_ids → 模型下一轮就说"目前没有文件"（用户实测的 bug）。
             // 附件本来就存在消息里，收全量只是多几个字符串，不新增任何存储。
             var recent = msgs;
-            var lastUserIdx = -1;
-            for (var i = recent.length - 1; i >= 0; i--) {
-                if (recent[i].role === 'user') { lastUserIdx = i; break; }
-            }
-            var allIds = [], freshIds = [];
-            recent.forEach(function (m, idx) {
+            var allIds = [];
+            recent.forEach(function (m) {
                 if (m.role !== 'user' || !m.attachments) return;
                 m.attachments.forEach(function (a) {
                     if (!a.file_id) return;
                     if (allIds.indexOf(a.file_id) === -1) allIds.push(a.file_id);
-                    if (idx === lastUserIdx && freshIds.indexOf(a.file_id) === -1) freshIds.push(a.file_id);
                 });
             });
-            return { allIds: allIds, freshIds: freshIds };
+            return { allIds: allIds };
         };
 
         var collected = _collectFileIds();
-        var fullIds = overrideFileIds ? overrideFileIds.slice() : collected.freshIds;
         var refIds = collected.allIds.slice();
-        fullIds.forEach(function (id) { if (refIds.indexOf(id) === -1) refIds.push(id); });
+        (overrideFileIds || []).forEach(function (id) { if (refIds.indexOf(id) === -1) refIds.push(id); });
 
         var requestBody = {
             input: userQuestion,
@@ -344,8 +369,9 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
                 api_key: apiKey || '',
                 base_url: modelCfg ? getModelBaseUrl(modelCfg.endpoint) : '',
                 temperature: state.settings?.temperature || 0.7,
-                max_tokens: state.settings?.maxTokens || 8192,
+                max_tokens: state.settings?.maxTokens || 65536,
                 context_window: state.settings?.contextWindow || 262144,
+                context_budget: state.settings?.contextBudget || 0,   // 清理触发线；0 = 后端自动
             },
             context_length: state.settings?.contextLength || 10,
             branch_id: state.currentBranchId || '',
@@ -353,7 +379,6 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
             engine: state.agentConfig?.engine || 'custom',
             max_rounds: (state.agentConfig?.maxRounds === 0 || state.agentConfig?.maxRounds) ? state.agentConfig.maxRounds : 20,
             file_ids: refIds,
-            full_file_ids: fullIds,
             note_refs: noteRefs,
             timeouts: {
                 nudge: state.settings?.timeoutNudge ?? 120,
@@ -369,7 +394,6 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
                 warn: state.settings?.subagentWarn ?? 150,
                 abort: state.settings?.subagentAbort ?? 300,
             },
-            images: optsImages,
         };
 
         console.log('[Agent] Full request:', JSON.stringify({
@@ -420,7 +444,7 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
                 try { ev = JSON.parse(dataStr); } catch(e) { continue; }
                 var t = ev.type;
                 if (t === 'reasoning') { handleReasoning(ev.text || ''); }
-                else if (t === 'token') { if (ev.text) { streamedText += ev.text; currentRoundText += ev.text; answerDiv.textContent += ev.text; } }
+                else if (t === 'token') { if (ev.text) { streamedText += ev.text; currentRoundText += ev.text; answerDiv.textContent += ev.text; showLiveStatus('✍️ 正在生成回答…'); } }
                 else if (t === 'tool_call') { handleToolCall(ev.name || '', ev.input || ''); }
                 else if (t === 'tool_result') { handleToolResult(ev.name || '', ev.content || ''); }
                 else if (t === 'subagent_start') { handleSubagentStart(ev); }
@@ -432,10 +456,12 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
                 else if (t === 'error') { throw new Error(ev.message || '后端错误'); }
             }
         }
+        hideLiveStatus();     // 本轮结束：收掉转圈状态行
         finalizeReasoning();  // 收尾：flush 未落盘的推理
         if (!finalAnswer && streamedText) finalAnswer = streamedText;  // 兜底：final 缺失/为空时用已流出的正文
 
     } catch (error) {
+        hideLiveStatus();  // 停止/异常：立即收掉转圈，别让它一直转
         if (error.name === 'AbortError') {
             finalAnswer = '已取消生成';
         } else {
@@ -463,6 +489,9 @@ async function reactAgentLoop(userQuestion, options /* {images:[], fileIds:[]} *
             reasoningSteps: reasoningSteps,  // 持久化思考过程（切换对话/刷新后仍显示；不会进入模型上下文）
         });
     }
+    // 本轮生成的推理块，重渲染后保持【展开】（与实时流式所见一致）；
+    // 用户手动收起的块由 __mrUser 记住。见 messages.js 的 mrOpenState / toggleMrBox。
+    if (typeof window.__mrMarkAuto === 'function') window.__mrMarkAuto(mergeInto || msgId);
     saveBranches();
 
     if (mergeInto) {
