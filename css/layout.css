@@ -427,151 +427,6 @@
             gap: 10px;
         }
 
-        /* 新版服务商布局 */
-        .provider-layout {
-            display: flex;
-            gap: 2rem;
-            background: var(--card-bg);
-            border-radius: 24px;
-            border: 1px solid var(--border-color);
-            padding: 2rem;
-            min-height: 500px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.05);
-            margin-top: 1rem;
-        }
-
-        .provider-sidebar {
-            width: 260px;
-            flex-shrink: 0;
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-            border-right: 1px solid var(--border-color);
-            padding-right: 1.5rem;
-        }
-
-        .provider-item {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 12px 16px;
-            border-radius: 12px;
-            cursor: pointer;
-            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.2s;
-            color: var(--gray);
-            font-weight: 500;
-        }
-
-        .provider-item:hover {
-            background: var(--bg-gradient);
-            color: var(--primary);
-        }
-
-        .provider-item.active {
-            background: var(--primary);
-            color: white;
-            box-shadow: 0 4px 12px var(--primary-glow);
-        }
-
-        .provider-icon-placeholder {
-            width: 24px;
-            height: 24px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: rgba(0, 0, 0, 0.05);
-            border-radius: 50%;
-            font-size: 0.6rem;
-            color: var(--gray);
-            flex-shrink: 0;
-        }
-
-        .provider-item.active .provider-icon-placeholder {
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-        }
-
-        .provider-content {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 2rem;
-        }
-
-        .provider-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding-bottom: 1.5rem;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .provider-title {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--dark);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .config-group {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1.5rem;
-        }
-
-        .form-group-item {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .form-label {
-            font-size: 0.9rem;
-            font-weight: 600;
-            color: var(--gray);
-        }
-
-        .form-input {
-            padding: 10px 14px;
-            border-radius: 10px;
-            border: 1px solid var(--border-color);
-            background: var(--sidebar-bg);
-            color: var(--dark);
-            font-size: 0.95rem;
-            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.2s;
-            outline: none;
-        }
-
-        .form-input:focus {
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px var(--primary-soft);
-        }
-
-        .save-config-btn {
-            background: var(--primary);
-            color: white;
-            border: none;
-            padding: 10px 24px;
-            border-radius: 10px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.2s;
-            align-self: flex-end;
-        }
-
-        .save-config-btn:hover {
-            opacity: 0.9;
-            transform: translateY(-1px);
-        }
-
-        .save-config-btn.success-state {
-            background: var(--success);
-            transform: scale(1.02);
-            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
-        }
-
         .models-grid-compact {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -667,26 +522,6 @@
         .add-model-btn:hover {
             border-color: var(--primary);
             color: var(--primary);
-        }
-
-        @media (max-width: 768px) {
-            .provider-layout {
-                flex-direction: column;
-                padding: 1rem;
-            }
-
-            .provider-sidebar {
-                width: 100%;
-                flex-direction: row;
-                overflow-x: auto;
-                padding-bottom: 0.5rem;
-                border-right: none;
-                border-bottom: 1px solid var(--border-color);
-            }
-
-            .config-group {
-                grid-template-columns: 1fr;
-            }
         }
 
         .model-card {
@@ -1257,30 +1092,6 @@
         .notes-resize::before { content: none; display: none; }
 
         /* 侧边栏头部新设计样式 */
-
-        /* ===== 服务商配置搬进「设置」面板后收紧尺寸（原为首页大屏布局） ===== */
-        .settings-panel .provider-settings-block {
-            padding: 0;
-        }
-
-        .settings-panel .provider-layout {
-            padding: 1rem;
-            gap: 1rem;
-            min-height: 0;
-            margin-top: 0.5rem;
-            box-shadow: none;
-            border-radius: 16px;
-        }
-
-        .settings-panel .provider-sidebar {
-            flex: 0 0 150px;
-            min-width: 0;
-        }
-
-        .settings-panel .provider-content {
-            flex: 1 1 auto;
-            min-width: 0;
-        }
 
         /* ── 桌面外壳（C4EAI.exe；URL 带 shell=desktop）──────────────────────────
            窗口是能被用户拖小的，所以不能套用面向浏览器的响应式：

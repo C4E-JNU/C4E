@@ -1,0 +1,540 @@
+/* ==========================================================================
+   设置界面（唯一归属文件）
+   设计口径（2026-10-02 用户定）：对齐 Codex / 主流桌面软件的设置 ——
+     · 模态：左分类（细线条图标 + 文字），右内容（滚动）
+     · 内容 = 分组卡片，组内一行一项：左标签 + 右控件，行间 1px 分隔线
+     · 字号 12/13px，灰色次要说明，不用粗边、不用大圆角、不用阴影堆叠
+     · 无 emoji（图标一律线条 SVG，继承 currentColor）
+   全部选择器以 #settings-panel 作用域，避免与历史样式互相打架。
+   ========================================================================== */
+
+/* ── 模态外壳 ───────────────────────────────────────────────────────────── */
+.settings-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 3200;
+    display: none;
+    background: rgba(17, 20, 32, 0.36);
+}
+
+.settings-overlay.active { display: block; }
+
+#settings-panel {
+    display: none;
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 3300;
+    width: min(920px, 92vw);
+    height: min(76vh, 700px);
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--border-color, #e0e0e0);
+    border-radius: 12px;
+    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.18);
+    flex-direction: column;
+    overflow: hidden;
+}
+
+#settings-panel.active { display: flex; }
+
+#settings-panel .settings-head {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--border-color, #e0e0e0);
+}
+
+#settings-panel .settings-title {
+    margin-right: auto;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--dark, #212529);
+    letter-spacing: 0.01em;
+}
+
+#settings-panel .settings-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+}
+
+/* ── 左：分类 ───────────────────────────────────────────────────────────── */
+#settings-panel .settings-nav {
+    flex: 0 0 196px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 8px;
+    overflow-y: auto;
+    border-right: 1px solid var(--border-color, #e0e0e0);
+}
+
+#settings-panel .settings-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    height: 32px;
+    padding: 0 10px;
+    font-family: inherit;
+    font-size: 0.82rem;
+    color: var(--gray, #6c757d);
+    text-align: left;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+#settings-panel .settings-nav-item .ico {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    opacity: 0.9;
+}
+
+#settings-panel .settings-nav-item:hover {
+    background: rgba(127, 127, 127, 0.10);
+    color: var(--dark, #212529);
+}
+
+#settings-panel .settings-nav-item.active {
+    background: rgba(67, 97, 238, 0.10);
+    color: var(--primary, #4361ee);
+    font-weight: 600;
+}
+
+/* ── 右：内容 ───────────────────────────────────────────────────────────── */
+#settings-panel .settings-panes {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-y: auto;
+    padding: 18px 22px 28px;
+}
+
+#settings-panel .settings-pane { display: none; }
+#settings-panel .settings-pane.active { display: block; }
+
+#settings-panel .settings-pane > h3 {
+    margin: 0 0 14px;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--dark, #212529);
+}
+
+/* 分组卡片（settings-group / config-section 两种来源统一外观） */
+#settings-panel .settings-group,
+#settings-panel .config-section {
+    margin: 0 0 16px;
+    padding: 0 14px;
+    background: transparent;
+    border: 1px solid var(--border-color, #e0e0e0);
+    border-radius: 10px;
+}
+
+#settings-panel .settings-group > h3,
+#settings-panel .config-section-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    padding: 11px 0;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--dark, #212529);
+    border-bottom: 1px solid var(--border-color, #e0e0e0);
+}
+
+/* 行：左标签 + 右控件 */
+#settings-panel .setting-item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 12px;
+    row-gap: 6px;
+    padding: 10px 0;
+    margin: 0;
+    font-size: 0.82rem;
+    border-bottom: 1px solid var(--border-color, #e0e0e0);
+}
+
+#settings-panel .setting-item:last-child,
+#settings-panel .settings-group > .setting-item:last-of-type { border-bottom: none; }
+
+#settings-panel .setting-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--dark, #212529);
+}
+
+#settings-panel .setting-value {
+    float: none;
+    margin-left: auto;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--primary, #4361ee);
+}
+
+/* 次要说明：原先是内联 style，现统一走类 */
+#settings-panel .setting-desc {
+    flex: 1 1 100%;
+    margin: 0;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: var(--gray, #6c757d);
+}
+
+/* 控件 */
+#settings-panel .slider,
+#settings-panel .mode-seg {
+    flex: 1 1 100%;
+    margin: 2px 0 0;
+}
+
+#settings-panel .slider { height: 4px; }
+
+#settings-panel .number-input {
+    flex: 0 0 150px;
+    width: 150px;
+    margin-left: auto;
+    height: 30px;
+    padding: 0 8px;
+    font-size: 0.78rem;
+    text-align: right;
+    color: var(--dark, #212529);
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--border-color, #e0e0e0);
+    border-radius: 6px;
+    outline: none;
+}
+
+#settings-panel .number-input:focus,
+#settings-panel .neo4j-input:focus,
+#settings-panel .form-input:focus {
+    border-color: var(--primary, #4361ee);
+    box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.12);
+}
+
+#settings-panel select {
+    height: 30px;
+    padding: 0 8px;
+    font-family: inherit;
+    font-size: 0.78rem;
+    color: var(--dark, #212529);
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--border-color, #e0e0e0);
+    border-radius: 6px;
+    outline: none;
+}
+
+#settings-panel input[type="text"],
+#settings-panel input[type="password"] {
+    height: 32px;
+    padding: 0 10px;
+    font-family: inherit;
+    font-size: 0.78rem;
+    color: var(--dark, #212529);
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--border-color, #e0e0e0);
+    border-radius: 6px;
+    outline: none;
+}
+
+#settings-panel input[type="checkbox"] { accent-color: var(--primary, #4361ee); }
+
+/* 组内子块（工具开关、Skill 列表、Neo4j 表单…）一律行式 */
+#settings-panel .config-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 0;
+    font-size: 0.8rem;
+    border-bottom: 1px solid var(--border-color, #e0e0e0);
+}
+
+#settings-panel .config-option:last-child { border-bottom: none; }
+
+#settings-panel .neo4j-connect-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 0;
+}
+
+#settings-panel .neo4j-input {
+    width: 100%;
+    height: 30px;
+    padding: 0 8px;
+    font-size: 0.78rem;
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--border-color, #e0e0e0);
+    border-radius: 6px;
+    outline: none;
+}
+
+#settings-panel .neo4j-row { display: flex; gap: 8px; }
+#settings-panel .neo4j-row .neo4j-input { flex: 1; min-width: 0; }
+
+#settings-panel .neo4j-connect-btn,
+#settings-panel .save-config-btn {
+    align-self: flex-start;
+    height: 30px;
+    padding: 0 14px;
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #fff;
+    background: var(--primary, #4361ee);
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+#settings-panel .neo4j-connect-btn:disabled { background: #94a3b8; cursor: not-allowed; }
+#settings-panel .neo4j-connect-msg { font-size: 0.75rem; color: var(--gray, #6c757d); }
+
+/* Neo4j 状态点（保留原 .connected/.disconnected 语义） */
+#settings-panel .neo4j-status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--gray, #6c757d);
+    flex-shrink: 0;
+}
+
+#settings-panel .neo4j-status-dot.connected { background: var(--database, #10b981); }
+#settings-panel .neo4j-status-dot.disconnected { background: var(--error, #ef4444); }
+
+/* ── 服务商配置（原首页大屏布局，收进设置后按行式重排）──────────────────── */
+#settings-panel .provider-settings-block { display: block; }
+
+#settings-panel .models-content-wrapper { max-height: none; overflow: visible; }
+
+#settings-panel .provider-layout {
+    display: flex;
+    gap: 16px;
+    min-height: 0;
+    margin: 0;
+    padding: 12px 0 4px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+#settings-panel .provider-sidebar {
+    flex: 0 0 168px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-right: 12px;
+    border-right: 1px solid var(--border-color, #e0e0e0);
+}
+
+#settings-panel .provider-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 9px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--gray, #6c757d);
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+#settings-panel .provider-item:hover { background: rgba(127, 127, 127, 0.10); color: var(--dark, #212529); }
+
+#settings-panel .provider-item.active {
+    background: rgba(67, 97, 238, 0.10);
+    color: var(--primary, #4361ee);
+    box-shadow: none;
+}
+
+#settings-panel .provider-icon-placeholder {
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.6rem;
+    color: var(--gray, #6c757d);
+    background: rgba(127, 127, 127, 0.12);
+    border-radius: 6px;
+    flex-shrink: 0;
+}
+
+#settings-panel .provider-item.active .provider-icon-placeholder {
+    background: rgba(67, 97, 238, 0.16);
+    color: var(--primary, #4361ee);
+}
+
+#settings-panel .provider-content {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+#settings-panel .provider-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-color, #e0e0e0);
+}
+
+#settings-panel .provider-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--dark, #212529);
+}
+
+#settings-panel .config-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+#settings-panel .form-group-item { display: flex; flex-direction: column; gap: 6px; }
+
+#settings-panel .form-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--gray, #6c757d);
+}
+
+#settings-panel .form-input {
+    height: 32px;
+    padding: 0 10px;
+    font-size: 0.78rem;
+    color: var(--dark, #212529);
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--border-color, #e0e0e0);
+    border-radius: 6px;
+    outline: none;
+}
+
+#settings-panel .action-btn {
+    height: 30px;
+    padding: 0 12px;
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    border: 1px solid var(--border-color, #e0e0e0);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--dark, #212529);
+    cursor: pointer;
+}
+
+#settings-panel .add-model-btn { margin-top: 8px; }
+
+/* 字号等分段控件（保持既有 .mode-seg 语义，只收尺寸） */
+#settings-panel .mode-seg { margin-top: 2px; }
+
+#settings-panel .mode-seg .mode-seg-btn { padding: 5px 10px; font-size: 0.75rem; }
+
+/* ── 窄屏（手机 / 极窄窗口）：全屏 + 分类变顶部横向 chips ──────────────── */
+@media (max-width: 768px) {
+    #settings-panel {
+        left: 0;
+        top: 0;
+        transform: none;
+        width: 100vw;
+        height: 100dvh;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+    }
+
+    #settings-panel .settings-body { flex-direction: column; }
+
+    #settings-panel .settings-nav {
+        flex: 0 0 auto;
+        flex-direction: row;
+        gap: 6px;
+        padding: 8px 10px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color, #e0e0e0);
+    }
+
+    #settings-panel .settings-nav-item { width: auto; white-space: nowrap; }
+
+    #settings-panel .settings-panes { padding: 14px 14px 24px; }
+
+    #settings-panel .provider-layout { flex-direction: column; gap: 12px; }
+
+    #settings-panel .provider-sidebar {
+        flex: 0 0 auto;
+        flex-direction: row;
+        gap: 4px;
+        padding: 0 0 10px;
+        overflow-x: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color, #e0e0e0);
+    }
+
+    #settings-panel .config-group { grid-template-columns: 1fr; }
+}
+
+/* 服务商保存键成功反馈态（原在 layout.css .save-config-btn.success-state） */
+#settings-panel .save-config-btn.success-state,
+#settings-panel .action-btn.success-state {
+    background: var(--success, #10b981);
+    color: #fff;
+    border-color: var(--success, #10b981);
+    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+    transition: background .3s, box-shadow .3s;
+}
+
+/* ── 细节收敛（对齐主流设置）─────────────────────────────────────────────
+   1) 头部「保存」收成紧凑主按钮（原 .key-btn 是首页大按钮尺寸 .75rem 1.5rem）
+   2) 已有数字输入框的行不再重复显示蓝色数值（同一数字出现两次）
+   3) 滑杆/下拉不铺满整行（控件宽度上限），说明文字限行宽避免长行难读 */
+#settings-panel .key-btn {
+    height: 30px;
+    padding: 0 14px;
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 6px;
+    background: var(--primary, #4361ee);
+    color: #fff;
+    cursor: pointer;
+}
+
+#settings-panel .key-btn:hover { background: var(--secondary, #3651d4); }
+
+#settings-panel .setting-item:has(.number-input) .setting-value { display: none; }
+
+#settings-panel .setting-item:has(> select) > .setting-value { display: none; }
+
+#settings-panel .slider {
+    flex: 1 1 100%;
+    max-width: 420px;
+    margin-right: auto;
+}
+
+#settings-panel .setting-desc { max-width: 74ch; }
+
+#settings-panel select { max-width: 300px; }   /* 下拉不铺满整行（含 .config-option 内的 select） */

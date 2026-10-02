@@ -905,12 +905,19 @@ body.win-tight .compact-model-select {
     display: inline-flex; align-items: center; justify-content: center;
     border: 1px solid var(--border-color); border-radius: 8px;
 }
-body.win-tight .compact-model-select::before {
-    content: "🧩"; font-size: 14px; line-height: 1; color: var(--gray);
-    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+body.win-tight .compact-model-select::before {   /* 模型图标：线条简笔（与输入条其余图标同源） */
+    content: ""; position: absolute; inset: 0; margin: auto; width: 15px; height: 15px;
+    background-color: var(--gray);
+    -webkit-mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%2216%22%20height%3D%2216%22%20rx%3D%222%22%2F%3E%3Crect%20x%3D%229%22%20y%3D%229%22%20width%3D%226%22%20height%3D%226%22%2F%3E%3Cpath%20d%3D%22M9%202v2%22%2F%3E%3Cpath%20d%3D%22M15%202v2%22%2F%3E%3Cpath%20d%3D%22M9%2020v2%22%2F%3E%3Cpath%20d%3D%22M15%2020v2%22%2F%3E%3Cpath%20d%3D%22M2%209h2%22%2F%3E%3Cpath%20d%3D%22M2%2015h2%22%2F%3E%3Cpath%20d%3D%22M20%209h2%22%2F%3E%3Cpath%20d%3D%22M20%2015h2%22%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%2216%22%20height%3D%2216%22%20rx%3D%222%22%2F%3E%3Crect%20x%3D%229%22%20y%3D%229%22%20width%3D%226%22%20height%3D%226%22%2F%3E%3Cpath%20d%3D%22M9%202v2%22%2F%3E%3Cpath%20d%3D%22M15%202v2%22%2F%3E%3Cpath%20d%3D%22M9%2020v2%22%2F%3E%3Cpath%20d%3D%22M15%2020v2%22%2F%3E%3Cpath%20d%3D%22M2%209h2%22%2F%3E%3Cpath%20d%3D%22M2%2015h2%22%2F%3E%3Cpath%20d%3D%22M20%209h2%22%2F%3E%3Cpath%20d%3D%22M20%2015h2%22%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
     pointer-events: none;
 }
 body.win-tight .compact-model-select::after { display: none; }   /* 藏掉下拉小箭头 */
 body.win-tight .compact-model-select select {
     position: absolute; inset: 0; width: 100%; padding: 0; opacity: 0; cursor: pointer;
 }
+
+/* 输入条内线条图标尺寸（简笔画 SVG，继承 currentColor） */
+.modern-input-bar .ico { width: 16px; height: 16px; display: block; }
+.send-circle-btn .ico { width: 15px; height: 15px; display: block; }
+.expand-btn .ico { width: 16px; height: 16px; display: block; }

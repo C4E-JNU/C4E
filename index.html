@@ -43,7 +43,7 @@
     <link rel="stylesheet" href="css/layout.css?v=34">
     <link rel="stylesheet" href="css/sidebar.css?v=11">
     <link rel="stylesheet" href="css/messages.css?v=2">
-    <link rel="stylesheet" href="css/input.css?v=15">
+    <link rel="stylesheet" href="css/input.css?v=16">
     <link rel="stylesheet" href="css/modals.css?v=4">
     <link rel="stylesheet" href="css/xiaoe.css?v=7">
     <link rel="stylesheet" href="css/mobile.css?v=34" id="css-mobile">
@@ -51,6 +51,7 @@
     <link rel="stylesheet" href="css/window.css?v=5">
     <link rel="stylesheet" href="css/components.css?v=10">
     <link rel="stylesheet" href="css/agent.css?v=6">
+    <link rel="stylesheet" href="css/settings.css?v=3">
 
     
 
@@ -186,16 +187,16 @@
     <div class="settings-overlay" id="settings-overlay"></div>
     <div class="settings-panel" id="settings-panel">
         <div class="settings-head">
-            <span class="settings-title">⚙️ 设置</span>
+            <span class="settings-title">设置</span>
             <button class="key-btn" id="save-settings">保存</button>
             <button class="close-panel-btn" id="close-settings" title="关闭">×</button>
         </div>
         <div class="settings-body">
             <nav class="settings-nav" id="settings-nav">
-                <button type="button" class="settings-nav-item active" data-pane="pane-model">模型与参数</button>
-                <button type="button" class="settings-nav-item" data-pane="pane-agent">智能体</button>
-                <button type="button" class="settings-nav-item" data-pane="pane-service">连接与服务</button>
-                <button type="button" class="settings-nav-item" data-pane="pane-ui">界面</button>
+                <button type="button" class="settings-nav-item active" data-pane="pane-model"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/></svg>模型与参数</button>
+                <button type="button" class="settings-nav-item" data-pane="pane-agent"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v2"/><path d="M15 2v2"/><path d="M9 20v2"/><path d="M15 20v2"/><path d="M2 9h2"/><path d="M2 15h2"/><path d="M20 9h2"/><path d="M20 15h2"/></svg>智能体</button>
+                <button type="button" class="settings-nav-item" data-pane="pane-service"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>连接与服务</button>
+                <button type="button" class="settings-nav-item" data-pane="pane-ui"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13.5" cy="6.5" r=".6"/><circle cx="17.5" cy="10.5" r=".6"/><circle cx="8.5" cy="7.5" r=".6"/><circle cx="6.5" cy="12.5" r=".6"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.83-.44-1.12-.29-.29-.44-.65-.44-1.13A1.64 1.64 0 0 1 14.44 16h2c3.05 0 5.55-2.5 5.55-5.55C21.97 6.01 17.46 2 12 2z"/></svg>界面</button>
             </nav>
             <div class="settings-panes">
                 <section class="settings-pane active" id="pane-model">
@@ -206,7 +207,7 @@
                                                 <span class="setting-value" id="temp-value">0.7</span>
                                             </label>
                                             <input type="range" min="0" max="2" step="0.1" value="0.7" class="slider" id="temperature">
-                                            <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
+                                            <div class="setting-desc">
                                                 控制随机性：较低值更确定性，较高值更有创造性
                                             </div>
                                         </div>
@@ -216,7 +217,7 @@
                                                 <span class="setting-value" id="context-value">10</span>
                                             </label>
                                             <input type="range" min="1" max="50" step="1" value="10" class="slider" id="context-length">
-                                            <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
+                                            <div class="setting-desc">
                                                 模型记住的对话轮次数量
                                             </div>
                                         </div>
@@ -227,7 +228,7 @@
                                              </label>
                                              <input type="number" min="100" max="393216" step="100" value="65536" class="number-input"
                                                  id="max-tokens">
-                                             <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
+                                             <div class="setting-desc">
                                                  每次请求发给模型的 max_tokens：单次回答最多能生成多少 token，超了会被服务端截断。<br>
                                                  DeepSeek 官方合法范围 1~393216（384K）；不传时默认「非思考 8K / 思考 64K」。思考模式下思维链也占这份额度，所以设太小会让正文很短（甚至为空）。<br>
                                                  ⚠️ 填大不会让回答变长（何时停由模型决定），但超过服务端真实上限会被 400 拒收。想要长代码/长报告，建议 64K 以上。<br>
@@ -241,7 +242,7 @@
                                              </label>
                                              <input type="number" min="1024" max="2000000" step="1000" value="262144" class="number-input"
                                                  id="context-window">
-                                             <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
+                                             <div class="setting-desc">
                                                  模型一次最多能接收的 token 数（hard limit，由模型本身决定，如 256K / 1M）。<br>
                                                  它只用于计算「什么时候开始清理旧工具结果」，本机不会因为超过此值而报错、截断或中断对话；真的超过模型能力时，只由模型服务端报错（那才是真的超上下文）。<br>
                                                  👉 填真实值最稳：填小 → 更早开始清理（保守，不报错）；填大 → 更晚清理，超了交给服务端。<br>
@@ -255,7 +256,7 @@
                                              </label>
                                              <input type="number" min="0" max="2000000" step="1000" value="0" class="number-input"
                                                  id="context-budget">
-                                             <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
+                                             <div class="setting-desc">
                                                  发送给模型的 token 估算量（或 API 真实用量）达到此值时，开始把较早的工具结果替换成占位符——只动工具结果，你和 AI 的正文、技能正文永不清。<br>
                                                  0 = 自动：(上下文窗口 − 输出预留) × 75%，并保底 ≥ 1024。<br>
                                                  ⚠️ 设得过大＝几乎不清理，上下文会一路涨到模型窗口，最终由服务端报错；设得过小＝频繁清理（可能每轮都在清旧工具结果）。
@@ -268,12 +269,12 @@
                                              </label>
                                              <input type="number" min="100" max="32000" step="100" value="4000" class="number-input"
                                                  id="expected-context-tokens">
-                                             <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
+                                             <div class="setting-desc">
                                                 当前发送给LLM的Token数超过此值时，界面红字加粗警告（仅提示，不影响输入）
                                             </div>
                                         </div>
                         <div class="setting-item provider-settings-block">
-                                            <label class="setting-label">🔌 模型与服务商配置</label>
+                                            <label class="setting-label">模型与服务商配置</label>
                                         <div class="models-content-wrapper">
                                             <div class="provider-layout">
                                                 <!-- 左侧服务商列表 -->
@@ -323,19 +324,19 @@
                 <section class="settings-pane" id="pane-agent">
                     <h3>智能体</h3>
                         <div class="config-section">
-                                                            <div class="config-section-title">⚙️ Agent 引擎</div>
+                                                            <div class="config-section-title">Agent 引擎</div>
                                                             <div class="permission-mode-row">
                                                                 <label class="config-option">
                                                                     <input type="radio" name="agent-engine" value="custom" id="engine-custom" checked>
-                                                                    <span class="config-option-label">⚡ 自定义流式 <span class="config-option-desc">裸API手写循环，显示🧠思考</span></span>
+                                                                    <span class="config-option-label">自定义流式 <span class="config-option-desc">裸API手写循环，显示🧠思考</span></span>
                                                                 </label>
                                                                 <label class="config-option">
                                                                     <input type="radio" name="agent-engine" value="langchain" id="engine-langchain">
-                                                                    <span class="config-option-label">🧠 LangChain 流式 <span class="config-option-desc">框架循环，无思考链</span></span>
+                                                                    <span class="config-option-label">LangChain 流式 <span class="config-option-desc">框架循环，无思考链</span></span>
                                                                 </label>
                                                             </div>
                                                             <div style="margin-top:0.6rem;">
-                                                                <label class="config-option-label" style="margin-bottom:0.3rem;display:block;">🔁 工具循环轮次</label>
+                                                                <label class="config-option-label" style="margin-bottom:0.3rem;display:block;">工具循环轮次</label>
                                                                 <select id="agent-max-rounds" class="neo4j-input" style="width:100%;">
                                                                     <option value="8">8 轮</option>
                                                                     <option value="20">20 轮</option>
@@ -345,7 +346,7 @@
                                                             </div>
                                                         </div>
                         <div class="config-section">
-                                                            <div class="config-section-title">🤖 子智能体</div>
+                                                            <div class="config-section-title">子智能体</div>
                                                             <label class="config-option" style="margin-bottom:.5rem;">
                                                                 <input type="checkbox" id="subagent-enabled" checked>
                                                                 <span class="config-option-label">启用子智能体
@@ -390,7 +391,7 @@
                                                             </div>
                                                         </div>
                         <div class="config-section">
-                                                            <div class="config-section-title">⏱️ 超时保护（主智能体）</div>
+                                                            <div class="config-section-title">超时保护（主智能体）</div>
                                                             <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem .6rem;">
                                                                 <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">催促(秒)
                                                                     <input type="number" id="timeout-nudge" min="0" max="604800" step="10" value="0"
@@ -410,31 +411,31 @@
                                                             </div>
                                                         </div>
                         <div class="config-section">
-                                                            <div class="config-section-title">🔐 权限模式</div>
+                                                            <div class="config-section-title">权限模式</div>
                                                             <div class="permission-mode-row">
                                                                 <label class="config-option">
                                                                     <input type="radio" name="permission-mode" value="safe" id="perm-safe" checked>
-                                                                    <span class="config-option-label">🔒 安全模式 <span class="config-option-desc">仅 workspace</span></span>
+                                                                    <span class="config-option-label">安全模式 <span class="config-option-desc">仅 workspace</span></span>
                                                                 </label>
                                                                 <label class="config-option">
                                                                     <input type="radio" name="permission-mode" value="ask" id="perm-ask">
-                                                                    <span class="config-option-label">❓ 询问模式 <span class="config-option-desc">可读项目+写技能</span></span>
+                                                                    <span class="config-option-label">询问模式 <span class="config-option-desc">可读项目+写技能</span></span>
                                                                 </label>
                                                                 <label class="config-option">
                                                                     <input type="radio" name="permission-mode" value="full" id="perm-full">
-                                                                    <span class="config-option-label">⚡ 完全访问 <span class="config-option-desc">任意读写</span></span>
+                                                                    <span class="config-option-label">完全访问 <span class="config-option-desc">任意读写</span></span>
                                                                 </label>
                                                             </div>
                                                         </div>
                         <div class="config-section">
-                                                            <div class="config-section-title">🛠️ 工具 <span style="font-size:0.75rem;color:var(--gray);font-weight:normal">（按分组勾选 = LLM 可用；数据来自后端 tools_registry）</span></div>
+                                                            <div class="config-section-title">工具 <span style="font-size:0.75rem;color:var(--gray);font-weight:normal">（按分组勾选 = LLM 可用；数据来自后端 tools_registry）</span></div>
                                                             <div id="tools-groups-container" style="min-height:2rem;">
                                                                 <!-- 由 agent_config.js 从后端 /api/tools 按分组动态渲染 -->
                                                                 <div style="font-size:0.8rem;color:var(--gray);padding:0.25rem 0;">加载中...</div>
                                                             </div>
                                                          </div>
                         <div class="config-section">
-                                                        <div class="config-section-title">📖 Skill</div>
+                                                        <div class="config-section-title">Skill</div>
                                                         <div id="skills-config-container">
                                                             <!-- 由 JS 从 skills/index.json 动态生成 -->
                                                             <div style="font-size:0.8rem;color:var(--gray);padding:0.25rem 0;">加载中...</div>
@@ -444,23 +445,23 @@
                 <section class="settings-pane" id="pane-service">
                     <h3>连接与服务</h3>
                         <div class="config-section">
-                                                            <div class="config-section-title">🔗 Neo4j 连接 <div class="neo4j-status-dot" id="neo4j-status-dot" title="Neo4j 连接状态"></div></div>
+                                                            <div class="config-section-title">Neo4j 连接 <div class="neo4j-status-dot" id="neo4j-status-dot" title="Neo4j 连接状态"></div></div>
                                                             <div class="neo4j-connect-form">
                                                                 <input type="text" class="neo4j-input" id="panel-neo4j-uri" placeholder="neo4j+s://..." value="">
                                                                 <div class="neo4j-row">
                                                                     <input type="text" class="neo4j-input" id="panel-neo4j-user" placeholder="用户名" value="">
                                                                     <input type="password" class="neo4j-input" id="panel-neo4j-pass" placeholder="密码">
                                                                 </div>
-                                                                <button class="neo4j-connect-btn" id="panel-neo4j-connect">🔌 连接</button>
+                                                                <button class="neo4j-connect-btn" id="panel-neo4j-connect">连接</button>
                                                                 <span class="neo4j-connect-msg" id="panel-neo4j-msg"></span>
                                                             </div>
                                                         </div>
                         <div class="config-section">
-                                                            <div class="config-section-title">📄 MinerU 解析配置 <span style="font-size:0.75rem;color:var(--gray);font-weight:normal">（PDF→Markdown，随保存提交）</span></div>
+                                                            <div class="config-section-title">MinerU 解析配置 <span style="font-size:0.75rem;color:var(--gray);font-weight:normal">（PDF→Markdown，随保存提交）</span></div>
                                                             <div class="neo4j-connect-form">
                                                                 <input type="password" class="neo4j-input" id="panel-mineru-token" placeholder="MinerU API Token / Key" autocomplete="off">
                                                                 <div class="neo4j-row" style="margin-top:6px;">
-                                                                    <button class="neo4j-connect-btn" id="panel-mineru-save" style="background:var(--primary);color:#fff;">💾 保存 Token</button>
+                                                                    <button class="neo4j-connect-btn" id="panel-mineru-save" style="background:var(--primary);color:#fff;">保存 Token</button>
                                                                     <span class="neo4j-connect-msg" id="panel-mineru-msg"></span>
                                                                 </div>
                                                             </div>
@@ -478,7 +479,7 @@
                                                             <button type="button" class="mode-seg-btn" data-mode="browser">浏览器新标签</button>
                                                             <button type="button" class="mode-seg-btn" data-mode="float">应用内浮窗</button>
                                                         </div>
-                                                        <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
+                                                        <div class="setting-desc">
                                                             后端打开：用本机默认应用（Word/Excel/看图器）打开；浏览器新标签：新标签页预览/下载；应用内浮窗：在页面内浮窗预览，不跳出应用
                                                         </div>
                                                     </div>
@@ -493,7 +494,7 @@
                                                                 <span class="slider-round"></span>
                                                             </label>
                                                         </div>
-                                                        <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">
+                                                        <div class="setting-desc">
                                                             页面上那只云朵团。点它聊天（问功能/用法），双击敲打、连点发飙、拖着玩、右键换天气；60 秒不理它会睡着。小e 不保存任何记录，关掉即忘
                                                         </div>
                                                     </div>
@@ -505,7 +506,7 @@
                                                         <span class="setting-value" id="font-conv-value">0.9</span>
                                                     </label>
                                                     <input type="range" min="0.6" max="1.6" step="0.05" value="0.9" class="slider" id="font-size-conv">
-                                                    <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">侧边栏的对话名称列表</div>
+                                                    <div class="setting-desc">侧边栏的对话名称列表</div>
                                                 </div>
                             <div class="setting-item">
                                                     <label class="setting-label">
@@ -513,7 +514,7 @@
                                                         <span class="setting-value" id="font-history-value">0.8</span>
                                                     </label>
                                                     <input type="range" min="0.5" max="1.5" step="0.05" value="0.8" class="slider" id="font-size-history">
-                                                    <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">侧边栏每条历史消息的预览文字</div>
+                                                    <div class="setting-desc">侧边栏每条历史消息的预览文字</div>
                                                 </div>
                             <div class="setting-item">
                                                     <label class="setting-label">
@@ -521,7 +522,7 @@
                                                         <span class="setting-value" id="font-messages-value">0.95</span>
                                                     </label>
                                                     <input type="range" min="0.6" max="1.8" step="0.05" value="0.95" class="slider" id="font-size-messages">
-                                                    <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">聊天区 AI/用户回复气泡内的文字</div>
+                                                    <div class="setting-desc">聊天区 AI/用户回复气泡内的文字</div>
                                                 </div>
                             <div class="setting-item">
                                                     <label class="setting-label">
@@ -529,7 +530,7 @@
                                                         <span class="setting-value" id="font-notes-value">0.9</span>
                                                     </label>
                                                     <input type="range" min="0.6" max="1.8" step="0.05" value="0.9" class="slider" id="font-size-notes">
-                                                    <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">笔记卡片的标题与正文</div>
+                                                    <div class="setting-desc">笔记卡片的标题与正文</div>
                                                 </div>
                             <div class="setting-item">
                                                     <label class="setting-label">
@@ -537,7 +538,7 @@
                                                         <span class="setting-value" id="font-thinking-value">0.7</span>
                                                     </label>
                                                     <input type="range" min="0.5" max="1.8" step="0.05" value="0.7" class="slider" id="font-size-thinking">
-                                                    <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">聊天区思考链与推理内容的文字</div>
+                                                    <div class="setting-desc">聊天区思考链与推理内容的文字</div>
                                                 </div>
                             <div class="setting-item">
                                                     <label class="setting-label">
@@ -545,7 +546,7 @@
                                                         <span class="setting-value" id="font-toast-value">0.85</span>
                                                     </label>
                                                     <input type="range" min="0.5" max="1.8" step="0.05" value="0.85" class="slider" id="font-size-toast">
-                                                    <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">右上角自动消失的轻提示（如"已复制"）</div>
+                                                    <div class="setting-desc">右上角自动消失的轻提示（如"已复制"）</div>
                                                 </div>
                             <div class="setting-item">
                                                     <label class="setting-label">
@@ -553,7 +554,7 @@
                                                         <span class="setting-value" id="font-popup-value">0.85</span>
                                                     </label>
                                                     <input type="range" min="0.5" max="1.8" step="0.05" value="0.85" class="slider" id="font-size-popup">
-                                                    <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">简单操作的小浮层（如重命名/编辑气泡）</div>
+                                                    <div class="setting-desc">简单操作的小浮层（如重命名/编辑气泡）</div>
                                                 </div>
                             <div class="setting-item">
                                                     <label class="setting-label">
@@ -561,7 +562,7 @@
                                                         <span class="setting-value" id="font-modal-value">0.9</span>
                                                     </label>
                                                     <input type="range" min="0.5" max="1.8" step="0.05" value="0.9" class="slider" id="font-size-modal">
-                                                    <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">居中大模态框（如添加模型/服务商/数据库）</div>
+                                                    <div class="setting-desc">居中大模态框（如添加模型/服务商/数据库）</div>
                                                 </div>
                             <div class="setting-item">
                                                     <label class="setting-label">
@@ -569,7 +570,7 @@
                                                         <span class="setting-value" id="font-edit-value">0.9</span>
                                                     </label>
                                                     <input type="range" min="0.5" max="1.8" step="0.05" value="0.9" class="slider" id="font-size-edit">
-                                                    <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">编辑消息/笔记的浮动 Markdown 编辑器</div>
+                                                    <div class="setting-desc">编辑消息/笔记的浮动 Markdown 编辑器</div>
                                                 </div>
                             <div class="setting-item">
                                                     <div class="font-tier-btns">
@@ -577,7 +578,7 @@
                                                         <button class="config-secondary-btn" id="reset-font-medium-btn" onclick="resetFontTier('medium')">重置为中字号</button>
                                                         <button class="config-secondary-btn" id="reset-font-large-btn" onclick="resetFontTier('large')">重置为大字号</button>
                                                     </div>
-                                                    <div style="font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem;">小字号为默认：对话管理 0.85 / 历史 0.65 / 回复 0.75 / 笔记 0.75 / 思考链 0.7 / 编辑器 0.9 / 模态框 0.9 / 浮层 0.85 / 提示 0.85，每级递增 0.15</div>
+                                                    <div class="setting-desc">小字号为默认：对话管理 0.85 / 历史 0.65 / 回复 0.75 / 笔记 0.75 / 思考链 0.7 / 编辑器 0.9 / 模态框 0.9 / 浮层 0.85 / 提示 0.85，每级递增 0.15</div>
                                                 </div>
                     </div>
                 </section>
@@ -790,11 +791,11 @@
                         <div class="modern-input-bar">
                             <!-- 附件 -->
                             <button class="tool-icon-btn" id="attachment-btn" title="上传文件">
-                                📎
+                                <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
                             </button>
                             <!-- 展开消息 -->
                             <button class="expand-btn" id="expand-btn" title="展开消息输入">
-                                ↕
+                                <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
                             </button>
 
                             <!-- 输入框 -->
@@ -821,7 +822,7 @@
 
                                 <!-- 设置按钮 -->
                                 <button class="tool-icon-btn" id="settings-btn" title="设置">
-                                    <span>⚙️</span>
+                                    <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>
                                 </button>
 
                                 <!-- 全屏开关 (图标) -->
@@ -829,7 +830,7 @@
 
                                 <!-- 发送按钮 (圆形) -->
                                 <button id="send-btn" class="send-circle-btn btn-disabled" title="发送">
-                                    ➤
+                                    <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
                                 </button>
                             </div>
                         </div>

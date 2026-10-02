@@ -191,6 +191,9 @@ grep -q "settings-nav" index.html || { echo "FAIL: 设置面板缺左分类 sett
 grep -q "settings-pane" index.html || { echo "FAIL: 设置面板缺右侧内容区 settings-pane"; exit 1; }
 grep -q "pane-agent" index.html || { echo "FAIL: 设置面板缺「智能体」分类"; exit 1; }
 grep -q "win-tight" css/input.css js/mobile.js || { echo "FAIL: 输入条窄屏判据 win-tight 缺失"; exit 1; }
+grep -q "css/settings.css" index.html || { echo "FAIL: 设置样式表 css/settings.css 未引入"; exit 1; }
+[ $(grep -l "^\.settings-panel\|^\.settings-nav\|^\.settings-pane" css/*.css | grep -v "css/settings.css" | wc -l) -eq 0 ] || { echo "FAIL: 设置样式散落在 settings.css 之外"; exit 1; }
+! grep -q "agent-config-panel" index.html || { echo "FAIL: 智能体独立面板复活"; exit 1; }
 ! grep -q "settings-content" index.html || { echo "FAIL: 旧设置内容区残留"; exit 1; }
 ! grep -q "placeNavControls" js/mobile.js || { echo "FAIL: mobile.js placeNavControls 复活"; exit 1; }
 
