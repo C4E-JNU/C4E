@@ -69,32 +69,6 @@
             margin-right: 8px;
         }
 
-
-        .logo {
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: var(--primary);
-            text-decoration: none;
-            line-height: 1;
-        }
-
-        .logo span {
-            color: var(--secondary);
-        }
-
-
-        .nav-controls {
-            display: flex;
-            gap: 1rem;
-            align-items: center;
-        ; margin-left: auto}
-
-        /* 文档和数据库上传按钮组 */
-        .upload-buttons {
-            display: flex;
-            gap: 0.5rem;
-        }
-
         .total-tokens {
             background: #f1f3ff;
             padding: 0.5rem 1rem;
@@ -278,107 +252,11 @@
             box-shadow: 0 6px 20px rgba(67, 97, 238, 0.4);
         }
 
-        /* 模型展示区 */
-        .models-section {
-            padding: 3rem 0;
-        }
-
-        .section-title {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            cursor: pointer;
-            user-select: none;
-            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s ease;
-            text-align: center;
-            font-size: 2rem;
-            margin-bottom: 2rem;
-            color: var(--dark);
-        }
-
-        .section-title:hover {
-            opacity: 0.8;
-        }
-
-        .title-dot {
-            width: 14px;
-            height: 14px;
-            border-radius: 50%;
-            background-color: var(--primary);
-            box-shadow: 0 0 10px var(--primary-glow);
-            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s ease;
-            position: relative;
-            top: 2px;
-        }
-
-        .models-section.collapsed .title-dot {
-            background-color: var(--gray);
-            box-shadow: none;
-            opacity: 0.5;
-        }
-
         .models-content-wrapper {
             max-height: 3000px;
             overflow: hidden;
             transition: max-height 0.6s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
             opacity: 1;
-        }
-
-        .models-section.collapsed .models-content-wrapper {
-            max-height: 0;
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        .models-section.collapsed {
-            padding-bottom: 0.5rem;
-        }
-
-        .model-grid {
-            display: grid;
-            grid-template-columns: repeat(6, 1fr);
-            gap: 1.5rem;
-            margin-bottom: 2rem;
-        }
-
-        @media (max-width: 1400px) {
-            .model-grid {
-                grid-template-columns: repeat(4, 1fr);
-            }
-        }
-
-        @media (max-width: 1100px) {
-            .model-grid {
-                grid-template-columns: repeat(3, 1fr);
-            }
-        }
-
-        @media (max-width: 768px) {
-            .model-grid {
-                grid-template-columns: repeat(2, 1fr);
-                padding: 0 1rem;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .model-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        .model-card {
-            background: var(--card-bg);
-            border-radius: 16px;
-            padding: 1.5rem;
-            border: 1px solid var(--border-color);
-            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s ease;
-            cursor: pointer;
-            position: relative;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
         }
 
         .models-grid-compact {
@@ -478,106 +356,6 @@
             color: var(--primary);
         }
 
-        .model-card {
-            background: var(--card-bg);
-            border-radius: 16px;
-            padding: 1.5rem;
-            border: 1px solid var(--border-color);
-            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
-            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s ease;
-            cursor: pointer;
-            border: 2px solid transparent;
-            position: relative;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .model-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.12);
-        }
-
-        .model-card.active {
-            border-color: var(--primary);
-            box-shadow: 0 5px 20px rgba(67, 97, 238, 0.2);
-        }
-
-        .model-status {
-            position: absolute;
-            top: 1rem;
-            right: 1rem;
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: var(--gray);
-        }
-
-        .model-status.active {
-            background: var(--success);
-        }
-
-        .model-icon {
-            width: 60px;
-            height: 60px;
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 1.5rem;
-            font-size: 1.5rem;
-            font-weight: bold;
-            color: white;
-        }
-
-        .deepseek-icon {
-            background: linear-gradient(135deg, #4f46e5, #7c3aed);
-        }
-
-        .qwen-icon {
-            background: linear-gradient(135deg, #f59e0b, #d97706);
-        }
-
-        .gemini-icon {
-            background: linear-gradient(135deg, #4285f4, #34a853);
-        }
-
-        .gpt-icon {
-            background: linear-gradient(135deg, #10a37f, #0d8b6c);
-        }
-
-        .claude-icon {
-            background: linear-gradient(135deg, #d946ef, #c026d3);
-        }
-
-        .llama-icon {
-            background: linear-gradient(135deg, #f97316, #ea580c);
-        }
-
-        .grok-icon {
-            background: linear-gradient(135deg, #8b5cf6, #7c3aed);
-        }
-
-        .model-name {
-            font-size: 1.3rem;
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-            color: var(--dark);
-        }
-
-        .model-provider {
-            color: var(--gray);
-            font-size: 0.9rem;
-            margin-bottom: 1rem;
-        }
-
-        .model-desc {
-            color: var(--gray);
-            margin-bottom: 1.5rem;
-            font-size: 0.95rem;
-        }
-
         /* KaTeX 公式样式 */
         .katex-display {
             margin: 1rem 0;
@@ -634,38 +412,6 @@
         /* 修复 KaTeX 复制插件可能带来的额外空格或布局问题 */
         .katex-html {
             user-select: all;
-        }
-
-        /* API密钥管理 */
-        .api-key-section {
-            background: var(--card-bg);
-            border-radius: 16px;
-            padding: 1.5rem;
-            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
-            margin-bottom: 0.5rem;
-            border: 1px solid var(--border-color);
-        }
-
-        .key-input-group {
-            display: grid;
-            grid-template-columns: 1fr auto;
-            gap: 1rem;
-            margin-bottom: 1rem;
-        }
-
-        .key-input {
-            padding: 0.75rem 1rem;
-            border: 2px solid var(--border-color);
-            background: var(--card-bg);
-            color: var(--dark);
-            border-radius: 8px;
-            font-size: 0.95rem;
-            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s;
-        }
-
-        .key-input:focus {
-            outline: none;
-            border-color: var(--primary);
         }
 
         .key-btn {
@@ -828,13 +574,12 @@
         }
         /* ══ 条目树（用户 2026-09-25 定：树为骨架）══
            根=类型(笔记/文档) → 分组 → 条目卡片（叶子渲染与改造前一致）*/
-        .db-troot-row, .db-tnode-row {
+        .db-tnode-row {
             display: flex; align-items: center; gap: 6px;
             padding: 6px 8px; border-radius: 8px;
             cursor: pointer; user-select: none;
         }
-        .db-troot-row:hover, .db-tnode-row:hover { background: var(--hover, #f2f4f7); }
-        .db-troot-row { margin-bottom: 1px; }
+        .db-tnode-row:hover { background: var(--hover, #f2f4f7); }
         .db-tnode-row { margin: 1px 0; }
         .db-tcaret {
             width: 12px; display: inline-block; text-align: center;
@@ -842,11 +587,10 @@
             transition: transform .15s;
         }
         .db-tcaret.open { transform: rotate(90deg); }
-        .db-troot-row .db-tname { font-weight: 600; font-size: .92rem; }
         .db-tnode-row .db-tname { font-size: .88rem; }
         .db-tcount { font-size: .74rem; color: var(--gray, #999); }
         .db-tacts { margin-left: auto; display: flex; gap: 1px; opacity: 0; transition: opacity .12s; }
-        .db-tnode-row:hover .db-tacts, .db-troot-row:hover .db-tacts { opacity: 1; }
+        .db-tnode-row:hover .db-tacts { opacity: 1; }
         .db-tacts button {
             background: none; border: none; cursor: pointer;
             font-size: .9rem; padding: .1rem .3rem; border-radius: 5px;
@@ -864,78 +608,9 @@
             white-space: pre-wrap;
         }
         .db-tintro.empty { color: var(--border, #b8bcc4); font-style: italic; }
-        .db-tempty {
-            font-size: .82rem; color: var(--gray, #999);
-            padding: .8rem .6rem; text-align: center;
-        }
         .db-tsys {
             font-size: .66rem; color: #3b5bdb; background: #eef2ff;
             padding: 0 5px; border-radius: 20px; line-height: 1.5;
-        }
-
-        /* 分组管理面板（用户 2026-09-25 定：手动控制分组）*/
-        .db-group-item {
-            border-radius: 8px;
-            padding: 4px 8px 6px;
-            margin-bottom: 3px;
-        }
-        .db-group-item:hover {
-            background: var(--hover, #f7f8fa);
-        }
-        .db-group-row {
-            display: flex;
-            align-items: center;
-            gap: .4rem;
-            padding: 5px 0 3px;
-        }
-        .db-group-name {
-            font-weight: 600;
-            font-size: .9rem;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        .db-group-count {
-            font-size: .74rem;
-            color: var(--gray, #999);
-            margin-left: .15rem;
-        }
-        .db-group-actions {
-            margin-left: auto;
-            display: flex;
-            gap: .1rem;
-            opacity: 0;
-            transition: opacity .12s;
-        }
-        .db-group-item:hover .db-group-actions {
-            opacity: 1;
-        }
-        .db-group-actions button {
-            background: none;
-            border: none;
-            cursor: pointer;
-            font-size: .92rem;
-            padding: .1rem .32rem;
-            border-radius: 5px;
-            line-height: 1.2;
-        }
-        .db-group-actions button:hover {
-            background: var(--border, #eef0f3);
-        }
-        .db-group-actions .db-group-del {
-            color: var(--danger, #e5484d);
-            font-size: 1rem;
-        }
-        .db-group-intro {
-            font-size: .8rem;
-            color: var(--gray, #6b7280);
-            line-height: 1.45;
-            padding: 0 2px 2px;
-            white-space: pre-wrap;
-        }
-        .db-group-intro-empty {
-            color: var(--border, #b8bcc4);
-            font-style: italic;
         }
 
         /* 右键「移动到分组」菜单（用户 2026-09-25 定：方案 B）*/

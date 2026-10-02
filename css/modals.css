@@ -670,14 +670,10 @@
         }
         .modal .key-btn,
         .modal .chat-btn,
-        .modal .danger-btn,
         .modal .save-config-btn {
             padding: 6px 14px;
             font-size: calc(var(--font-size-modal) * 0.9);
             border-radius: 7px;
-        }
-        .modal .delete-confirm-message {
-            margin-bottom: 0.5rem;
         }
 
         /* 数据库管理模态框样式在 .modal-content 中定义 */
@@ -688,79 +684,6 @@
             overflow-y: auto;
         }
 
-        .file-upload-area {
-            border: 2px dashed #e0e7ff;
-            border-radius: 12px;
-            padding: 2rem;
-            text-align: center;
-            margin-bottom: 1.5rem;
-            cursor: pointer;
-            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s;
-        }
-
-        .file-upload-area:hover {
-            border-color: var(--primary);
-            background: var(--light);
-        }
-
-        .file-upload-area.active {
-            border-color: var(--success);
-            background: #f0fdf4;
-        }
-
-        .upload-icon {
-            font-size: 3rem;
-            color: var(--primary);
-            margin-bottom: 1rem;
-        }
-
-        .file-info {
-            margin-top: 1rem;
-            padding: 1rem;
-            background: var(--light);
-            border-radius: 8px;
-            font-size: 0.9rem;
-            display: none;
-        }
-
-        .file-info.show {
-            display: block;
-        }
-
-        .file-name {
-            font-weight: 600;
-            color: var(--primary);
-        }
-
-        .database-stats {
-            background: var(--light);
-            border-radius: 12px;
-            padding: 1rem;
-            margin: 1rem 0;
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 1rem;
-            margin-top: 0.5rem;
-        }
-
-        .stat-item {
-            text-align: center;
-        }
-
-        .stat-value {
-            font-size: 1.5rem;
-            font-weight: 600;
-            color: var(--primary);
-        }
-
-        .stat-label {
-            font-size: 0.8rem;
-            color: var(--gray);
-        }
-
         /* 对话创建模态框 */
         .branch-name-input {
             width: 100%;
@@ -769,31 +692,5 @@
             border-radius: 8px;
             margin-bottom: 1rem;
             font-size: 1rem;
-        }
-
-        /* 删除确认模态框 */
-        .delete-confirm-message {
-            background: #fee2e2;
-            border: 1px solid #fecaca;
-            color: var(--error);
-            padding: 1rem;
-            border-radius: 8px;
-            margin: 1rem 0;
-            font-weight: 500;
-        }
-
-        .danger-btn {
-            background: var(--error);
-            color: white;
-            border: none;
-            padding: 0.75rem 1.5rem;
-            border-radius: 8px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-
-        .danger-btn:hover {
-            background: #dc2626;
         }
 

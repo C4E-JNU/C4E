@@ -18,7 +18,6 @@
     will-change: transform;
 }
 /* 小e 本体与内部元素都不参与浏览器手势（拖动/长按菜单） */
-#xiaoe-root .xiaoe-stage,
 #xiaoe-root svg,
 #xiaoe-root .xiaoe-body {
     touch-action: none;
@@ -27,8 +26,6 @@
 }
 #xiaoe-root.xiaoe-dragging { cursor: grabbing; z-index: 3600; }
 #xiaoe-root.xiaoe-hidden { display: none; }
-
-.xiaoe-stage { position: relative; width: 100%; height: 100%; }
 
 /* 云朵本体：形变容器（所有 Q弹都作用在这里） */
 .xiaoe-body {
@@ -71,8 +68,6 @@
     30%  { opacity: .75; }
     100% { transform: translateX(46px); opacity: 0; }
 }
-.xiaoe-wind i.wind { position: absolute; height: 2px; border-radius: 2px;
-    background: linear-gradient(90deg, transparent, #b8c9dd, transparent); animation: xiaoe-wind 1.5s linear infinite; }
 
 /* 地面阴影（跟着 Q弹一起缩放，落地更有实感） */
 .xiaoe-shadow { position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%);
@@ -202,14 +197,14 @@
 
 /* ==================== 状态色（变色 / 红温 / 天气氛围） ==================== */
 /* 用 filter 叠加色调，不改 SVG 内部颜色，保证形状清晰 */
-.xiaoe-body.tone-rain   { filter: hue-rotate(8deg) saturate(.75) brightness(.9); }
-.xiaoe-body.tone-wind   { filter: hue-rotate(-12deg) saturate(.85); }
-.xiaoe-body.tone-storm  { filter: hue-rotate(215deg) saturate(.7) brightness(.82) contrast(1.06); }
-.xiaoe-body.tone-hot    { filter: hue-rotate(-42deg) saturate(1.9) brightness(1.02) contrast(1.06); }
-.xiaoe-body.tone-sunny  { filter: saturate(1.22) brightness(1.07); }
-.xiaoe-body.tone-cold   { filter: hue-rotate(186deg) saturate(1.1) brightness(1.03); }
-.xiaoe-body.tone-pink   { filter: hue-rotate(-96deg) saturate(1.35); }
-.xiaoe-body.tone-green  { filter: hue-rotate(58deg) saturate(1.25); }
+.xiaoe-body.tone-rain { filter: hue-rotate(8deg) saturate(.75) brightness(.9); }
+.xiaoe-body.tone-wind { filter: hue-rotate(-12deg) saturate(.85); }
+.xiaoe-body.tone-storm { filter: hue-rotate(215deg) saturate(.7) brightness(.82) contrast(1.06); }
+.xiaoe-body.tone-hot { filter: hue-rotate(-42deg) saturate(1.9) brightness(1.02) contrast(1.06); }
+.xiaoe-body.tone-sunny { filter: saturate(1.22) brightness(1.07); }
+.xiaoe-body.tone-cold { filter: hue-rotate(186deg) saturate(1.1) brightness(1.03); }
+.xiaoe-body.tone-pink { filter: hue-rotate(-96deg) saturate(1.35); }
+.xiaoe-body.tone-green { filter: hue-rotate(58deg) saturate(1.25); }
 .xiaoe-body.tone-purple { filter: hue-rotate(212deg) saturate(1.3); }
 
 /* 红温：额外加红色光晕 + 头顶小火焰 */

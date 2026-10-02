@@ -209,5 +209,23 @@ grep -q -- "--chat-min" css/variables.css || { echo "FAIL: variables.css 缺 --c
 grep -q "_sbSetW" js/sidebar.js || { echo "FAIL: sidebar.js 缺 _sbSetW 入口"; exit 1; }
 ! grep -q "adoptSidebar" js/topbar.js || { echo "FAIL: mobile.js adoptSidebar 复活"; exit 1; }
 grep -q "chat-section.narrow .chat-sidebar" css/layout.css || { echo "FAIL: layout.css 缺窄空间抽屉样式"; exit 1; }
+
+# ── CSS 残渣体检（2026-10-02）——改前端必看：死样式 / 括号残渣 ──
+for a in scripts/css_audit.py scripts/css_class_audit.py; do
+    [ -f "$a" ] || { echo "FAIL: 缺体检脚本 $a"; exit 1; }
+done
+_css_struct="$(env -u PYTHONPATH "$PY" scripts/css_audit.py . 2>&1)"
+if printf '%s' "$_css_struct" | grep -q '全部 CSS 括号平衡'; then
+    ok "CSS 结构干净（无游离括号 / 空规则块 / 空行堆积）"
+else
+    bad "CSS 结构残渣：$(printf '%s' "$_css_struct" | tr -d '\n' | cut -c1-200)"
+fi
+_css_dead="$(env -u PYTHONPATH "$PY" scripts/css_class_audit.py . --warn-only 2>&1)"
+_dead_n="$(printf '%s' "$_css_dead" | grep -c '^   \.')"
+if [ "$_dead_n" = "0" ]; then
+    ok "CSS 无死样式（每个类都有人生成）"
+else
+    echo "  INFO 发现 $_dead_n 个「CSS 定义但代码从不生成」的类 —— 用 scripts/css_purge_dead.py 预演后再决定"
+fi
 if [ "$fail" -eq 0 ]; then echo "ALL_PASS ✅"; else echo "FAILED ($fail)"; fi
 exit "$fail"

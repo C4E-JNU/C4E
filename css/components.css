@@ -20,62 +20,6 @@
             cursor: pointer;
         }
 
-        /* 系统提示词区域样式 */
-        .system-prompt-container {
-            position: relative;
-            margin-bottom: 1rem;
-        }
-
-        .textarea-setting.system-prompt {
-            font-size: 0.9rem;
-            line-height: 1.4;
-            padding: 0.75rem;
-            background: #f8f9ff;
-            border: 2px solid #e0e7ff;
-            border-radius: 8px;
-            min-height: 120px;
-            width: 100%;
-            resize: vertical;
-            font-family: inherit;
-        }
-
-        .delete-prompt-btn {
-            position: absolute;
-            top: -10px;
-            right: -10px;
-            background: var(--error);
-            color: white;
-            border: none;
-            border-radius: 50%;
-            width: 24px;
-            height: 24px;
-            font-size: 0.9rem;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 10;
-            transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-        }
-
-        .delete-prompt-btn:hover {
-            background: #dc2626;
-            transform: scale(1.1);
-        }
-
-        /* 删除确认提示 */
-        .delete-prompt-confirm {
-            background: #fee2e2;
-            border: 1px solid #fecaca;
-            color: var(--error);
-            padding: 0.75rem;
-            border-radius: 8px;
-            margin: 0.5rem 0;
-            font-size: 0.85rem;
-            display: none;
-        }
-
         .config-secondary-btn {
             width: 100%;
             padding: 0.35rem 0.7rem;

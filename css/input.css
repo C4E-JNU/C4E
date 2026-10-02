@@ -74,10 +74,6 @@
             display: none;
         }
 
-        body.full-screen-mode .models-section {
-            display: none;
-        }
-
         body.full-screen-mode .chat-container {
             border-radius: 0;
             box-shadow: none;
@@ -113,20 +109,6 @@
             height: 100vh;
             border-radius: 0;
             border-right: 1px solid var(--border-color);
-        }
-        /* 全屏下分屏状态：笔记占满剩余，对话框和侧边栏等宽 */
-        body.full-screen-mode .notes-panel.phase-1 {
-            flex: 1;
-            width: auto;
-            min-width: 200px;
-        }
-        body.full-screen-mode .notes-panel.phase-1 ~ .chat-main {
-            width: 320px;
-            flex: none;
-        }
-        /* 全屏下最大化状态：隐藏对话框 */
-        body.full-screen-mode .notes-panel.phase-2 ~ .chat-main {
-            display: none;
         }
 
         body.full-screen-mode .chat-main {
@@ -191,15 +173,6 @@
             max-width: 90%;
             font-size: var(--font-size-messages);
             line-height: 1.7;
-        }
-
-        /* 退出全屏按钮样式 (覆盖在右上角，或集成到输入栏) */
-        /* 我们使用输入栏上的按钮来退出 */
-
-        .input-row {
-            display: flex;
-            gap: 0.5rem;
-            align-items: flex-end;
         }
 
         /* 展开消息按钮 */
@@ -759,39 +732,6 @@
             filter: brightness(1.05);
         }
 
-        /* 数据库开关样式微调 */
-        .database-indicator {
-            position: absolute;
-            top: 2px;
-            right: 2px;
-            width: 8px;
-            height: 8px;
-            background: var(--success);
-            border-radius: 50%;
-            border: 1px solid white;
-            display: none;
-        }
-
-        .tool-icon-btn.active .database-indicator {
-            display: block;
-        }
-
-        .graph-indicator {
-            position: absolute;
-            top: 2px;
-            right: 2px;
-            width: 8px;
-            height: 8px;
-            background: #8b5cf6;
-            border-radius: 50%;
-            border: 1px solid white;
-            display: none;
-        }
-
-        .tool-icon-btn.active .graph-indicator {
-            display: block;
-        }
-
         .typing-indicator {
             display: none;
             padding: 0.5rem;
@@ -835,42 +775,6 @@
         /* 启动页里 logo 铺满大屏 */
         body:not(.full-screen-mode) .hero-logo {
             height: clamp(180px, 34vh, 320px);
-        }
-
-        /* ==================== 宽版模态框（模型与服务商配置）==================== */
-        .modal-content.modal-wide {
-            max-width: 1000px;
-            width: 92vw;
-            max-height: 86vh;
-            overflow-y: auto;
-        }
-
-        /* 全屏模式下模态框默认被限到 500px，宽版要解除 */
-        body.full-screen-mode .modal-content.modal-wide {
-            max-width: 1000px;
-        }
-
-        .modal-head-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 1rem;
-        }
-
-        .modal-close-x {
-            border: none;
-            background: transparent;
-            font-size: 1.05rem;
-            cursor: pointer;
-            color: var(--gray);
-            line-height: 1;
-            padding: 4px 10px;
-            border-radius: 8px;
-        }
-
-        .modal-close-x:hover {
-            background: var(--primary-soft);
-            color: var(--primary);
         }
 
 /* ★ 窄屏判据 body.win-tight（mobile.js 实测宽度 <520px，与 head 的 .tight 同一测量、同一阈值）：
