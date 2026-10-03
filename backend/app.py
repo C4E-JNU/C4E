@@ -32,9 +32,12 @@ from tools.vector_search import search_history, search_knowledge
 from tools.shared_hub import publish_note_to_db
 import tools.user_settings as US
 import tools.user_chats as UC
+import tools.work_areas as WA
 from tools.mineru_tools import save_token as _mineru_save_token, load_token as _mineru_load_token
 from agent.tools import tools_registry as _tools_registry
 from agent.agent import run_agent, stream_agent, stream_agent_lc
+from agent import projection as PROJ     # 消息树投影：账本 → branch.messages（2026-10-03）
+from agent import turn_store as TS       # 轮次账本：补偿事件（编辑/删除）写入
 
 app = FastAPI(title="C4EAI Backend")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -157,13 +160,12 @@ class AgentRunRequest(BaseModel):
     model: Optional[dict] = None
     context_length: Optional[int] = 10
     branch_id: Optional[str] = ""
-    file_ids: list[str] = []
-    # 当轮附件（注入完整文本）；None=旧前端未区分，全部按完整注入；[]=仅 file_ids 中标记
-    full_file_ids: Optional[list[str]] = None
-    images: list[str] = []          # base64(dataURL) 图片，多模态给模型
+    file_ids: list[str] = []        # 本对话全部附件 id（文档与图片同权；正文/像素由模型按需 read_file 自取）
     permission_mode: str = "safe"
     engine: str = "custom"          # custom=裸API手写循环 / langchain=LangChain流式
     max_rounds: Optional[int] = None  # 工具循环步数，0=无限
+    client_id: str = ""             # 发起端标识：多端广播时供各端过滤回声（见 /api/events chats_delta）
+    skip_resume: bool = False       # True=本次是「重新生成」：绝不注入上次中断摘要
 
 # ── 健康检查 ──────────────────────────────────────
 
@@ -1445,6 +1447,31 @@ def _notify_all(kind: str):
         _notify(_u, kind)
 
 
+# ── 内容型广播：生成过程实时推给该账号的**全部**在线页面（用户 2026-10-03 定）──
+# 旧实现只推 {"type":"chats"} 这个「门铃」，各端收到后自己再拉全量 ——
+# 结果是「A 生成期间，B 什么都看不见，等结束了才看到结果」。
+# 现在把生成事件原样灌进每个订阅队列：B 也能逐字看到过程。
+#   · 发起端 A 也会收到自己的回声 → 由 payload.client_id 在前端过滤（后端不区分谁是谁）
+#   · 队列积压保护：某页消费不动（qsize 超限）就丢增量，它自己会靠 chats 拉全量补齐
+_DELTA_TYPES = frozenset((
+    "token", "reasoning", "tool_call", "tool_result", "final", "stopped",
+    "timeout_notice", "subagent_start", "subagent_step", "subagent_end",
+    "context_pruned", "error",
+))
+_DELTA_QMAX = 800
+
+
+def _notify_delta(username: str, payload: dict):
+    """把一条生成事件广播给该账号所有在线页面（含发起端，前端按 client_id 过滤）。"""
+    for q in list(_subscribers.get(username) or ()):
+        try:
+            if q.qsize() >= _DELTA_QMAX:
+                continue
+            q.put_nowait(payload)
+        except Exception:
+            pass
+
+
 @app.get("/api/events")
 async def api_events(request: Request):
     """事件流（SSE）。前端收到 {type:"chats"|"notes"} 就去拉对应数据并合并。"""
@@ -1497,7 +1524,15 @@ async def api_user_chats_get(request: Request):
       旧实现把本接口转发到共享库，导致本机实例"看不到自己的对话/对话存在云端"（踩过）。
     """
     user = _cur_user(request)
-    return json.loads(UC.load_user_chats(user["username"]))
+    res = json.loads(UC.load_user_chats(user["username"]))
+    res["_tree"] = PROJ.tree_mode()   # 前端据此决定「生成内容由谁落盘」：on=后端接管
+    # 哪些对话已有账本（=由后端投影维护）→ 前端不再回推它们，免得用截断版盖掉后端完整版
+    try:
+        res["_managed"] = [bid for bid in ((res.get("chats") or {}).get("branches") or {})
+                           if TS.has_turns(user["username"], bid)]
+    except Exception:
+        res["_managed"] = []
+    return res
 
 
 @app.put("/api/user/chats")
@@ -1511,6 +1546,103 @@ async def api_user_chats_put(req: UserChatsReq, request: Request):
     return out
 
 
+class WorkAreaReq(BaseModel):
+    name: str = ""
+    project_dir: str = ""
+    output_dir: str = ""
+
+
+@app.get("/api/user/work_areas")
+async def api_work_areas_get(request: Request):
+    """工作区域列表（含虚拟的默认工作区域，排第一）。"""
+    user = _cur_user(request)
+    return {"status": "ok", "areas": WA.all_areas(user["username"])}
+
+
+@app.post("/api/user/work_areas")
+async def api_work_areas_post(req: WorkAreaReq, request: Request):
+    """新建工作区域。project_dir 必须已存在；output_dir 缺省 = <项目>/output。"""
+    user = _cur_user(request)
+    pd = (req.project_dir or "").strip()
+    if not pd or not os.path.isdir(pd):
+        return {"status": "error", "error": "项目文件夹不存在：%s" % pd}
+    area = WA.save_area(user["username"], req.name, pd, (req.output_dir or "").strip())
+    return {"status": "ok", "area": area}
+
+
+@app.get("/api/browse_dir")
+async def api_browse_dir(request: Request):
+    """弹本机原生文件夹选择器（桌面端）。取消或不可用返回 cancelled=true。"""
+    _cur_user(request)
+
+    def _pick():
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+            p = filedialog.askdirectory(title="选择文件夹")
+            try:
+                root.destroy()
+            except Exception:
+                pass
+            return p or ""
+        except Exception:
+            return ""
+
+    path = await asyncio.to_thread(_pick)
+    return {"status": "ok", "path": path, "cancelled": not bool(path)}
+
+
+class ChatOpsReq(BaseModel):
+    branch_id: str = ""
+    ops: list = []      # [{type:'edit', target:'t_xxx', text:'...'} | {type:'truncate', from:'t_xxx'}]
+
+
+@app.post("/api/user/chat_ops")
+async def api_user_chat_ops(req: ChatOpsReq, request: Request):
+    """把前端的「编辑消息 / 删除后续消息」记成**账本补偿事件**，然后重新投影。
+
+    为什么需要它：账本是 append-only（jsonl 只增不改），改历史只能靠追加补偿事件；
+    投影时按顺序套用 → 别的设备也能看到这次编辑/删除。
+    对应用户 2026-10-03 的话：「前端怎么变，后端就怎么变」。
+    """
+    user = _cur_user(request)
+    uname = user["username"]
+    if not req.branch_id:
+        return {"status": "error", "error": "缺少 branch_id"}
+    applied = 0
+    for op in (req.ops or []):
+        if not isinstance(op, dict):
+            continue
+        if TS.append_op(uname, req.branch_id, op):
+            applied += 1
+    projected = await asyncio.to_thread(PROJ.sync_branch, uname, req.branch_id)
+    if projected:
+        _notify(uname, "chats")
+    return {"status": "ok", "applied": applied, "projected": bool(projected)}
+
+
+@app.get("/api/user/chats/branch")
+async def api_user_chats_branch(request: Request, id: str = ""):
+    """按对话 id 分片拉取（治 6.8MB 全量：只取一条对话）。
+    id 为空 → 返回轻量列表（id/标题/时间/消息数），供侧栏先用。"""
+    user = _cur_user(request)
+    raw = json.loads(UC.load_user_chats(user["username"]))
+    br = ((raw.get("chats") or {}).get("branches") or {})
+    if not id:
+        return {"status": "ok", "list": [
+            {"id": k, "name": (v or {}).get("name", ""),
+             "updatedAt": (v or {}).get("updatedAt", ""),
+             "messages": len((v or {}).get("messages") or [])}
+            for k, v in br.items() if isinstance(v, dict)]}
+    b = br.get(id)
+    if b is None:
+        return JSONResponse({"status": "error", "error": "对话不存在"}, status_code=404)
+    return {"status": "ok", "branch": b}
+
+
 # ── LangChain Agent ──────────────────────────────
 
 def _build_model_config(req):
@@ -1519,53 +1651,34 @@ def _build_model_config(req):
         "api_key": req.model.get("api_key"),
         "base_url": req.model.get("base_url", "https://api.deepseek.com"),
         "temperature": req.model.get("temperature", 0.7),
-        "max_tokens": req.model.get("max_tokens") or 8192,
+        "max_tokens": req.model.get("max_tokens") or 32768,
     }
 
 async def _resolve_refs(refs: list, owner: str) -> str:
-    """把用户引用的笔记/数据库条目拼成上下文块：按 scope+id 取**全文**并注入（不截断）。
+    """把用户引用的笔记/数据库条目拼成**元数据行**注入（不取正文）。
+
+    为什么改（用户 2026-10-01 定）：原实现按 id 取**全文**塞进当轮用户消息，
+    一份几万字笔记每轮重复灌进上下文，且与「内容一律由模型按需自取」的设计相悖。
+    现在只交代「引用了谁」（scope + id + 标题），正文由模型自己用
+    conversation_notes(action=read, note_id=id, scope=scope) 取（写回用 update，参数同）。
     scope='notes'    → 本地对话笔记（users/<身份>/notes.json）
     scope='database' → 云端共享数据库条目（branch=__db__）
-    前端只传 {id, scope, title} 元数据，正文由后端按 id 现取——保证与库中内容一致，
-    也避免把长正文塞进浏览器 localStorage。"""
+    """
     if not refs:
         return ""
-    from tools import file_tools as _ft
-    from tools.shared_hub import db_notes
-    blocks = []
+    rows = []
     for r in refs:
         if not isinstance(r, dict):
             continue
         scope = (r.get("scope") or r.get("kind") or "notes").strip()
-        rid = str(r.get("id") or "")
-        title = str(r.get("title") or "")
-        content = ""
-        try:
-            if scope in ("database", "db", "__db__", "cloud", "shared"):
-                scope = "database"
-                res = await db_notes("read", rid, "", "", owner)
-                e = res.get("entry") or {}
-                content = e.get("content") or ""
-                title = title or e.get("title", "")
-                if not content:
-                    content = "（读取失败：" + str(res.get("error", "条目不存在或无权访问")) + "）"
-            else:
-                scope = "notes"
-                n, _ = _ft._find_note(owner, rid)
-                if n is None:
-                    content = "（读取失败：笔记不存在或无权访问）"
-                else:
-                    content = n.get("content") or ""
-                    title = title or n.get("title", "")
-        except Exception as ex:
-            content = f"（读取异常：{ex}）"
-        blocks.append(f"▸ scope={scope} id={rid} 标题={title}\n{content}")
-    if not blocks:
+        scope = "database" if scope in ("database", "db", "__db__", "cloud", "shared") else "notes"
+        rows.append("▸ scope=%s id=%s 标题=%s" % (scope, str(r.get("id") or ""), str(r.get("title") or "")))
+    if not rows:
         return ""
-    head = ("【用户引用的条目（以下为完整内容；如需修改请用 conversation_notes 工具，"
-            "参数带同样的 scope 与 id）】")
-    return head + "\n\n" + "\n\n".join(blocks) + \
-        "\n\n—————— 以上为引用内容，以下是用户本次的问题 ——————\n"
+    return ("【用户引用了以下条目（这里只给元数据，未附正文）——需要内容请用 conversation_notes："
+            "action=read、scope 与 note_id 照抄下列值自行读取；需要修改用 action=update，参数同】\n"
+            + "\n".join(rows) +
+            "\n\n—————— 以上为引用元数据，以下是用户本次的问题 ——————\n")
 
 
 @app.post("/api/agent/run")
@@ -1582,7 +1695,7 @@ async def agent_run(req: AgentRunRequest, request: Request):
         enabled_tools=req.enabled_tools, loaded_skills=req.loaded_skills,
         model_config=mc, neo4j_config=req.neo4j_config,
         context_length=req.context_length or 10, branch_id=req.branch_id or "",
-        file_ids=req.file_ids or [], full_file_ids=req.full_file_ids,
+        file_ids=req.file_ids or [],
         permission_mode=req.permission_mode or "safe",
         user=u["username"],
         timeouts=req.timeouts or {}, subagent=req.subagent or {})
@@ -1650,20 +1763,25 @@ async def agent_stream(req: AgentRunRequest, request: Request = None):
 
         w = asyncio.create_task(watchdog())
         cur_user = user["username"]
+        _client = (req.client_id or "").strip()
+        _branch = req.branch_id or ""
         _chars = len(req.input) + sum(len(str(m.get("content", ""))) for m in req.history if isinstance(m, dict))
         try:
             async for event in runner(history=req.history, user_input=await _resolve_refs(req.note_refs, cur_user) + req.input,
                 enabled_tools=req.enabled_tools, loaded_skills=req.loaded_skills,
                 model_config=mc, neo4j_config=req.neo4j_config,
-                context_length=req.context_length or 10, branch_id=req.branch_id or "",
-                file_ids=req.file_ids or [], full_file_ids=req.full_file_ids,
+                context_length=req.context_length or 10, branch_id=_branch,
+                file_ids=req.file_ids or [],
                 permission_mode=req.permission_mode or "safe",
-                images=req.images or [],
                 max_rounds=max_rounds,
-                user=cur_user,
+                user=cur_user, client_id=_client, skip_resume=bool(req.skip_resume),
                 timeouts=req.timeouts or {}, subagent=req.subagent or {}):
                 if isinstance(event, dict) and event.get("type") in ("token", "reasoning"):
                     _chars += len(event.get("text", "") or "")
+                # ★ 多端可见：把生成事件实时广播给该账号的其它页面（带 client_id 供发起端滤回声）
+                if isinstance(event, dict) and event.get("type") in _DELTA_TYPES:
+                    _notify_delta(cur_user, {"type": "chats_delta", "branch_id": _branch,
+                                             "client_id": _client, "event": event})
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
         finally:
             stop_flag.set()
@@ -1671,6 +1789,14 @@ async def agent_stream(req: AgentRunRequest, request: Request = None):
             reset_generation_cancel()
             if _qwen:
                 _RP.add_qwen_usage(user, _chars)
+            # ★ 后端接管消息树：本轮结束（正常/停止/异常都算）→ 把账本投影进 chats.json，
+            #   再通知各端对齐。投影失败绝不影响已经发出的回复（sync_branch 内部吞异常）。
+            try:
+                _synced = await asyncio.to_thread(PROJ.sync_branch, cur_user, _branch)
+                if _synced:
+                    _notify(cur_user, "chats")
+            except Exception as _e:
+                print("[tree] sync after stream error:", _e)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -1719,7 +1845,8 @@ if (_PROJECT_ROOT / "index.html").exists():
     @app.get("/", include_in_schema=False)
     @app.get("/c4eai", include_in_schema=False)
     async def _frontend_page():
-        return FileResponse(str(_PROJECT_ROOT / "index.html"))
+        # 入口 HTML 禁缓存：开发迭代期 index.html 一天改 N 版， heuristic 缓存会把旧版钉死在用户标签页
+        return FileResponse(str(_PROJECT_ROOT / "index.html"), headers={"Cache-Control": "no-store"})
 
 if __name__ == "__main__":
     import asyncio

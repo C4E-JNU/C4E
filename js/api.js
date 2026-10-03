@@ -138,8 +138,11 @@
             });
 
             // 新建对话按钮事件
-            newChatBtn.addEventListener('click', createNewConversation);
-            newChatBtnEmpty.addEventListener('click', createNewConversation);
+            newChatBtn.addEventListener('click', function () { openWorkAreaPicker(newChatBtn); });
+            newChatBtnEmpty.addEventListener('click', function () { openWorkAreaPicker(newChatBtnEmpty); });
+            fetch('/api/user/work_areas').then(function (r) { return r.json(); }).then(function (d) {
+                if (d && d.areas) state.workAreas = d.areas;
+            }).catch(function () {});
 
             // 分支重命名事件
             cancelRenameBtn.addEventListener('click', closeRenameBranchModal);
@@ -258,8 +261,110 @@
             }
         }
 
+        // ==================== 工作区域（新建对话时选/建） ====================
+        // 用户 2026-10-03 定：不放进设置页 —— 新建对话时选工作区域；不选 = 默认工作区域。
+        function _waFetch(url, opts) {
+            return fetch(url, opts).then(function (r) { return r.json(); }).catch(function () { return null; });
+        }
+        function closeWaPicker() {
+            var old = document.getElementById('wa-picker-popover');
+            if (old) old.remove();
+            document.removeEventListener('click', _waPickerOutside, true);
+        }
+        function _waPickerOutside(e) {
+            var p = document.getElementById('wa-picker-popover');
+            if (p && !p.contains(e.target)) closeWaPicker();
+        }
+        function openWorkAreaPicker(anchorBtn) {
+            closeWaPicker();
+            var pop = document.createElement('div');
+            pop.id = 'wa-picker-popover';
+            pop.className = 'wa-popover';
+            document.body.appendChild(pop);
+            var rr = anchorBtn ? anchorBtn.getBoundingClientRect() : null;
+            if (!rr || (rr.left === 0 && rr.top === 0 && rr.width === 0)) {
+                // 锚点不可见（如侧栏收起态）→ 视口上方居中
+                pop.style.top = '70px';
+                pop.style.left = 'calc(50vw - 160px)';
+            } else {
+                pop.style.top = (rr.bottom + 6) + 'px';
+                pop.style.left = Math.max(8, Math.min(rr.left, window.innerWidth - 320)) + 'px';
+            }
+            pop.innerHTML = '<div class="wa-pop-title">选择工作区域</div><div class="wa-pop-list" id="wa-pop-list"><div class="wa-item wa-loading">加载中…</div></div>';
+            document.addEventListener('click', _waPickerOutside, true);
+            _waFetch('/api/user/work_areas').then(function (d) {
+                var areas = (d && d.areas) || [];
+                state.workAreas = areas;
+                var list = pop.querySelector('#wa-pop-list');
+                if (!list) return;
+                list.innerHTML = '';
+                areas.forEach(function (a) {
+                    var item = document.createElement('div');
+                    item.className = 'wa-item';
+                    item.innerHTML = '<span class="wa-item-icon">📁</span><span class="wa-item-name"></span><span class="wa-item-path"></span>';
+                    item.querySelector('.wa-item-name').textContent = a.name;
+                    item.querySelector('.wa-item-path').textContent = a.project_dir;
+                    item.title = a.project_dir + '\n产物: ' + a.output_dir;
+                    item.addEventListener('click', function () { closeWaPicker(); createNewConversation(a.id); });
+                    list.appendChild(item);
+                });
+                var addBtn = document.createElement('div');
+                addBtn.className = 'wa-item wa-add';
+                addBtn.innerHTML = '<span class="wa-item-icon">＋</span><span class="wa-item-name">新建工作区域…</span>';
+                addBtn.addEventListener('click', function () { _waShowCreateForm(pop); });
+                list.appendChild(addBtn);
+            });
+        }
+        function _waShowCreateForm(pop) {
+            var list = pop.querySelector('#wa-pop-list');
+            list.innerHTML = '';
+            var form = document.createElement('div');
+            form.className = 'wa-form';
+            form.innerHTML =
+                '<div class="wa-form-title">新建工作区域</div>' +
+                '<label>名称</label><input type="text" id="wa-f-name" placeholder="如：TruthCross 数据挖掘">' +
+                '<label>项目文件夹</label><div class="wa-f-row"><input type="text" id="wa-f-proj" placeholder="D:\…"><button type="button" class="wa-f-browse" data-t="proj">浏览…</button></div>' +
+                '<label>产物文件夹</label><div class="wa-f-row"><input type="text" id="wa-f-out" placeholder="默认 项目文件夹\\output"><button type="button" class="wa-f-browse" data-t="out">浏览…</button></div>' +
+                '<div class="wa-f-actions"><button type="button" id="wa-f-ok">创建并开始对话</button><button type="button" id="wa-f-cancel">取消</button></div>' +
+                '<div class="wa-f-err" id="wa-f-err"></div>';
+            list.appendChild(form);
+            form.querySelector('#wa-f-name').focus();
+            form.querySelectorAll('.wa-f-browse').forEach(function (b) {
+                b.addEventListener('click', function () {
+                    _waFetch('/api/browse_dir').then(function (r) {
+                        if (!r || r.cancelled || !r.path) return;
+                        if (b.dataset.t === 'proj') {
+                            form.querySelector('#wa-f-proj').value = r.path;
+                            var out = form.querySelector('#wa-f-out');
+                            if (!out.value) out.value = r.path + '\\output';
+                        } else {
+                            form.querySelector('#wa-f-out').value = r.path;
+                        }
+                    });
+                });
+            });
+            form.querySelector('#wa-f-cancel').addEventListener('click', function () { closeWaPicker(); });
+            form.querySelector('#wa-f-ok').addEventListener('click', function () {
+                var name = form.querySelector('#wa-f-name').value.trim();
+                var proj = form.querySelector('#wa-f-proj').value.trim();
+                var out = form.querySelector('#wa-f-out').value.trim();
+                var err = form.querySelector('#wa-f-err');
+                if (!proj) { err.textContent = '请填写项目文件夹'; return; }
+                err.textContent = '创建中…';
+                _waFetch('/api/user/work_areas', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name, project_dir: proj, output_dir: out })
+                }).then(function (r) {
+                    if (!r || r.status !== 'ok' || !r.area) { err.textContent = (r && r.error) || '创建失败'; return; }
+                    closeWaPicker();
+                    createNewConversation(r.area.id);
+                });
+            });
+        }
+
         // ==================== 新建对话功能 ====================
-        function createNewConversation() {
+        function createNewConversation(projectId) {
             // ★ 2026-09-30 用户定：取消「临时对话 / 空草稿 / 默认占位」三种概念 ——
             //   新建对话 = 直接创建一条 **永久** 对话；空对话也保留在侧栏，永不自动删除。
             //   （只有小e 的对话是临时的：内存态、走 /api/xiaoe/*、不落盘，不在此列。）
@@ -291,6 +396,7 @@
                 totalTokens: 0,
                 sessionTokens: 0,
                 hasContent: false,
+                project_id: projectId || 'default',
                 notes: []
             };
 

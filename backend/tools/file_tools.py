@@ -9,6 +9,8 @@ import shutil
 import threading
 from datetime import datetime
 
+from tools import work_areas as _work_areas
+
 # 单次读取/注入返回给模型的正文字符封顶：防止长行 JSON / 超大文档一次撑爆模型上下文
 READ_FILE_MAX_CHARS = 20000
 # 历史拼装时，单条消息与总上下文的字符预算（1 token ≈ 2~3 汉字 / 4 英文，留足安全余量）
@@ -119,50 +121,51 @@ def _within(base: str, p: str) -> bool:
 def _resolve_safe_path(relative_path: str, write: bool = False) -> str:
     """将路径解析为绝对路径，并按当前权限模式校验访问范围。
 
-    write=False 表示读/列目录；write=True 表示写文件。
-    相对路径以 workspace/ 为基准；绝对路径直接使用（非安全模式下可访问项目/任意路径）。
+    路径路由（用户 2026-10-03 定）：相对路径以**当前工作区域**为基准——默认落
+    项目目录；以 output/ 开头 → 产物目录（中间产物专用）。绝对路径直接使用。
+    模式范围：safe=项目目录+产物目录；ask=读+应用项目根 / 写+skills；full=任意。
     """
     mode = _PERMISSION_MODE
-    workspace = _get_workspace_dir()
-    # 确保 workspace 目录存在
-    os.makedirs(workspace, exist_ok=True)
+    area = _work_areas.current_area(_CURRENT_USER)
+    project_abs = os.path.abspath(area.get("project_dir") or _get_workspace_dir())
+    output_abs = os.path.abspath(area.get("output_dir") or os.path.join(project_abs, "output"))
+    os.makedirs(project_abs, exist_ok=True)
+    os.makedirs(output_abs, exist_ok=True)
 
-    # 规范化路径：相对路径以 workspace 为基准，绝对路径直接用
+    # 规范化路径：相对路径走工作区域路由，绝对路径直接用
     if os.path.isabs(relative_path):
         full_path = os.path.abspath(relative_path)
     else:
-        full_path = os.path.abspath(os.path.join(workspace, relative_path))
+        full_path = _work_areas.route(_CURRENT_USER, relative_path)
 
     if mode == "full":
         return full_path  # 完全访问：任意路径读写
 
-    workspace_abs = os.path.abspath(workspace)
-    project_abs = os.path.abspath(_get_project_root())
-
     if mode == "safe":
-        # 仅 workspace
-        if not _within(workspace_abs, full_path):
-            raise PermissionError(f"安全模式下仅允许访问 workspace 目录: {relative_path}")
+        # 仅当前工作区域（项目目录 ∪ 产物目录）
+        if not (_within(project_abs, full_path) or _within(output_abs, full_path)):
+            raise PermissionError(f"安全模式下仅允许访问当前工作区域（项目/产物目录）: {relative_path}")
         # 云端共享库：普通成员进一步锁到本人目录 users/<u>/ 与共享 pool/
         if _USER_SCOPE:
             u = (_USER_SCOPE.get("user") or "guest").replace("..", "_")
-            me = os.path.abspath(os.path.join(workspace_abs, "users", u))
-            pool = os.path.abspath(os.path.join(workspace_abs, "pool"))
+            me = os.path.abspath(os.path.join(_get_workspace_dir(), "users", u))
+            pool = os.path.abspath(os.path.join(_get_workspace_dir(), "pool"))
             if not (_within(me, full_path) or _within(pool, full_path) or full_path == me):
                 raise PermissionError(f"云端实例仅可访问自己的文件与共享库: {relative_path}")
         return full_path
 
     # ask 询问模式
+    app_root = os.path.abspath(_get_project_root())
     if not write:
-        # 读：允许 workspace + 项目根（含 skills/）
-        if _within(workspace_abs, full_path) or _within(project_abs, full_path):
+        # 读：允许工作区域 + 应用项目根（含 skills/）
+        if _within(project_abs, full_path) or _within(output_abs, full_path) or _within(app_root, full_path):
             return full_path
-        raise PermissionError(f"询问模式下仅可读取项目与 workspace 目录: {relative_path}")
-    # 写：允许 workspace + skills 目录（写技能作为例外放行）
+        raise PermissionError(f"询问模式下仅可读取工作区域与应用项目目录: {relative_path}")
+    # 写：允许工作区域 + skills 目录（写技能作为例外放行）
     skills_abs = os.path.abspath(_get_skills_dir())
-    if _within(workspace_abs, full_path) or _within(skills_abs, full_path):
+    if _within(project_abs, full_path) or _within(output_abs, full_path) or _within(skills_abs, full_path):
         return full_path
-    raise PermissionError("__NEED_FULL__ 该写操作超出 workspace 与 skills 目录，需要切换到完全访问模式才能执行")
+    raise PermissionError("__NEED_FULL__ 该写操作超出工作区域与 skills 目录，需要切换到完全访问模式才能执行")
 
 
 def _page_lines(lines, offset: int, limit: int, subject: str = "内容", extra_note: str = ""):
@@ -303,7 +306,7 @@ async def read_file(path: str = "", file_id: str = "", as_base64: bool = False, 
                 if not _txt:
                     return json.dumps({"ok": False, "file_id": fid,
                                        "error": f"附件 {fid} 未提取到文本（可能是扫描件；"
-                                                f"图片请用 read_image，扫描 PDF 可试 mineru_parse）"},
+                                                f"图片请用 read_file，扫描 PDF 可试 mineru_parse）"},
                                       ensure_ascii=False)
                 p = _page_lines(_txt.splitlines(keepends=True), offset, limit,
                                 subject="原件正文", extra_note="续读时 file_id 保持不变。")
@@ -877,16 +880,41 @@ async def delete_upload(file_id: str) -> str:
     return json.dumps({"error": f"文件 {file_id} 不存在"})
 
 
+# 无 text.txt 时可回退「直读原文件本体」的文本类扩展名。
+# 背景：产出文件（outputs/*.md 等）由 register_output 只登记指针、不复制、不生成 text.txt，
+# 导致 /api/file/text 返回 200+空串 → 前端小窗显示「该文件没有可用文本」（且 200 不触发回退）。
+_TEXT_READABLE_EXTS = {
+    "md", "markdown", "txt", "py", "js", "mjs", "ts", "jsx", "tsx", "json", "jsonl",
+    "csv", "tsv", "log", "yaml", "yml", "toml", "ini", "cfg", "conf", "env",
+    "html", "htm", "css", "xml", "sql", "sh", "bat", "ps1", "tex", "bib", "rst",
+}
+_TEXT_READABLE_MAX = 1024 * 1024  # 1 MB 上限：超此不回退，避免超大文件灌爆小窗与模型上下文
+
+
 async def get_upload_text(file_id: str) -> str:
-    """获取上传文件的完整文本内容（跨 pool/私人区/旧目录解析）"""
-    d, _, _ = _resolve_upload(file_id)
+    """获取上传文件的完整文本内容（跨 pool/私人区/旧目录解析）
+
+    优先读解析产物 text.txt；没有 text.txt 时（产出指针文件、未解析的纯文本附件）
+    回退直读原文件本体，仅限 _TEXT_READABLE_EXTS 且体积不超 _TEXT_READABLE_MAX。
+    """
+    d, _, orig = _resolve_upload(file_id)
     if not d:
         return ""
     text_path = os.path.join(d, "text.txt")
-    if not os.path.isfile(text_path):
-        return ""
-    with open(text_path, "r", encoding="utf-8") as f:
-        return f.read()
+    if os.path.isfile(text_path):
+        with open(text_path, "r", encoding="utf-8") as f:
+            return f.read()
+    if orig and os.path.isfile(orig):
+        ext = os.path.splitext(orig)[1].lower().lstrip(".")
+        if ext in _TEXT_READABLE_EXTS:
+            try:
+                if os.path.getsize(orig) > _TEXT_READABLE_MAX:
+                    return ""
+                with open(orig, "r", encoding="utf-8", errors="replace") as f:
+                    return f.read()
+            except Exception:
+                return ""
+    return ""
 
 
 # ═══════════════════════════════════════════════

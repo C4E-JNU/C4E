@@ -69,7 +69,7 @@ class WriteFileParams(BaseModel):
 
 class TerminalParams(BaseModel):
     command: str = Field(description="要执行的 shell 命令（如 `uv pip install pandas`、`uv sync`、`python script.py`、`git status`）。可执行任意命令，受权限模式约束。")
-    workdir: str = Field(default=".", description="工作目录（相对路径以项目根为基准；省略则用项目根）。安全模式强制在项目内。")
+    workdir: str = Field(default="", description="工作目录。省略 = 本人产出区（临时脚本/产出文件的落点，避免污染项目）。相对路径以项目根为基准；要在项目内跑 git/uv pip/项目脚本，请显式传 workdir='.'。安全模式强制在项目内。")
 
 class TodoParams(BaseModel):
     action: str = Field(description="操作类型: list=列表, add=添加, complete=标记完成, remove=删除")
@@ -86,6 +86,14 @@ class NotesParams(BaseModel):
                     "两者格式相同但存储不同，改错地方是不可逆错误：拿不准时先 list 确认，或直接问用户。"
     )
     note_id: Optional[str] = Field(default=None, description="条目ID（read/append/update/delete时需要；数据库条目的 id 形如 note-1234567890）")
+    branch_id: str = Field(
+        default="",
+        description="仅 scope='notes' 且 action='list' 时用于限定范围："
+                    "留空（默认）=列出本人**全部对话**的笔记（跨对话，含所属 branch_id，便于按对话定位）；"
+                    "传具体分支 id（如 'branch-48'）=只看该对话的笔记；"
+                    "传 '__current__'=只看当前对话的笔记。"
+                    "read/append/update/delete 按 note_id 跨对话全局生效，不受此参数限制。"
+    )
     title: Optional[str] = Field(default=None, description="笔记标题（add时需要）")
     content: Optional[str] = Field(
         default=None,
@@ -306,7 +314,7 @@ tools_registry["terminal"] = _make_async_tool(
     description=(
         "在项目环境中执行 shell 命令（git、build、test、uv/pip 装包、跑脚本等），返回 stdout/stderr/exit_code。\n\n"
         "WHEN to use: 需要运行真实命令、装/升级第三方库（uv pip install / uv sync）、跑测试或脚本、查看 git 状态时。run_code 也能 import 大部分已装的第三方包（numpy/pandas/scipy 实测可用），但【超时上限只有 60 秒】且不做进程隔离——要跑长任务、装包或执行脚本文件，用 terminal。\n\n"
-        "HOW: 写完整 shell 命令。工作目录默认项目根；可用 workdir 指定（相对项目根）。\n\n"
+        "HOW: 写完整 shell 命令。工作目录**默认当前工作区域的项目目录**；相对 workdir 以项目目录为基准。会产出大量中间文件的脚本，先 cd 到产物目录再跑（路径见系统提示词「工作区域」一节）。\n\n"
         "安全: 受权限模式约束——safe 仅项目内且禁高危命令；ask 涉及外部会返回 need_confirm 需用户确认；full 任意执行。装包建议用 `uv pip install <包>` 装进项目 venv。"
     ),
     args_schema=TerminalParams,
@@ -315,14 +323,14 @@ tools_registry["terminal"] = _make_async_tool(
 
 tools_registry["read_file"] = _make_async_tool(
     name="read_file",
-    description="读取文件内容，可指定起始行和行数。相对路径以 workspace/ 为基准；询问/完全访问模式下可用绝对路径读取项目内或磁盘上的文件。",
+    description="读取文件内容，可指定起始行和行数。相对路径以当前工作区域的项目目录为基准；以 output/ 开头的相对路径读产物目录；询问/完全访问模式下可用绝对路径。",
     args_schema=ReadFileParams,
     func=_read_file,
 )
 
 tools_registry["write_file"] = _make_async_tool(
     name="write_file",
-    description="将内容写入文件（存在则覆盖）。相对路径以 workspace/ 为基准。安全模式仅限 workspace/ 内；询问模式可写 workspace/ 与 skills/；完全访问模式可写任意路径（含项目代码、系统文件）。",
+    description="将内容写入文件（存在则覆盖）。相对路径写入当前工作区域的项目目录；以 output/ 开头写入产物目录（中间产物专用，如 output/tmp.log）。安全模式限工作区域内；询问模式另放行 skills/；完全访问模式任意路径。",
     args_schema=WriteFileParams,
     func=_write_file,
 )
@@ -459,10 +467,10 @@ def _write_notes(notes):
         json.dump(notes, f, ensure_ascii=False, indent=2)
 
 async def _exec_notes(action: str, note_id: str = None, title: str = None, content: str = None,
-                      scope: str = "notes") -> str:
+                      scope: str = "notes", branch_id: str = "") -> str:
     """笔记/数据库条目统一入口。
 
-    scope='notes'    → 本地对话笔记 users/<身份>/notes.json（按当前对话分支）
+    scope='notes'    → 本地对话笔记 users/<身份>/notes.json（list 默认跨对话全量，可用 branch_id 限定）
     scope='database' → 云端共享数据库条目（branch=__db__；本地实例自动转发云端）
     """
     from agent.agent import _current_branch_id, _current_user
@@ -553,15 +561,48 @@ async def _exec_notes(action: str, note_id: str = None, title: str = None, conte
                                      "branch_id": n.get("branch_id", ""),
                                      "owner": n.get("owner", owner)}}, ensure_ascii=False, indent=2)
 
-    # list：当前对话(branch)的本地笔记 —— 只给目录，不含正文（正文可能极大，全量返回会撑爆上下文）
-    notes = [n for n in _ft._read_notes(owner) if n.get("branch_id", "") == _current_branch_id]
+    # list：本地笔记目录。
+    # ★ 修正（用户实测踩到）：原先硬过滤成「只列当前对话 branch」，
+    #   结果 agent 看不到自己在**别的对话**里建的笔记（document-entry 建的条目笔记全在各自 branch 下），
+    #   出现「我有很多笔记，AI 说只有 1 条」。现改为默认跨对话全量，并带回 branch_id / branch_title，
+    #   仍可用 branch_id 限定（具体 id 或 '__current__'）。只给目录，不含正文（正文可能极大）。
+    bid = (branch_id or "").strip()
+    if bid.lower() in ("__current__", "current", "本对话", "当前对话"):
+        bid = _current_branch_id or ""
+    all_notes = _ft._read_notes(owner)
+    notes = [n for n in all_notes if (n.get("branch_id") or "") == bid] if bid else list(all_notes)
+
+    # 对话标题映射（chats.json 的 branches[].title）→ 让 agent 能按「哪段对话」定位/认领笔记
+    titles, groups = {}, {}
+    try:
+        from tools import user_chats as _uc
+        for b_id, b in ((_uc._read_raw(owner) or {}).get("branches") or {}).items():
+            if isinstance(b, dict):
+                titles[b_id] = (b.get("title") or b.get("name") or "").strip()[:60]
+    except Exception:
+        pass
+
     def _slim_local(n):
         c = n.get("content") or ""
-        return {"id": n["id"], "title": n.get("title", ""), "content_len": len(c),
+        b_id = n.get("branch_id") or ""
+        return {"id": n["id"], "title": n.get("title", ""), "branch_id": b_id,
+                "branch_title": titles.get(b_id, ""),
+                "content_len": len(c), "updatedAt": n.get("updatedAt", ""),
                 "preview": c[:120].replace("\n", " ") + ("…" if len(c) > 120 else "")}
+
+    for n in notes:
+        b_id = n.get("branch_id") or "(未归属)"
+        g = groups.setdefault(b_id, {"branch_id": b_id, "branch_title": titles.get(b_id, ""), "count": 0})
+        g["count"] += 1
+
     return json.dumps({
-        "status": "ok", "total": len(notes),
-        "note": "以上仅为笔记目录（不含正文）。需要正文请用 action=read 按 id 读取。",
+        "status": "ok", "scope": "notes", "owner": owner,
+        "filter": bid or "(全部对话)",
+        "current_branch_id": _current_branch_id,
+        "total": len(notes),
+        "by_branch": list(groups.values()),
+        "note": "以上为本人笔记目录（默认跨对话、只含目录不含正文）。找正文：action=read 按 note_id；"
+                "只列某段对话的笔记：list 时传 branch_id='branch-12' 或 '__current__'。",
         "notes": [_slim_local(n) for n in notes]
     }, ensure_ascii=False, indent=2)
 
@@ -600,6 +641,53 @@ def delegate_prepare(tasks) -> tuple:
     return valid, None
 
 
+def slim_subagent_results(results: list) -> list:
+    """把子智能体结果裁成「只回喂摘要」的精简版（防上下文爆炸）。
+
+    病根：run_subagent 返回的 steps 里含子智能体**读过的正文**
+    （tool_result 最多 2000 字/条、thinking 全文），会随工具结果一起灌回主控上下文。
+    实测一次派 2 篇即吃掉约 2 万字符，10 步流水线必炸。
+
+    修法：**前端与主控分离** ——
+      · 事件槽 set_delegate_results() 仍放**完整原件**，供 subagent_end 流给前端展示过程；
+      · 这里只裁「回喂给模型」的副本：删掉 steps 正文，保留可核验的元信息
+        （ok / goal / summary / error / 轮次 / 秒数 / 调用过的工具名 / 步骤数）。
+    想恢复旧行为（回喂完整 steps）：设置里 subagent.feed_steps=True。
+    """
+    try:
+        from agent.agent import get_subagent_options
+        if get_subagent_options().get("feed_steps"):
+            return results or []
+    except Exception:
+        pass
+    out = []
+    for r in (results or []):
+        if not isinstance(r, dict):
+            continue
+        steps = r.get("steps") or []
+        tools_used: list[str] = []
+        for s in steps:
+            if isinstance(s, dict) and s.get("type") == "tool_call":
+                n = (s.get("name") or "").strip()
+                if n and n not in tools_used:
+                    tools_used.append(n)
+        item = {
+            "index": r.get("index", 0),
+            "ok": bool(r.get("ok")),
+            "goal": r.get("goal", ""),
+            "summary": (r.get("summary") or "")[:10000],
+            "rounds": r.get("rounds", 0),
+            "seconds": r.get("seconds", 0),
+            # 完整步骤已随 subagent_end 流给前端；此处只报数量，绝不回喂正文
+            "steps_omitted": len(steps),
+            "tools_used": tools_used,
+        }
+        if r.get("error"):
+            item["error"] = r["error"]
+        out.append(item)
+    return out
+
+
 async def _exec_delegate(tasks: list[dict], max_rounds: int = None, timeout: int = None) -> str:
     """派发子智能体（并发上限 & 三级超时由设置决定；失败即失败，不重试）。
 
@@ -623,9 +711,11 @@ async def _exec_delegate(tasks: list[dict], max_rounds: int = None, timeout: int
     results = await run_subagents_parallel(valid, max_rounds=mr, timeout=to,
                                            max_parallel=int(opts.get("max_parallel", 2) or 2),
                                            timeouts=sub_timeouts)
-    # 结果放进槽 → 主循环流 subagent_end（含完整步骤/结论）
+    # 结果放进槽 → 主循环流 subagent_end（前端要完整步骤，这里放原件）
     set_delegate_results(results)
-    return json.dumps({"status": "ok", "count": len(results), "results": results},
+    # 回喂主控的那一份必须裁剪（见 slim_subagent_results 说明）
+    return json.dumps({"status": "ok", "count": len(results),
+                       "results": slim_subagent_results(results)},
                       ensure_ascii=False)
 
 
@@ -672,7 +762,12 @@ tools_registry["conversation_notes"] = _make_async_tool(
                 "scope='notes'=本地对话笔记（用户说「笔记」「我的笔记」）；"
                 "scope='database'=云端共享数据库条目（用户说「数据库」「共享库」「组里的条目」）。"
                 "支持 list=列表, read=按id读取, add=新建, append=末尾追加, update=更新, delete=删除。"
-                "【读取纪律·重要】list 只返回**目录**（id/标题/owner/正文长度/前120字预览），**不含正文**——"
+                "【作用域铁律·2026 修正】scope='notes' 的 list **默认跨对话全量**：返回本人**所有对话**里建的笔记目录，"
+                "每条带 branch_id / branch_title（所属对话），并给出 by_branch 分组统计 —— "
+                "**不要因为「当前对话里没看到」就说用户没有/只有 1 条笔记**（用户说「我有很多对话笔记」时一律先跨对话 list 全量）。"
+                "只列某段对话：list 传 branch_id='branch-12'（具体对话）或 '__current__'（仅当前对话）。"
+                "read/append/update/delete 按 note_id **跨对话全局生效**，不需要也不能指定 branch。"
+                "【读取纪律·重要】list 只返回**目录**（id/标题/branch/正文长度/前120字预览），**不含正文**——"
                 "这是为了防止大条目（有的几十万字）一次性撑爆上下文。要看某条正文，必须再用 read 按 id 取；"
                 "read 单次最多返回 20000 字（超出会标记 truncated=true 并告知原文总长），"
                 "不要反复 read 同一超长条目，需要时请让用户分段查看或指定要看哪部分。"

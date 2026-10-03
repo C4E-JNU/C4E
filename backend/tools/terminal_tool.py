@@ -45,12 +45,13 @@ def _is_dangerous(command: str) -> bool:
     return False
 
 
-async def terminal(command: str, workdir: str = "."):
+async def terminal(command: str, workdir: str = ""):
     """执行 shell 命令并返回 stdout/stderr/exit_code。
 
     Args:
         command: 要执行的 shell 命令
-        workdir: 工作目录。相对路径以项目根为基准；省略则用项目根。
+        workdir: 工作目录。**省略 = 当前工作区域的项目目录**；
+                 相对路径以项目目录为基准。会产出大量中间文件的脚本，先 cd 到产物目录再跑。
     """
     command = (command or "").strip()
     if not command:
@@ -66,26 +67,31 @@ async def terminal(command: str, workdir: str = "."):
     # 默认 cwd = **本人产出区**（用户 2026-09-26 定：产出源不固定，不能只认 write_file）——
     # 这样用终端跑技能脚本产出的文件会被产出区收走、自动登记成附件、有同款打开方式。
     # 需要操作项目本身时，显式传 workdir（相对项目根）。
+    # 工作区域（用户 2026-10-03 定）：默认 cwd = 项目目录；safe 允许范围 = 应用项目根 ∪ 项目目录 ∪ 产物目录
+    _area = file_tools._work_areas.current_area(file_tools._CURRENT_USER)
+    _proj_dir = os.path.abspath(_area.get("project_dir") or PROJECT_ROOT)
+    _out_dir = os.path.abspath(_area.get("output_dir") or os.path.join(_proj_dir, "output"))
+
     if workdir and workdir.strip():
         if os.path.isabs(workdir):
             wd = workdir
         else:
-            wd = os.path.join(PROJECT_ROOT, workdir)
+            wd = os.path.join(_proj_dir, workdir)
     else:
-        wd = file_tools._user_outputs_dir()
+        wd = _proj_dir
     wd = os.path.abspath(wd)
 
+    _app_roots = (os.path.abspath(PROJECT_ROOT), _proj_dir, _out_dir)
+
     if mode == "safe":
-        # safe：强制在项目根 / workspace 内
-        proj = os.path.abspath(PROJECT_ROOT)
-        if not (wd == proj or wd.startswith(proj + os.sep)):
-            return json.dumps({"error": f"安全模式仅允许在项目目录内执行: {workdir}", "blocked": True})
+        if not any(wd == r or wd.startswith(r + os.sep) for r in _app_roots):
+            return json.dumps({"error": f"安全模式仅允许在工作区域内执行: {workdir}", "blocked": True})
         if _is_dangerous(command):
             return json.dumps({"error": "安全模式下禁止高危命令", "blocked": True})
         need_ask = False
     elif mode == "ask":
         # ask：允许外部，但高危/外部写特征要询问
-        need_ask = _is_dangerous(command) or (not os.path.abspath(wd).startswith(os.path.abspath(PROJECT_ROOT) + os.sep))
+        need_ask = _is_dangerous(command) or (not any(os.path.abspath(wd).startswith(r + os.sep) for r in _app_roots))
         if need_ask:
             return json.dumps({"need_confirm": True, "command": command, "workdir": wd,
                                 "message": "该命令可能影响项目外部或操作敏感资源，请确认是否执行"})

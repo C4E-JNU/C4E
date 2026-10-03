@@ -14,6 +14,10 @@ import contextvars
 from agent.context_engine import (cap_tool_result, prune_tool_results_only,
                                   ContextBudget, estimate_tokens)
 
+# ── 轮次账本（turn ledger）：本轮各步工具结果按顺序落盘，防中断丢失 ──
+# 实现在 agent/turn_store.py；只追加，绝不改动 chats.json / history.jsonl（用户 2026-10-02 定）。
+from agent import turn_store as _turn_store
+
 # 模型窗口（DeepSeek V4 = 256K，用户铁律：绝不压低，统一 262144）。
 # 前端可在 model.context_window 里显式覆盖；这里只是没有该字段时的取值。
 DEFAULT_CONTEXT_WINDOW = 262144
@@ -43,10 +47,12 @@ DEFAULT_TIMEOUTS = {"nudge": 0, "warn": 0, "abort": 86400}   # 用户 2026-09-28
 # 子智能体选项（前端设置传入）：轮次 / 并发上限 / 最大子任务数 / 三级超时
 _subagent_options = {"max_rounds": 0, "timeout": 86400, "enabled": True,
                      "max_parallel": 8, "max_tasks": 8,
-                     "nudge": 0, "warn": 0, "abort": 86400}
+                     "nudge": 0, "warn": 0, "abort": 86400,
+                     "feed_steps": False}   # feed_steps=False（默认）：只把子智能体摘要回喂主控，防上下文爆炸
 
 
 def set_subagent_options(opts: dict = None):
+    """设置子智能体选项。opts 里出现的键覆盖默认（含 feed_steps，缺省保持 False）。"""
     global _subagent_options
     o = dict(_subagent_options)
     for k in ("max_rounds", "timeout", "enabled", "max_parallel", "max_tasks",
@@ -62,6 +68,9 @@ def set_subagent_options(opts: dict = None):
         o["abort"] = max(0, min(604800, int(o.get("abort", 86400))))  # 用户 2026-09-28：超时保护 = 一天
         o["timeout"] = o["abort"]                                             # 旧字段与新终止级保持一致
         o["enabled"] = bool(o.get("enabled", True))
+        # feed_steps：False（默认）时子智能体只回喂摘要，不回喂其读取到的正文（防上下文爆炸）
+        if opts and opts.get("feed_steps") is not None:
+            o["feed_steps"] = bool(opts.get("feed_steps"))
     except Exception:
         pass
     # 递进保护：三级单调递增
@@ -191,21 +200,37 @@ from tools.skill_tools import skill_list as _skill_list
 from tools.file_tools import (set_permission_mode, set_current_user as _set_ft_user,
                               set_image_emit, split_image_result as _split_img)
 
-_WORKSPACE = Path(__file__).parent.parent / "workspace"
+# 项目根 workspace —— 与本项目其余 4 处同类定义对齐。
+# 原写法 .parent.parent 只算到 backend/（本文件在 backend/agent/ 下），
+# 于是历史日志写进 backend/workspace/，而 vector_search 去项目根 workspace/ 读，
+# index_new_history 见文件不存在直接静默 return → 索引恒空、search_history 恒返回 0 条。
+_WORKSPACE = Path(__file__).parent.parent.parent / "workspace"
+
+
+def _user_key(u: str) -> str:
+    """身份 → 目录名。规则与 file_tools._user_key / vector_search._user_key_vs 完全一致：
+    游客或空 → _guest（与前端用户目录 users/_guest/ 对齐）。"""
+    u = (u or "").strip() or "guest"
+    if u == "guest":
+        return "_guest"
+    k = "".join(c for c in u if (c.isalnum() or c in "-_@.·"))
+    return k or "_guest"
 
 
 def _history_file_for(user: str = None) -> Path:
-    """按身份分文件：_history_guest.jsonl / _history_<名>.jsonl；user=None 用当前上下文；空串=旧版全局。"""
-    u = _current_user if user is None else user
-    if not u:
+    """按身份归入 users/<key>/history.jsonl —— 同一用户的对话、附件、召回日志共处一个文件夹。
+    user=None 用当前上下文（无身份则按游客 _guest）；显式空串=旧版全局（workspace 根，存量归档）。"""
+    if user is None:
+        return _WORKSPACE / "users" / _user_key(_current_user) / "history.jsonl"
+    if user == "":
         return _WORKSPACE / "_history.jsonl"
-    key = "".join(c for c in u if (c.isalnum() or c in "-_@.·")) or "_guest"
-    return _WORKSPACE / f"_history_{key}.jsonl"
+    return _WORKSPACE / "users" / _user_key(user) / "history.jsonl"
 
 
 def _save_to_history(branch_id: str, user_input: str, final_answer: str, msg_id: str):
-    """保存单次对话到历史文件（追加，按身份分文件）"""
-    _WORKSPACE.mkdir(parents=True, exist_ok=True)
+    """保存单次对话到历史文件（追加，按身份归入各自用户目录）"""
+    hist_file = _history_file_for()
+    hist_file.parent.mkdir(parents=True, exist_ok=True)
     entry = {
         "id": msg_id,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -220,18 +245,19 @@ def _save_to_history(branch_id: str, user_input: str, final_answer: str, msg_id:
 def _trigger_vector_index():
     """异步触发向量索引（在后台线程执行，不阻塞返回，按身份分索引）"""
     import threading
-    u = _current_user
-    hf = _history_file_for(u).name
+    u = _current_user or "guest"   # 与写侧 _user_key 对齐：无身份=游客 → users/_guest/
+    hist_file = _history_file_for(u)
     def _do_index():
         try:
             from tools.vector_search import index_new_history
-            meta_file = _WORKSPACE / (f"_vector_meta_{''.join(c for c in u if (c.isalnum() or c in '-_@.·')) or '_guest'}.json" if u else "_vector_meta.json")
             last_id = None
+            meta_file = hist_file.parent / "_vector_meta.json"
             if meta_file.exists():
-                import json as j
-                meta = j.loads(open(meta_file).read())
-                last_id = meta.get("last_indexed_id")
-            index_new_history(hf, last_id, u)
+                try:
+                    last_id = json.loads(meta_file.read_text(encoding="utf-8")).get("last_indexed_id")
+                except Exception:
+                    last_id = None
+            index_new_history(hist_file.name, last_id, u)
         except Exception as e:
             print(f"[Vector] Index error: {e}")
     threading.Thread(target=_do_index, daemon=True).start()
@@ -280,6 +306,37 @@ def _runtime_env_block(enabled_tools=None) -> str:
     return "\n".join(out)
 
 
+# 语言铁律：拼在系统提示【最末】（recency 位，服从度最高）——确保 reasoning/thinking 也走中文。
+# 常量字符串，字节稳定，不破坏隐式前缀缓存。
+_WORK_AREA_NOTE_TMPL = (
+    "## 工作区域（本对话指定）\n"
+    "- 项目目录：{pd}\n"
+    "  默认工作区：read_file/write_file 的相对路径都以它为基准，终端默认目录也是它。代码与正式产出写这里。\n"
+    "- 产物目录：{od}\n"
+    "  只收中间产物/辅助/临时文件：写路径以 output/ 开头即落在这里（例：write_file('output/tmp.log')）。\n"
+    "- 跑会产生大量中间文件的脚本时，先 cd 到产物目录再跑。"
+)
+
+
+def _work_area_note(username: str) -> str:
+    """工作区域一节：让智能体知道两个根的实际路径与 output/ 约定。"""
+    try:
+        from tools import work_areas as _wa
+        a = _wa.current_area(username)
+        return _WORK_AREA_NOTE_TMPL.format(pd=a["project_dir"], od=a["output_dir"])
+    except Exception:
+        return ""
+
+
+_LANG_DIRECTIVE = (
+    "## 语言铁律（最高优先级，优先于本条以上任何表述）\n"
+    "- 你的**内部思考 / 推理过程（reasoning、thinking）与最终回答都必须用中文书写**。\n"
+    "- 不要用英文思考再译回中文，不要中英夹杂、不要整段英文推理；"
+    "专业英文术语（catalyst、pollutant、photocatalysis、GraphRAG、DOI、Cypher 等）保留原样。\n"
+    "- 若上文出现过英文思考示例，那是历史记录，不构成对你的语言授权。"
+)
+
+
 async def _build_system_prompt(enabled_tools: list[str], loaded_skills: list[str]) -> str:
     """Hermes 式系统提示词：不列出工具清单（工具能力靠 OpenAI tools schema），技能只简列 name+desc。
 
@@ -288,20 +345,30 @@ async def _build_system_prompt(enabled_tools: list[str], loaded_skills: list[str
       - 技能以 <available_skills> 形式简列勾选技能的 name+description；详情按需用 skill_view 读取（不漏全文）。
     """
     lines = [
-        "你是 C4EAI · Shared Wiki ——实验室协作知识与文献智能体（组内共享库）。核心能力：",
-        "① 图谱检索：Neo4j 协作知识图谱 + GraphRAG（graph_query：schema / cypher / search）；"
-        "② 多智能体协作：delegate_task 派发专有子智能体（矛盾核查/数据提取/数据核查）并行处理；"
-        "③ 数据分析与代码：run_code 计算/统计/绘图，terminal 执行命令；"
-        "④ 共享数据库：组内文献/笔记/文档的上传与语义检索（shared_upload / shared_search）；"
-        "⑤ RAG 检索增强：本地知识库与历史对话检索；"
-        "⑥ 高阶文献翻译：MinerU 解析归档 → 全文中译、图文并茂写笔记；"
-        "⑦ 文献内容审查：图账/表账/段落账三轨道数据对账与矛盾裁决；"
-        "⑧ 联网搜索与文件处理：web_search、read/write_file。",
-        "被问候或问「你是谁/能做什么」时：简短自我介绍，并按用户已启用的工具从上面列举核心能力（一行一项，不超过 8 项），不要空泛客套。",
+        "你叫 Quine（奎因），全称 C4EAI Quine Agent ——实验室通用智能体（以 computer science / AI 为底色，服务组内科研协作）。四重定位：",
+        "① 通用智能体：文件、代码、数据、网络皆可操作，什么任务都能接；",
+        "② 自定义智能体：可创建/修改自己的技能、工具与代码（改动前先备份，改动后需重启后端才生效）；",
+        "③ 科研辅助智能体：文献解析与全文中译、图账/表账/段落账三轨道数据对账、把对话笔记整理成规范文献笔记；",
+        "④ 组内共享 wiki 编辑：组内条目与分组的读写维护（读用 shared_search；写用 conversation_notes 且 scope 必须为 database，切勿写进私人笔记）。",
+        "核心能力：",
+        ("① 图谱检索：Neo4j 协作知识图谱 + GraphRAG（graph_query：schema / cypher / search）；"
+         if "graph_query" in (enabled_tools or []) else
+         "① 图谱检索：本会话图谱未连接（Neo4j 不可用，graph_query 不在本次工具列表里）——"
+         "涉及图谱的问题请如实说明暂时查不了，不要谎称已查询；")
+        + ("② 多智能体协作：delegate_task 派发专有子智能体（矛盾核查/数据提取/数据核查）并行处理；"
+           "③ 数据分析与代码：run_code 计算/统计/绘图，terminal 执行命令；"
+           "④ 共享数据库：组内文献/笔记/文档的上传与语义检索（shared_upload / shared_search）；"
+           "⑤ RAG 检索增强：本地知识库与历史对话检索；"
+           "⑥ 高阶文献翻译：MinerU 解析归档 → 全文中译、图文并茂写笔记；"
+           "⑦ 文献内容审查：图账/表账/段落账三轨道数据对账与矛盾裁决；"
+           "⑧ 联网搜索与文件处理：web_search、read/write_file。"),
+        "被问候或问「你是谁/能做什么」时：先报名字（Quine / 奎因，全称 C4EAI Quine Agent），再按用户已启用的工具从上面列举核心能力（一行一项，不超过 8 项），不要空泛客套。",
         "",
         "",
         _runtime_env_block(enabled_tools),
         "## 规则",
+        "- **全程中文（含思考）**：最终回答与**内部思考/推理过程（reasoning、thinking）都必须用中文**书写，不要中英夹杂、不要整段用英文思考再翻回中文；"
+        "专业英文术语（如 catalyst、pollutant、photocatalysis、GraphRAG、DOI）保留原样即可，不必翻译。",
         "- 用中文回答，保留专业英文术语",
         "- 需要哪些能力时，直接使用对应工具（工具的能力与用法由各工具的接口说明给出）。",
         "- 图谱查询、联网搜索、文件解析、技能读取等，按用户问题需求选择合适的工具。",
@@ -313,7 +380,7 @@ async def _build_system_prompt(enabled_tools: list[str], loaded_skills: list[str
         "- **动手前先读**：没读过的文件不要提改法，也不要凭文件名猜内容。",
         "- **完成前必须验证，并如实汇报**：跑过的就说跑过，没跑的就明说没跑；不要把未完成说成完成，也不要把已验证通过的过度弱化成「可能可以」。",
         "- **长度定量**：工具调用之间的旁白不超过 25 个词；最终回答按任务复杂度写，不要为了短丢掉结论。",
-        "- **本对话已上传的文件**（系统提示末尾那段清单）：只要在清单里就直接 read_file(file_id=…) / read_image(file_id=…) 取内容，**不要因为消息变旧就说没有文件、也不要让用户重新上传**。",
+        "- **本对话已上传的文件**（系统提示末尾那段清单）：只要在清单里就直接 read_file(file_id=…) 取（图片也走 read_file，会以图像块返回像素），**不要因为消息变旧就说没有文件、也不要让用户重新上传**。",
         "- **调用工具后必须收敛**：每次工具执行完，先根据返回内容判断是否已足够回答用户问题。若已获得所需信息，立即生成最终回答并结束，**不要无意义地重复调用工具**。只有确实缺少关键信息时才继续调用**不同的、有必要的**工具。同一工具返回失败时，最多按需换用别的工具一次，不要反复重试同一工具。",
         "- 若某写操作工具返回包含 `__NEED_FULL__` 的错误，说明当前为询问模式、该操作超出权限范围。请明确告知用户：需要切换到完全访问模式后才能执行，并简要说明要做什么。",
         "- **产出文件一律写到 `outputs/` 目录**（相对路径，例如 `outputs/报告.pptx`）：用 write_file 写文本时路径就用 `outputs/xxx`；"
@@ -444,59 +511,9 @@ async def _build_file_manifest(file_ids: list) -> str:
     return ("[本对话已上传的文件] —— 这些文件在本会话里**一直可用**，"
             "不要因为消息变旧就说「没有文件」或者要求用户重新上传。\n"
             + "\n".join(rows) +
-            "\n取正文用 read_file(file_id=…)，取图片用 read_image(file_id=…)；清单里有的就不要问用户要。")
+            "\n取正文/取图片一律 read_file(file_id=…)（图片返回图像块，可直接看像素）；清单里有的就不要问用户要。")
 
 
-async def _prepare_file_context(file_ids: list, full_file_ids, images: list):
-    """统一构建附件上下文。
-
-    - full_file_ids（当轮上传的附件）→ 注入完整文本 / 图片转 base64 多模态
-    - 其余 file_ids（仅历史消息引用）→ 注入简短引用说明，模型需要时用 read_file(file_id=...) 自取，
-      避免大文档每轮重复注入撑爆上下文
-    - full_file_ids=None（旧前端未区分）→ 全部按完整注入，兼容旧行为
-
-    返回 (text_block, image_urls)：text_block 拼到当前用户输入之后；image_urls 附加到最后一条 user 消息。
-    """
-    # ⚠️ READ_FILE_MAX_CHARS 必须一并导入：函数内用它做正文截断上限，
-    #    漏导入时只要附件有可提取文本就抛 NameError → HTTP 500 → 前端"未能生成回答"
-    from tools.file_tools import (image_to_base64, _resolve_upload,
-                                  get_upload_text as get_file_text,
-                                  READ_FILE_MAX_CHARS)
-
-    file_ids = [f for f in (file_ids or []) if f]
-    full_set = None if full_file_ids is None else set(full_file_ids or [])
-    image_urls = list(images or [])
-    full_texts = []
-
-    for fid in file_ids:
-        _, meta, _ = _resolve_upload(fid)
-        name = (meta or {}).get("name") or fid
-        is_full = full_set is None or fid in full_set
-
-        data_url = await image_to_base64(fid)
-        if data_url:
-            if is_full:
-                image_urls.append(data_url)
-            # 历史图片不在这里重复列名：文件清单（系统提示）里已经有它的 file_id
-            continue
-
-        text = await get_file_text(fid)
-        if is_full and text:
-            if len(text) > READ_FILE_MAX_CHARS:
-                text = (text[:READ_FILE_MAX_CHARS] +
-                        f"\n…[文件 {name} 正文 {len(text)} 字符，已截断至 {READ_FILE_MAX_CHARS}；"
-                        "如需更多内容请用 read_file 指定 file_id 或分页读取]")
-            full_texts.append(f"[文件: {name}]\n{text}")
-        # 历史附件（非当轮）不在这里注入：改由 _build_file_manifest 进系统提示，
-        # 同一份信息不在用户消息尾部重复一遍（重复注入是纯浪费）。
-        elif text:
-            pass
-
-    parts = []
-    if full_texts:
-        parts.append("---\n用户上传了以下文件内容：\n" + "\n---\n".join(full_texts))
-    text_block = ("\n\n" + "\n\n".join(parts)) if parts else ""
-    return text_block, image_urls
 
 
 # ── 运行 Agent ────────────────────────────────────
@@ -511,7 +528,6 @@ async def run_agent(
     context_length: int = 10,
     branch_id: str = "",
     file_ids: list[str] = None,
-    full_file_ids: list[str] = None,
     permission_mode: str = "safe",
     user: str = "",
     timeouts: dict = None,
@@ -521,6 +537,8 @@ async def run_agent(
     _current_branch_id = branch_id or ""
     set_permission_mode(permission_mode or "safe")
     set_current_user(user or "")
+    from tools import work_areas as _wa
+    _wa.set_current_area(_wa.area_for_branch(user or "", branch_id or ""))
     set_image_emit("off")     # 阻塞式入口：工具结果不做图像提升，保守关掉
     set_current_model_config(model_config)
     set_subagent_options(subagent or {})
@@ -541,6 +559,10 @@ async def run_agent(
     _manifest = await _build_file_manifest(file_ids)
     if _manifest:
         system_prompt = system_prompt + "\n\n" + _manifest
+    system_prompt = system_prompt + "\n\n" + _LANG_DIRECTIVE
+    _wa_note = _work_area_note(user or "")
+    if _wa_note:
+        system_prompt = system_prompt + "\n\n" + _wa_note
 
     # 3. LLM
     llm = ChatOpenAI(
@@ -565,11 +587,6 @@ async def run_agent(
 
     # 5. Agent（记忆由前端 history 提供）
     agent = create_agent(model=llm, tools=tools, system_prompt=system_prompt)
-
-    # 6. 文件内容注入（当轮附件全文 / 历史附件引用说明）
-    file_block, _ = await _prepare_file_context(file_ids, full_file_ids, [])
-    if file_block:
-        user_input = user_input + file_block
 
     # 7. 上下文管理（保留最近轮次）
     messages = _build_context(history, user_input, context_length)
@@ -621,13 +638,13 @@ async def stream_agent(
     context_length: int = 10,
     branch_id: str = "",
     file_ids: list[str] = None,
-    full_file_ids: list[str] = None,
     permission_mode: str = "safe",
-    images: list[str] = None,
     max_rounds: int = 20,
     user: str = "",
     timeouts: dict = None,
     subagent: dict = None,
+    client_id: str = "",
+    skip_resume: bool = False,
 ):
     """真流式 Agent：直接调原始 OpenAI 兼容 API 流，逐 token 抓取。
 
@@ -652,11 +669,68 @@ async def stream_agent(
     _current_branch_id = branch_id or ""
     set_permission_mode(permission_mode or "safe")
     set_current_user(user or "")
+    from tools import work_areas as _wa
+    _wa.set_current_area(_wa.area_for_branch(user or "", branch_id or ""))
     set_image_emit("blocks")  # custom 引擎：工具返回内容块，由循环提升成 user 图像块
     set_current_model_config(model_config)
     set_subagent_options(subagent or {})
     _T = _resolve_timeouts(timeouts)
     clear_delegate_pending()
+
+    # ── 轮次账本（turn ledger）──────────────────────────────────
+    # 设计（用户 2026-10-02 定）：粒度 =「轮次 + 每步工具」，不记逐 token（丢一轮可接受）；
+    # 中断即停、**不自动续跑**；下次发消息时由 build_resume_note() 拼出进度摘要注入。
+    # 落盘时机：工具结果一到手（yield tool_result 之后）立刻写，不等轮末 ——
+    # 否则「第 N 步工具已跑完、结果还没进 messages 就被停止」这一步就丢了。
+    _turn_id = _turn_store.new_turn_id()
+    _turn_closed = False
+    _turn_n = [0]          # 工具步全局计数（旧实现直接用轮号 → 一轮多工具会重号）
+
+    def _turn_finish(status: str, partial: str = "") -> None:
+        """收尾本轮。停止/超时/正常/异常多个出口都可能调用，只允许先到的那次生效。"""
+        nonlocal _turn_closed
+        if _turn_closed:
+            return
+        _turn_closed = True
+        try:
+            _turn_store.finalize(user, branch_id, _turn_id, status, partial_text=partial or "")
+        except Exception as _e:      # 账本出问题绝不影响正常对话
+            print("[turn_store] finalize error:", _e)
+
+    def _turn_step(tool_name: str, tool_args, tool_result, round_no: int = 0) -> None:
+        """把一步工具结果写进账本（落全量，不是推给前端的 2k 截断版）。"""
+        _turn_n[0] += 1
+        try:
+            _turn_store.append_step(user, branch_id, _turn_id, _turn_n[0],
+                                    tool_name, tool_args, tool_result, round_no=round_no)
+        except Exception as _e:
+            print("[turn_store] append_step error:", _e)
+
+    def _turn_reasoning(round_no: int, text: str) -> None:
+        """本轮推理落盘（投影为 model_reasoning）。"""
+        try:
+            _turn_store.append_reasoning(user, branch_id, _turn_id, round_no, text)
+        except Exception as _e:
+            print("[turn_store] append_reasoning error:", _e)
+
+    def _turn_text(round_no: int, text: str) -> None:
+        """工具轮的中间正文落盘（投影时作 final 缺失的兜底）。"""
+        try:
+            _turn_store.append_text(user, branch_id, _turn_id, round_no, text)
+        except Exception as _e:
+            print("[turn_store] append_text error:", _e)
+
+    def _turn_notice(level: str, text: str, elapsed: int = 0) -> None:
+        try:
+            _turn_store.append_notice(user, branch_id, _turn_id, level, text, elapsed)
+        except Exception as _e:
+            print("[turn_store] append_notice error:", _e)
+
+    def _turn_final(text: str) -> None:
+        try:
+            _turn_store.append_final(user, branch_id, _turn_id, text)
+        except Exception as _e:
+            print("[turn_store] append_final error:", _e)
 
     # Neo4j（可选增强：连不上只降级摘掉图谱工具，绝不终止对话 —— 用户 2026-09-22 定）
     # 理由：用户常只想问普通问题/读附件；图谱没连上不该让整个对话失败。
@@ -677,6 +751,10 @@ async def stream_agent(
     _manifest = await _build_file_manifest(file_ids)
     if _manifest:
         system_prompt = system_prompt + "\n\n" + _manifest
+    system_prompt = system_prompt + "\n\n" + _LANG_DIRECTIVE
+    _wa_note = _work_area_note(user or "")
+    if _wa_note:
+        system_prompt = system_prompt + "\n\n" + _wa_note
 
     # Tools (LangChain StructuredTool)
     tools = get_tools(enabled_tools)
@@ -704,29 +782,25 @@ async def stream_agent(
             }
     openai_tools = [_tool_to_openai(t) for t in tools]
 
-    # Files injection（当轮附件全文 / 历史附件引用说明）
-    file_block, image_urls = await _prepare_file_context(file_ids, full_file_ids, images or [])
-    if file_block:
-        user_input = user_input + file_block
-
     # 上下文管理（保留最近轮次）
     ctx = _build_context(history, user_input, context_length)
+    # ── 上次中断的进度摘要：仅当上一轮是「被停止」时注入；必须在 begin_turn 之前读 ──
+    _resume_note = ""
+    try:
+        _resume_note = _turn_store.build_resume_note(user, branch_id, skip=skip_resume, current_input=user_input)
+    except Exception as _e:
+        print("[turn_store] resume note error:", _e)
     messages = [{"role": "system", "content": system_prompt}]
     for m in ctx:
         role = "user" if isinstance(m, HumanMessage) else "assistant"
         messages.append({"role": role, "content": m.content})
-
-    # 多模态：把图片(base64)附加到最后一条 user 消息
-    if image_urls:
-        # 找到最后一条 user 消息，把 content 扩展为 [text, image_url...]
-        for i in range(len(messages) - 1, -1, -1):
-            if messages[i]["role"] == "user":
-                base_content = messages[i]["content"]
-                vision_content = [{"type": "text", "text": base_content}]
-                for img in image_urls:
-                    vision_content.append({"type": "image_url", "image_url": {"url": img}})
-                messages[i]["content"] = vision_content
-                break
+    if _resume_note:
+        messages.append({"role": "user", "content": _resume_note})
+    # 开新轮（顺序关键：必须在 build_resume_note 之后，否则读到的是本轮自己）
+    try:
+        _turn_store.begin_turn(user, branch_id, _turn_id, user_input, client_id=client_id)
+    except Exception as _e:
+        print("[turn_store] begin_turn error:", _e)
 
     # LLM 端点
     model = model_config.get("model", "deepseek-chat")
@@ -739,7 +813,7 @@ async def stream_agent(
     else:
         endpoint = base + "/v1/chat/completions"
     temperature = model_config.get("temperature", 0.7)
-    max_tokens = model_config.get("max_tokens") or 8192
+    max_tokens = model_config.get("max_tokens") or 32768
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
@@ -759,14 +833,18 @@ async def stream_agent(
     _t_start = time.time()
     _nudged = _warned = False
     # A0：单轮内上下文预算（用 API 真实 usage 校准；触发线 = (窗口 - 输出预留) × 0.75）
+    # context_window = hard limit，仅用于计算触发线，绝不据此在本地报错/截断（真的超了交给模型端报错）
+    # context_budget = 前端可显式指定的清理触发线；0/缺失 → 自动 (窗口 − 输出预留) × 75%
     _ctx = ContextBudget(window_tokens=int(model_config.get("context_window") or DEFAULT_CONTEXT_WINDOW),
-                         max_output_tokens=max_tokens)
+                         max_output_tokens=max_tokens,
+                         trigger_override=int(model_config.get("context_budget") or 0))
     _overflow_retried = False
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(connect=20, read=300, write=60, pool=20)) as client:
             cap = max_rounds if max_rounds and max_rounds > 0 else 100000  # 0 = 无限
             for _step in range(1, cap + 1):  # 工具循环（步数可配，0=无限）
                 if generation_cancelled():
+                    _turn_finish("interrupted", all_content)
                     yield {"type": "stopped", "text": "已停止"}
                     return
 
@@ -777,6 +855,8 @@ async def stream_agent(
                     yield {"type": "timeout_notice", "level": "immediate",
                            "text": "已按你的「立即回答」注入催促：请它马上收尾出答案。",
                            "elapsed": int(time.time() - _t_start)}
+                    _turn_notice("immediate", "已按你的「立即回答」注入催促：请它马上收尾出答案。",
+                                 int(time.time() - _t_start))
 
                 # ── 三级超时保护：催促 → 警告 → 终止 ──
                 _elapsed = time.time() - _t_start
@@ -784,7 +864,11 @@ async def stream_agent(
                     yield {"type": "timeout_notice", "level": "abort",
                            "text": f"已达终止时限 {_T['abort']}s（实际 {int(_elapsed)}s），强制结束本轮生成。",
                            "elapsed": int(_elapsed)}
+                    _turn_notice("abort", f"已达终止时限 {_T['abort']}s（实际 {int(_elapsed)}s），强制结束本轮生成。",
+                                 int(_elapsed))
                     final_answer = all_content or final_answer
+                    _turn_final(final_answer)
+                    _turn_finish("timeout", final_answer)
                     yield {"type": "final",
                            "text": (final_answer + f"\n\n---\n⏱️ **超时终止**：本次生成用时超过 {_T['abort']} 秒上限，已强制结束（未完成的探索被中断）。"
                                                 f"可继续追问让它收尾，或在设置里调大「超时终止」时限。") if final_answer
@@ -797,6 +881,7 @@ async def stream_agent(
                         "不要再调用任何工具、不要继续探索；答案可以不完整，但必须马上输出。"})
                     yield {"type": "timeout_notice", "level": "warn",
                            "text": f"已超过警告时限 {_T['warn']}s，已注入「立即作答」提示。", "elapsed": int(_elapsed)}
+                    _turn_notice("warn", f"已超过警告时限 {_T['warn']}s，已注入「立即作答」提示。", int(_elapsed))
                 elif _T.get("nudge") and not _nudged and _elapsed >= _T["nudge"]:
                     _nudged = True
                     messages.append({"role": "user", "content":
@@ -804,6 +889,7 @@ async def stream_agent(
                         "把已得到的信息总结成答案；如仍有缺口，在答案中标注「未完成部分」。"})
                     yield {"type": "timeout_notice", "level": "nudge",
                            "text": f"已超过催促时限 {_T['nudge']}s，已注入「尽快收尾」提示。", "elapsed": int(_elapsed)}
+                    _turn_notice("nudge", f"已超过催促时限 {_T['nudge']}s，已注入「尽快收尾」提示。", int(_elapsed))
 
                 cur_reasoning = ""
                 cur_content = ""
@@ -841,12 +927,17 @@ async def stream_agent(
                         return
                     async for line in resp.aiter_lines():
                         if generation_cancelled():
+                            _turn_finish("interrupted", all_content + cur_content)
                             return
                         # 流式中途的硬终止（长回答不会因为循环顶部检查而失守）
                         if _T.get("abort") and (time.time() - _t_start) >= _T["abort"]:
                             yield {"type": "timeout_notice", "level": "abort",
                                    "text": f"已达终止时限 {_T['abort']}s，流式输出中断。",
                                    "elapsed": int(time.time() - _t_start)}
+                            _turn_notice("abort", f"已达终止时限 {_T['abort']}s，流式输出中断。",
+                                         int(time.time() - _t_start))
+                            _turn_final(all_content + cur_content)
+                            _turn_finish("timeout", all_content + cur_content)
                             yield {"type": "final",
                                    "text": (all_content + cur_content) +
                                            f"\n\n---\n⏱️ **超时终止**：生成超过 {_T['abort']} 秒上限，已中断本次输出。"}
@@ -889,6 +980,10 @@ async def stream_agent(
                                         slot["arguments"] += fn["arguments"]
 
                 all_content += cur_content
+                # ★ 账本：本轮推理落盘；工具轮的中间正文本轮也落一次（投影为 model_reasoning）
+                _turn_reasoning(_step, cur_reasoning)
+                if tool_acc:
+                    _turn_text(_step, cur_content)
 
                 # 输出被 max_tokens 截断且本轮还有工具调用没生成完：参数 JSON 必然不完整，
                 # 与其静默执行残缺参数（写入残缺笔记等），不如明确告知并终止
@@ -905,6 +1000,8 @@ async def stream_agent(
                     final_answer = _clean_final(answer_text)
                     if round_finish == "length" and final_answer:
                         final_answer += "\n\n> ⚠️ 回答因达到最大输出 Token 上限被截断，可点击「继续生成」续写。"
+                    _turn_final(final_answer or "Agent 未能生成回答")
+                    _turn_finish("complete", final_answer)
                     yield {"type": "final", "text": final_answer or "Agent 未能生成回答"}
                     # 保存历史 + 触发向量索引
                     try:
@@ -991,8 +1088,9 @@ async def stream_agent(
                                        "summary": _r.get("summary", ""), "error": _r.get("error", ""),
                                        "steps": _r.get("steps", []), "rounds": _r.get("rounds", 0),
                                        "seconds": _r.get("seconds", 0)}
+                            from agent.tools import slim_subagent_results as _slim
                             result = json.dumps({"status": "ok", "count": len(_sa_results),
-                                                 "results": _sa_results}, ensure_ascii=False)
+                                                 "results": _slim(_sa_results)}, ensure_ascii=False)
                     elif not args_ok:
                         result = json.dumps({"error": f"工具 {name} 的调用参数不是合法 JSON（可能被输出长度截断）。请重新调用并简化参数。"}, ensure_ascii=False)
                     else:
@@ -1019,7 +1117,10 @@ async def stream_agent(
                     elif isinstance(result, list):
                         result = json.dumps(result, ensure_ascii=False, default=str)
                     yield {"type": "tool_result", "name": name, "content": str(result)[:2000]}
+                    # ★ 落盘点：工具结果已在手 → 立刻按顺序写进账本（「第 N 步已跑完」就在这里保住）
+                    _turn_step(name, args, result, round_no=_step)
                     if generation_cancelled():
+                        _turn_finish("interrupted", all_content + cur_content)
                         yield {"type": "stopped", "text": "已停止"}
                         return
                     call_id = tc["id"] or f"call_{_step}_{len(assistant_tc)}"
@@ -1061,6 +1162,8 @@ async def stream_agent(
             yield {"type": "timeout_notice", "level": "cap",
                    "text": f"已达最大工具循环步数({cap})，改为基于已获得信息强制收尾。",
                    "elapsed": int(time.time() - _t_start)}
+            _turn_notice("cap", f"已达最大工具循环步数({cap})，改为基于已获得信息强制收尾。",
+                         int(time.time() - _t_start))
             forced = ""
             try:
                 _fmsg = messages + [{"role": "user", "content":
@@ -1075,6 +1178,7 @@ async def stream_agent(
                     if _fr.status_code == 200:
                         async for _line in _fr.aiter_lines():
                             if generation_cancelled():
+                                _turn_finish("interrupted", all_content + forced)
                                 break
                             if not _line or not _line.startswith("data: "):
                                 continue
@@ -1099,15 +1203,18 @@ async def stream_agent(
             if not forced.strip():
                 forced = all_content  # 兜底：把前面各轮已写出的正文还给用户，别让它凭空消失
             final_answer = _clean_final(forced)
+            _turn_final(final_answer)
             _tail = (f"\n\n---\n⏳ **步数上限**：本次工具循环达 {cap} 步上限，以上结论由已获得的"
                      "信息收敛而来，可能不完整。可继续追问让它接着做，"
                      "或在「设置」里调大「最大工具步数」。")
+            _turn_finish("complete", final_answer)
             yield {"type": "final", "text": (final_answer + _tail) if final_answer.strip() else (
                 f"已达最大工具循环步数({cap})，且没有可总结的内容。"
                 "可尝试精简问题或拆分任务。")}
 
     except Exception as e:
         import traceback
+        _turn_finish("error", all_content)
         yield {"type": "error", "message": str(e), "traceback": traceback.format_exc()}
 
 
@@ -1122,13 +1229,13 @@ async def stream_agent_lc(
     context_length: int = 10,
     branch_id: str = "",
     file_ids: list[str] = None,
-    full_file_ids: list[str] = None,
     permission_mode: str = "safe",
-    images: list[str] = None,
     max_rounds: int = 20,
     user: str = "",
     timeouts: dict = None,
     subagent: dict = None,
+    client_id: str = "",
+    skip_resume: bool = False,
 ):
     """LangChain 流式 Agent：create_agent + astream_events。
 
@@ -1142,6 +1249,8 @@ async def stream_agent_lc(
     _current_branch_id = branch_id or ""
     set_permission_mode(permission_mode or "safe")
     set_current_user(user or "")
+    from tools import work_areas as _wa
+    _wa.set_current_area(_wa.area_for_branch(user or "", branch_id or ""))
     # 图像通道：LangChain 原生支持 list[dict] 内容块经 ToolMessage 直达 wire
     # （tool 角色带 image_url，见 langchain_openai._sanitize_chat_completions_content），
     # 故默认 "blocks" 走原生；若所用端点拒收 tool 角色图像（400），
@@ -1154,6 +1263,48 @@ async def stream_agent_lc(
     _T = _resolve_timeouts(timeouts)
     clear_delegate_pending()
     _t_start = time.time()
+
+    # ── 轮次账本（turn ledger）—— 与 custom 引擎同款，两引擎行为一致 ──
+    _turn_id = _turn_store.new_turn_id()
+    _turn_closed = False
+    _turn_n = [0]          # 工具步计数（LangChain 事件流没有步号，自己数）
+    _lc_args = {}          # 工具名 → 最近一次调用参数（on_tool_end 拿不到 input）
+
+    def _turn_finish(status: str, partial: str = "") -> None:
+        nonlocal _turn_closed
+        if _turn_closed:
+            return
+        _turn_closed = True
+        try:
+            _turn_store.finalize(user, branch_id, _turn_id, status, partial_text=partial or "")
+        except Exception as _e:
+            print("[turn_store] finalize error:", _e)
+
+    def _turn_step(tool_name: str, tool_args, tool_result, round_no: int = 0) -> None:
+        _turn_n[0] += 1
+        try:
+            _turn_store.append_step(user, branch_id, _turn_id, _turn_n[0],
+                                    tool_name, tool_args, tool_result, round_no=round_no)
+        except Exception as _e:
+            print("[turn_store] append_step error:", _e)
+
+    def _turn_text(round_no: int, text: str) -> None:
+        try:
+            _turn_store.append_text(user, branch_id, _turn_id, round_no, text)
+        except Exception as _e:
+            print("[turn_store] append_text error:", _e)
+
+    def _turn_notice(level: str, text: str, elapsed: int = 0) -> None:
+        try:
+            _turn_store.append_notice(user, branch_id, _turn_id, level, text, elapsed)
+        except Exception as _e:
+            print("[turn_store] append_notice error:", _e)
+
+    def _turn_final(text: str) -> None:
+        try:
+            _turn_store.append_final(user, branch_id, _turn_id, text)
+        except Exception as _e:
+            print("[turn_store] append_final error:", _e)
 
     # Neo4j（可选增强：连不上只降级摘掉图谱工具，绝不终止对话 —— 用户 2026-09-22 定）
     # 理由：用户常只想问普通问题/读附件；图谱没连上不该让整个对话失败。
@@ -1173,6 +1324,10 @@ async def stream_agent_lc(
     _manifest = await _build_file_manifest(file_ids)
     if _manifest:
         system_prompt = system_prompt + "\n\n" + _manifest
+    system_prompt = system_prompt + "\n\n" + _LANG_DIRECTIVE
+    _wa_note = _work_area_note(user or "")
+    if _wa_note:
+        system_prompt = system_prompt + "\n\n" + _wa_note
 
     tools = get_tools(enabled_tools)
     if not tools:
@@ -1183,33 +1338,26 @@ async def stream_agent_lc(
     if (permission_mode or "safe") == "safe":
         tools = [t for t in tools if t.name != "skill_write"]
 
-    # 文件内容注入（当轮附件全文 / 历史附件引用说明）
-    file_block, image_urls = await _prepare_file_context(file_ids, full_file_ids, images or [])
-    if file_block:
-        user_input = user_input + file_block
-
     messages = _build_context(history, user_input, context_length)
-
-    # 多模态：file_ids 图片(auto转base64) + 显式 images 附加到最后一条 user 消息
-    if image_urls:
-        for i in range(len(messages) - 1, -1, -1):
-            if isinstance(messages[i], HumanMessage):
-                import copy
-                vision = copy.deepcopy(messages[i])
-                base_text = messages[i].content if isinstance(messages[i].content, str) else ""
-                parts = [{"type": "text", "text": base_text}]
-                for img in image_urls:
-                    parts.append({"type": "image_url", "image_url": {"url": img}})
-                vision.content = parts
-                messages[i] = vision
-                break
+    # 上次中断的进度摘要（须在 begin_turn 之前读，否则读到本轮自己）
+    _resume_note = ""
+    try:
+        _resume_note = _turn_store.build_resume_note(user, branch_id, skip=skip_resume, current_input=user_input)
+    except Exception as _e:
+        print("[turn_store] resume note error:", _e)
+    if _resume_note:
+        messages = list(messages) + [HumanMessage(content=_resume_note)]
+    try:
+        _turn_store.begin_turn(user, branch_id, _turn_id, user_input, client_id=client_id)
+    except Exception as _e:
+        print("[turn_store] begin_turn error:", _e)
 
     llm = ChatOpenAI(
         model=model_config.get("model", "deepseek-chat"),
         api_key=model_config.get("api_key") or "sk-noauth",  # 免密钥本地 llama-server 占位
         base_url=model_config.get("base_url", ""),
         temperature=model_config.get("temperature", 0.7),
-        max_tokens=model_config.get("max_tokens") or 8192,
+        max_tokens=model_config.get("max_tokens") or 32768,
     )
     agent = create_agent(model=llm, tools=tools, system_prompt=system_prompt)
 
@@ -1227,6 +1375,8 @@ async def stream_agent_lc(
     try:
         async for ev in agent.astream_events({"messages": messages}, version="v2", config=config):
             if generation_cancelled():
+                _turn_final(final_answer)
+                _turn_finish("interrupted", final_answer)
                 yield {"type": "stopped", "text": "已停止"}
                 return
             # 用户点「⚡立即回答」：LangChain 图内无法安全注入提示 → 直接用已有内容收尾作答
@@ -1234,6 +1384,9 @@ async def stream_agent_lc(
                 reset_immediate_answer()
                 yield {"type": "timeout_notice", "level": "immediate",
                        "text": "已按「立即回答」收尾（LangChain 引擎无法中途注入提示，直接用已有内容作答）。"}
+                _turn_notice("immediate", "已按「立即回答」收尾（LangChain 引擎无法中途注入提示，直接用已有内容作答）。")
+                _turn_final(final_answer)
+                _turn_finish("complete", final_answer)
                 yield {"type": "final",
                        "text": (final_answer.strip() + "\n\n---\n⚡ **立即回答**：按你的要求提前收尾，以上是已有内容。")
                                if final_answer.strip() else "⚡ **立即回答**：按你的要求收尾，但本轮还没有产出内容，可继续追问。"}
@@ -1243,6 +1396,10 @@ async def stream_agent_lc(
                 yield {"type": "timeout_notice", "level": "abort",
                        "text": f"已达终止时限 {_T['abort']}s，强制结束本轮生成（LangChain 引擎仅支持终止级）。",
                        "elapsed": int(time.time() - _t_start)}
+                _turn_notice("abort", f"已达终止时限 {_T['abort']}s，强制结束本轮生成（LangChain 引擎仅支持终止级）。",
+                             int(time.time() - _t_start))
+                _turn_final(final_answer)
+                _turn_finish("timeout", final_answer)
                 yield {"type": "final",
                        "text": (final_answer.strip() + f"\n\n---\n⏱️ **超时终止**：生成超过 {_T['abort']} 秒上限，已强制结束。")
                                if final_answer.strip() else f"⏱️ **超时终止**：超过 {_T['abort']} 秒上限且无产出，已强制结束。"}
@@ -1296,6 +1453,7 @@ async def stream_agent_lc(
                 except Exception:
                     inp_s = str(inp)
                 yield {"type": "tool_call", "name": name, "input": inp_s[:2000]}
+                _lc_args[name] = inp_s
                 if name == "delegate_task":
                     _delegate_runs.add(ev.get("run_id"))
             elif e == "on_tool_end":
@@ -1322,6 +1480,8 @@ async def stream_agent_lc(
                     except Exception:
                         out = str(out)
                 yield {"type": "tool_result", "name": name, "content": out[:2000]}
+                # ★ 落盘点：LC 事件同样在结果一到手就写账本
+                _turn_step(name, _lc_args.pop(name, None), out)
 
         if isinstance(final_answer, str):
             final_answer = final_answer.strip()
@@ -1331,6 +1491,7 @@ async def stream_agent_lc(
             # LangChain 引擎的 final_answer 是逐步累加各轮 AIMessage 正文的，
             # 走到这里说明确实一个字都没产出；措辞与 custom 引擎保持一致，
             # 告诉用户怎么办，而不是只报"失败了"。
+            _turn_finish("complete", "")
             yield {"type": "final", "text":
                    f"⏳ **步数上限**：本次工具循环达 {cap} 步上限，仍未收敛出可展示的正文。"
                    "可继续追问让它基于已有信息作答，或在「设置」里调大「最大工具步数」；"
@@ -1338,6 +1499,8 @@ async def stream_agent_lc(
         else:
             if saw_length:
                 final_answer += "\n\n> ⚠️ 检测到模型输出曾因达到最大输出 Token 上限被截断；若结果不完整，请在设置中调大 Token 或让 AI 分多次写入。"
+            _turn_final(final_answer)
+            _turn_finish("complete", final_answer)
             yield {"type": "final", "text": final_answer}
         # 保存历史 + 触发向量索引
         try:
@@ -1348,4 +1511,5 @@ async def stream_agent_lc(
             print("[lc-stream] save history error:", e)
     except Exception as e:
         import traceback
+        _turn_finish("error", final_answer if isinstance(final_answer, str) else "")
         yield {"type": "error", "message": f"LangChain Agent 执行失败: {str(e)}", "traceback": traceback.format_exc()}

@@ -919,7 +919,7 @@
                 `;
                 historyList.appendChild(emptyState);
                 // 重新绑定事件
-                document.getElementById('new-chat-btn-empty').addEventListener('click', createNewConversation);
+                document.getElementById('new-chat-btn-empty').addEventListener('click', function () { openWorkAreaPicker(document.getElementById('new-chat-btn-empty')); });
                 return;
             }
 
@@ -953,7 +953,32 @@
                 });
             }
 
-            for (const branchId of groupKeys) {
+            // ── 工作区域分组（用户 2026-10-03）：对话按 project_id 归组，组间插分隔头；默认工作区域在最后 ──
+            const _waList = (state.workAreas && state.workAreas.length) ? state.workAreas : [{ id: 'default', name: '默认工作区域' }];
+            const _waName = {};
+            _waList.forEach(function (a) { _waName[a.id] = a.name; });
+            const _projOrder = _waList.filter(function (a) { return a.id !== 'default'; }).map(function (a) { return a.id; });
+            _projOrder.push('default');
+            const _buckets = {};
+            groupKeys.forEach(function (k) {
+                const p = ((state.branches[k] || {}).project_id) || 'default';
+                if (_projOrder.indexOf(p) === -1) _projOrder.push(p);
+                (_buckets[p] = _buckets[p] || []).push(k);
+            });
+            const _orderedKeys = [];
+            _projOrder.forEach(function (p) { (_buckets[p] || []).forEach(function (k) { _orderedKeys.push(k); }); });
+
+            let _lastProj = null;
+            for (const branchId of _orderedKeys) {
+                const _pid = ((state.branches[branchId] || {}).project_id) || 'default';
+                if (_pid !== _lastProj) {
+                    _lastProj = _pid;
+                    const pd = document.createElement('div');
+                    pd.className = 'project-divider';
+                    pd.innerHTML = '<span class="pd-icon">📁</span><span class="pd-name"></span>';
+                    pd.querySelector('.pd-name').textContent = _waName[_pid] || '工作区域';
+                    historyList.appendChild(pd);
+                }
                 const group = groupedByBranch[branchId];
 
                 const groupEl = document.createElement('div');

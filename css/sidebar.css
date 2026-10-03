@@ -1087,3 +1087,28 @@
    用户把分隔条拖过"对话区容忍最小宽度"→ 对话区整个让位，只留对话管理（条目 + 笔记）。
    宽度归 JS（js/sidebar.js 的 _sbEnterFocus/_sbExitFocus），这里只负责把它藏掉。 */
 .chat-section.focus-manage .chat-main { display: none; }
+
+/* ── 工作区域（新建对话选择器 + 对话分组分隔头） 用户 2026-10-03 ── */
+.wa-popover{position:fixed;z-index:10000;width:300px;max-height:380px;overflow-y:auto;background:var(--card-bg);border:1px solid var(--border-color);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:8px;font-size:.85rem;color:var(--dark)}
+.wa-pop-title{font-weight:600;padding:4px 8px 8px}
+.wa-item{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;cursor:pointer}
+.wa-item:hover{background:var(--primary-soft)}
+.wa-item-icon{flex:none;opacity:.75}
+.wa-item-name{flex:none;font-weight:500}
+.wa-item-path{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gray);font-size:.75rem}
+.wa-loading{color:var(--gray);justify-content:center}
+.wa-add{border-top:1px solid var(--border-color);margin-top:4px;color:var(--primary)}
+.wa-form{padding:6px 8px;display:flex;flex-direction:column;gap:6px}
+.wa-form-title{font-weight:600;margin-bottom:2px}
+.wa-form label{font-size:.75rem;color:var(--gray)}
+.wa-form input[type=text]{width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--border-color);border-radius:7px;background:var(--card-bg);color:var(--dark);font-size:.82rem}
+.wa-f-row{display:flex;gap:6px}
+.wa-f-row input{flex:1;min-width:0}
+.wa-f-browse{flex:none;padding:6px 10px;border:1px solid var(--border-color);border-radius:7px;background:var(--primary-soft);cursor:pointer;font-size:.8rem;color:var(--dark)}
+.wa-f-browse:hover{border-color:var(--primary)}
+.wa-f-actions{display:flex;gap:8px;margin-top:4px}
+.wa-f-actions button{padding:7px 12px;border-radius:8px;border:none;cursor:pointer;font-size:.85rem}
+#wa-f-ok{background:var(--primary);color:#fff;flex:1}
+#wa-f-cancel{background:var(--primary-soft);color:var(--dark)}
+.wa-f-err{color:var(--error);font-size:.78rem;min-height:1em}
+.project-divider{display:flex;align-items:center;gap:6px;padding:10px 8px 4px;font-size:.78rem;font-weight:600;color:var(--gray);user-select:none}

@@ -32,7 +32,7 @@
     <link rel="stylesheet" href="css/variables.css?v=7">
     <link rel="stylesheet" href="css/reset.css?v=4">
     <link rel="stylesheet" href="css/layout.css?v=42">
-    <link rel="stylesheet" href="css/sidebar.css?v=15">
+    <link rel="stylesheet" href="css/sidebar.css?v=18">
     <link rel="stylesheet" href="css/messages.css?v=7">
     <link rel="stylesheet" href="css/input.css?v=22">
     <link rel="stylesheet" href="css/modals.css?v=6">
@@ -340,6 +340,14 @@
                                                                 <input type="checkbox" id="subagent-enabled" checked>
                                                                 <span class="config-option-label">启用子智能体
                                                                     <span class="config-option-desc">主智能体可派子智能体并行处理独立子任务（需在下方工具区勾选 delegate_task）</span>
+                                                                </span>
+                                                            </label>
+                                                            <label class="config-option" style="margin-bottom:.5rem;">
+                                                                <input type="checkbox" id="subagent-feed-steps">
+                                                                <span class="config-option-label">回喂子智能体完整步骤
+                                                                    <span class="config-option-desc">默认关闭。关闭时主智能体只收到子智能体的结论摘要（含调用过的工具名与步骤数），
+                                                                    不收到子智能体读到的正文 —— 这是防上下文爆炸的关键；
+                                                                    前端仍可完整看到子智能体过程。仅在需要主智能体逐字复核子智能体读到什么时才打开。</span>
                                                                 </span>
                                                             </label>
                                                             <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem .6rem;">
@@ -850,9 +858,9 @@
     <script src="js/image_tools.js?v=3"></script>
     <script src="js/file_preview.js?v=12"></script>
     <script src="js/auth.js?v=24"></script>
-    <script src="js/api.js?v=15"></script>
+    <script src="js/api.js?v=17"></script>
     <script src="js/database.js?v=21"></script>
-    <script src="js/sidebar.js?v=36"></script>
+    <script src="js/sidebar.js?v=37"></script>
     <script src="js/branching.js?v=20"></script>
     <script src="js/provider.js?v=9"></script>
     <script src="js/messages.js?v=15"></script>
