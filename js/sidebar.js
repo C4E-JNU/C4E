@@ -3,10 +3,12 @@
         //   · 拖分隔条 = 用户主动要更多侧栏 → 拖过"对话区容忍最小"就整个让位（专注对话管理）
         //   · 窗口变小 = 用户没说要藏对话  → 侧栏让位（自动收起），对话区保住
         var _SB_KEY = 'c4eai-sidebar-width';   // localStorage: 历史侧栏宽度(px)
-        var _SB_DEFAULT = 300;
-        var _SB_MIN = 240;
-        var _CHAT_MIN = 480;                   // 对话区最小可呼吸宽度（= variables.css --chat-min；低于它侧栏让位，宽度驱动）
+        var _SB_DEFAULT = 260;
+        var _SB_MIN = 220;
+        var _CHAT_MIN = 420;                   // 对话区最小可呼吸宽度（= variables.css --chat-min；低于它侧栏让位，宽度驱动）
         var _SB_FOCUS_SLACK = 24;              // 拖过分界多少像素才算"我要全屏看对话管理"（防边界抖）
+        // ★ 紧凑化改版一次性对齐：老默认 300（用户没拖过 = 存档恰为旧默认）直接迁到新默认 260
+        try { if (localStorage.getItem(_SB_KEY) === '300') localStorage.setItem(_SB_KEY, '260'); } catch (e) {}
 
         // ★ 宽度只有两个来源：用户意图（localStorage 存档）＋ 客观上限（_sbMaxWidth）。
         //   不再各存一份"进专注前 / 被自动收起前"的宽度 —— 那是从渲染结果量出来的数：
