@@ -31,10 +31,13 @@ SUBAGENT_TOOL_ALLOWLIST = {
     "mineru_parse",
 }
 
+# 默认只读白名单之外、但**档案里显式写了才给**的只读工具（文件定位类，仍属只读）
+SUBAGENT_EXTRA_READ_TOOLS = {"find_files", "search_files", "list_outputs"}
+
 SUBAGENT_MAX_ROUNDS_DEFAULT = 4
 SUBAGENT_TIMEOUT_DEFAULT = 300
 SUBAGENT_MAX_PARALLEL = 2                 # 默认并发上限（设置里可调）
-SUBAGENT_TIMEOUTS_DEFAULT = {"nudge": 60, "warn": 150, "abort": 300}   # 子智能体三级超时（秒）
+SUBAGENT_TIMEOUTS_DEFAULT = {"abort": 300}   # 子智能体超时保护（2026-10-13 起只剩强制中断一级，秒）
 SUBAGENT_MAX_TASKS = 4                    # 单次最多派发子任务数（设置里可调）
 
 # 专有子智能体角色预设：按任务类型注入领域系统提示（delegate_task 的 tasks[].role）
@@ -68,7 +71,8 @@ _SUBAGENT_SYSTEM = (
     "2. 完成后必须给出一段**结构化结论摘要**：结论要点 + 关键数据 + 来源（如有）。\n"
     "3. 摘要要能独立阅读：不要写“如上”“见上文”这类依赖上下文的话。\n"
     "4. 不要向用户提问；信息不足时，就在摘要里写明“信息不足：<缺什么>”。\n"
-    "5. 你无法派发子智能体，也不要尝试写文件或执行终端命令。"
+    "5. 你无法派发子智能体，也不要尝试写文件或执行终端命令。\n"
+    "6. **语言跟随用户**：结论摘要与**内部思考/推理（reasoning、thinking）应尽量使用用户消息所用的语言**；专业英文术语保留原样。"
 )
 
 
@@ -100,11 +104,17 @@ async def run_subagent(goal: str, context: str = "", tools: list[str] | None = N
                        max_rounds: int = SUBAGENT_MAX_ROUNDS_DEFAULT,
                        timeout: int = SUBAGENT_TIMEOUT_DEFAULT,
                        timeouts: dict | None = None,
-                       emit=None, index: int = 0, role: str = "") -> dict:
-    """跑一个子智能体。返回 {ok, summary, steps[], rounds, seconds} 或 {ok: False, error}。
+                       emit=None, index: int = 0, role: str = "",
+                       profile: str = "") -> dict:
+    """跑一个子智能体。返回 {ok, summary, steps[], rounds, seconds, profile, status} 或失败态。
 
-    三级超时（催促 / 警告 / 终止）：到催促时注入"尽快收尾"，到警告时注入"立即给结论"，
-    到终止时中断并返回已完成的部分（绝不卡死）。
+    profile：子智能体档案名（backend/agents/<name>/agent.json）。档案自己挂
+    技能目录 / 工具目录 / 运行上下文参数 / 模型参数，**不与主智能体共用**。
+    role 是老写法（内置档案 contradiction/extraction/verify），仍兼容：
+    传了 profile 以 profile 为准，否则用 role。
+
+    超时保护（2026-10-13 起只剩一级）：到终止时限时中断并返回已完成的部分（绝不卡死）。
+    原催促/警告两级已删——断点续跑让中断后可继续，多级递进失去意义。
 
     emit: 可选回调 emit(index, step_dict)。提供时会在每个步骤发生时实时推送，
           供上层把子智能体过程流式转发给前端（不改变最终返回值）。
@@ -112,39 +122,84 @@ async def run_subagent(goal: str, context: str = "", tools: list[str] | None = N
     from agent.agent import generation_cancelled, get_current_model_config
     from agent.tools import tools_registry
     from tools.file_tools import split_image_result as _split_img
+    from agent import profiles as _pf
 
     t0 = time.time()
+
+    # ── 档案：独立技能 / 工具 / 参数 / 模型 ──────────────
+    _pname = (profile or role or "").strip()
+    _prof = _pf.get_profile(_pname)
+    if _prof is None:
+        return {"ok": False, "error": f"未知子智能体档案「{_pname}」（可用：见 /api/agents/profiles）",
+                "goal": goal, "steps": [], "profile": _pname}
+    _prof_name = _pname or "__generic__"
+    _pp = _prof.get("params") or {}
+    _tok = _pf.set_current_profile(_prof)      # 技能根 / 技能白名单 / 读上限 由此生效
+    proc_max_chars = int(_pp.get("tool_result_max_chars") or 4000)
+    preview_chars = int(_pp.get("tool_result_preview_chars") or 2000)
+    ctx_max_chars = int(_pp.get("user_context_max_chars") or 6000)
+    # 显式 max_images=0 = 该档案声明「不读图」：图片一律不内联（旧写法 `or 3` 会把 0 吃掉）
+    _mi = _pp.get("max_images")
+    max_images = 3 if _mi is None else max(0, int(_mi))
+
     _T = dict(SUBAGENT_TIMEOUTS_DEFAULT)
-    if isinstance(timeouts, dict):
-        for k in ("nudge", "warn", "abort"):
-            if timeouts.get(k) is not None:
-                try:
-                    _T[k] = max(0, int(timeouts[k]))
-                except Exception:
-                    pass
+    if isinstance(timeouts, dict) and timeouts.get("abort") is not None:
+        try:
+            _T["abort"] = max(0, int(timeouts["abort"]))
+        except Exception:
+            pass
     if timeout and not (timeouts or {}).get("abort"):
         _T["abort"] = int(timeout)          # 兼容旧的单一 timeout（等价于终止级）
-    _nudged = _warned = False
+    # 档案里显式写了的时限/轮次 → 覆盖（子智能体有自己的一套；2026-10-13 起只剩 abort 一级）
+    if _pp.get("abort"):
+        try:
+            _T["abort"] = max(0, int(_pp["abort"]))
+        except Exception:
+            pass
+    if _pp.get("timeout"):
+        try:
+            _T["abort"] = max(0, int(_pp["timeout"]))
+        except Exception:
+            pass
+    if _pp.get("max_rounds"):
+        try:
+            max_rounds = int(_pp["max_rounds"])
+        except Exception:
+            pass
 
-    cfg = get_current_model_config() or {}
+    # 模型：档案 model 段覆盖主控当前模型（可只覆盖其中几项，未写的沿用主控）
+    cfg = dict(get_current_model_config() or {})
+    for k in ("model", "base_url", "api_key", "temperature", "max_tokens"):
+        v = (_prof.get("model") or {}).get(k)
+        if v not in (None, ""):
+            cfg[k] = v
     if not cfg.get("model"):
-        return {"ok": False, "error": "子智能体无法启动：缺少模型配置", "goal": goal, "steps": []}
+        return {"ok": False, "error": "子智能体无法启动：缺少模型配置", "goal": goal,
+                "steps": [], "profile": _prof_name}
     endpoint = _endpoint(cfg.get("base_url", ""))
     if not endpoint:
-        return {"ok": False, "error": "子智能体无法启动：模型 base_url 为空", "goal": goal, "steps": []}
+        return {"ok": False, "error": "子智能体无法启动：模型 base_url 为空", "goal": goal,
+                "steps": [], "profile": _prof_name}
 
-    # 工具子集：白名单 ∩ 实际注册 ∩ 调用方指定
-    want = [n for n in (tools or list(SUBAGENT_TOOL_ALLOWLIST))]
-    names = [n for n in want if n in SUBAGENT_TOOL_ALLOWLIST and n in tools_registry]
-    tool_objs = [tools_registry[n] for n in names]
-    tool_map = {t.name: t for t in tool_objs}
-    openai_tools = [_tool_schema(t) for t in tool_objs]
+    # 工具：该档案的私有注册表（全局只读白名单 ∩ 档案白名单 + agents/<name>/tools/）
+    _reg = _pf.build_registry(_prof, tools_registry, global_allowlist=SUBAGENT_TOOL_ALLOWLIST,
+                              extra_allowlist=SUBAGENT_EXTRA_READ_TOOLS)
+    if tools:
+        _want = set(tools)
+        _priv = {getattr(t, "name", "") for t in _pf.load_agent_tools(_prof)}
+        _reg = {n: t for n, t in _reg.items() if n in _want or n in _priv}
+    tool_map = dict(_reg)
+    openai_tools = [_tool_schema(t) for t in _reg.values()]
 
+    _sys = _SUBAGENT_SYSTEM.format(rounds_hint=("建议 ≤ %d 轮" % int(max_rounds)
+                                               if int(max_rounds) > 0 else "轮次不限，按需取数即可"))
+    _sys += SUBAGENT_ROLE_PROMPTS.get(role, "")
+    _sys += ("\n" + _pf.system_prompt_for(_prof)) if _pf.system_prompt_for(_prof) else ""
+    if _prof.get("status_line", True):
+        _sys += _pf.STATUS_HINT
     messages = [
-        {"role": "system", "content": _SUBAGENT_SYSTEM.format(rounds_hint=("建议 ≤ %d 轮" % int(max_rounds)
-                                                    if int(max_rounds) > 0 else "轮次不限，按需取数即可"))
-         + SUBAGENT_ROLE_PROMPTS.get(role, "")},
-        {"role": "user", "content": f"【子任务】{goal}\n\n【背景/上下文】\n{(context or '（无额外上下文）')[:6000]}"},
+        {"role": "system", "content": _sys},
+        {"role": "user", "content": f"【子任务】{goal}\n\n【背景/上下文】\n{(context or '（无额外上下文）')[:ctx_max_chars]}"},
     ]
     headers = {"Content-Type": "application/json"}
     if cfg.get("api_key"):
@@ -172,7 +227,7 @@ async def run_subagent(goal: str, context: str = "", tools: list[str] | None = N
                 pass
 
     async def _loop() -> None:
-        nonlocal summary, rounds_used, _nudged, _warned
+        nonlocal summary, rounds_used
         _pending_images: list = []       # image_read：待附加的图片 dataURL
         async with httpx.AsyncClient(timeout=httpx.Timeout(connect=20, read=180, write=60, pool=20)) as client:
             _cap = int(max_rounds) if int(max_rounds) > 0 else 100000   # 0 = 无限（用户 2026-09-27：不要锁死 20）
@@ -180,31 +235,20 @@ async def run_subagent(goal: str, context: str = "", tools: list[str] | None = N
                 if generation_cancelled():
                     _push({"type": "notice", "text": "子智能体被用户停止"})
                     return
-                # ── 子智能体三级超时：催促 → 警告 → 终止 ──
+                # ── 子智能体超时保护：只剩一级强制中断（2026-10-13 删催促/警告）──
                 _el = time.time() - t0
                 if _T.get("abort") and _el >= _T["abort"]:
                     _push({"type": "notice",
                            "text": f"已达终止时限 {_T['abort']}s（实际 {int(_el)}s），子智能体被中断。"})
                     summary = summary or f"（子任务超时中断：超过 {_T['abort']}s）"
                     return
-                if _T.get("warn") and not _warned and _el >= _T["warn"]:
-                    _warned = True
-                    _push({"type": "notice", "text": f"超时警告：已用 {int(_el)}s，注入「立即给结论」提示。"})
-                    messages.append({"role": "user", "content":
-                        "[系统·超时警告] 立即用你已获得的信息给出结论摘要，不要再调用任何工具。"})
-                elif _T.get("nudge") and not _nudged and _el >= _T["nudge"]:
-                    _nudged = True
-                    _push({"type": "notice", "text": f"超时催促：已用 {int(_el)}s，注入「尽快收尾」提示。"})
-                    messages.append({"role": "user", "content":
-                        "[系统·超时催促] 尽快收尾：停止进一步探索和多余的工具调用，"
-                        "把已得到的信息总结成结论摘要；有缺口就在摘要里标注「信息不足：…」。"})
                 rounds_used = rnd
                 _mark({"type": "round", "round": rnd})
                 payload = {
                     "model": cfg.get("model"),
                     "messages": messages,
                     "temperature": cfg.get("temperature", 0.3),
-                    "max_tokens": cfg.get("max_tokens") or 8192,
+                    "max_tokens": cfg.get("max_tokens") or 32768,
                 }
                 if openai_tools:
                     payload["tools"] = openai_tools
@@ -244,17 +288,23 @@ async def run_subagent(goal: str, context: str = "", tools: list[str] | None = N
                     # ── image_read：先抽出图片，再把正文换成桩（必须在 4000 截断之前）──
                     _img_u, _img_txt = _split_img(result)
                     if _img_u:
-                        if len(_pending_images) < 3:
+                        if max_images > 0 and len(_pending_images) < max_images:
                             _pending_images.append(_img_u)
+                            _img_note = "图片已作为图像附加，可直接查看像素"
+                        else:
+                            _img_note = ("本次未内联图片：当前档案 max_images=%d（声明为非读图档案）。"
+                                         "不要试图靠读 base64 文本猜图内容——需要图面数据请改由 "
+                                         "fenton-image / fenton-verifier 档案处理，或读归档的 FigureN.txt 图注文字。"
+                                         % max_images)
                         result = json.dumps({"ok": True, "mode": "image",
-                                             "note": "图片已作为图像附加，可直接查看像素",
+                                             "note": _img_note,
                                              "meta": _img_txt},
                                             ensure_ascii=False)
                     elif isinstance(result, list):
                         result = json.dumps(result, ensure_ascii=False, default=str)
-                    _push({"type": "tool_result", "name": name, "content": str(result)[:2000]})
+                    _push({"type": "tool_result", "name": name, "content": str(result)[:preview_chars]})
                     messages.append({"role": "tool", "tool_call_id": tc.get("id") or name,
-                                     "content": str(result)[:4000]})
+                                     "content": str(result)[:proc_max_chars]})
                 if _pending_images:
                     _vis = [{"type": "text", "text": "[系统] 上一步工具返回的图片如下，可直接读取像素："}]
                     _vis += [{"type": "image_url", "image_url": {"url": _u}} for _u in _pending_images]
@@ -267,16 +317,28 @@ async def run_subagent(goal: str, context: str = "", tools: list[str] | None = N
         await asyncio.wait_for(_loop(), timeout=max(10, _hard))
     except asyncio.TimeoutError:
         seconds = round(time.time() - t0, 1)
-        return {"ok": False, "error": f"子任务超时（{_hard}s）", "goal": goal,
-                "steps": steps, "rounds": rounds_used, "seconds": seconds}
+        _pf.reset_current_profile(_tok)
+        return {"ok": False, "error": f"子任务超时（{_hard}s）", "goal": goal, "profile": _prof_name,
+                "status": "failed", "steps": steps, "rounds": rounds_used, "seconds": seconds}
     except Exception as e:
-        return {"ok": False, "error": f"子智能体异常：{e}", "goal": goal,
-                "steps": steps, "rounds": rounds_used, "seconds": round(time.time() - t0, 1)}
+        _pf.reset_current_profile(_tok)
+        return {"ok": False, "error": f"子智能体异常：{e}", "goal": goal, "profile": _prof_name,
+                "status": "failed", "steps": steps, "rounds": rounds_used,
+                "seconds": round(time.time() - t0, 1)}
 
     if not summary:
         summary = "（子智能体未产出结论）"
-    return {"ok": True, "summary": summary, "goal": goal, "context": context,
-            "steps": steps, "rounds": rounds_used, "seconds": round(time.time() - t0, 1)}
+    # 结论状态行（档案 status_line）→ 结构化字段，供主控评估「要不要重派/换档案重派」
+    _clean, _meta = _pf.parse_status(summary)
+    out = {"ok": True, "summary": _clean or summary, "goal": goal, "context": context,
+           "steps": steps, "rounds": rounds_used, "seconds": round(time.time() - t0, 1),
+           "profile": _prof_name}
+    out.update(_meta)
+    if _meta.get("status") == "failed":
+        out["ok"] = False
+        out["error"] = _meta.get("missing") or "子智能体自报 failed"
+    _pf.reset_current_profile(_tok)
+    return out
 
 
 async def run_subagents_parallel(tasks: list[dict], max_rounds: int = SUBAGENT_MAX_ROUNDS_DEFAULT,
@@ -294,10 +356,14 @@ async def run_subagents_parallel(tasks: list[dict], max_rounds: int = SUBAGENT_M
         async with sem:
             res = await run_subagent(t.get("goal", ""), t.get("context", ""),
                                      t.get("tools"), max_rounds, timeout, timeouts,
-                                     emit=emit, index=i, role=str(t.get("role", "") or ""))
+                                     emit=emit, index=i,
+                                     role=str(t.get("role", "") or ""),
+                                     profile=str(t.get("profile", "") or ""))
             res["index"] = i
             if not res.get("goal"):
                 res["goal"] = t.get("goal", "")
+            if not res.get("profile"):
+                res["profile"] = str(t.get("profile", "") or "")
             return res
 
     results = await asyncio.gather(*[_one(i, t) for i, t in enumerate(tasks)],

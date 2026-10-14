@@ -1,0 +1,24 @@
+{
+  "title": "Fenton 成品终检员",
+  "description": "多智能体 Fenton 挖掘步骤九：提取完成后换独立主体复核成品（字段合规 / 值-源一致 / 曲线合理 / 账目完整 / 图谱预检），产出 08_audit.json。五类查法、抽样纪律与回报 schema 全部内联在 system.md、不挂技能。只读不写，修复决定权在主控。",
+  "skills": [],
+  "tools": [
+    "read_file",
+    "list_files",
+    "find_files",
+    "search_files",
+    "graph_query"
+  ],
+  "params": {
+    "max_rounds": 26,
+    "timeout": 1800,
+    "nudge": 300,
+    "warn": 900,
+    "abort": 1800,
+    "read_file_max_chars": 100000,
+    "tool_result_max_chars": 120000,
+    "tool_result_preview_chars": 2500,
+    "user_context_max_chars": 10000,
+    "max_images": 0
+  }
+}

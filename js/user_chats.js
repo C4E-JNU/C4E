@@ -34,13 +34,23 @@ var _chatsLastPush = '';                     // 上次成功推送的报文，�
 var _chatsMeta = {};                         // id → 指纹（判断哪个对话真的变了）
 var _chatsDeleted = {};                      // 本地墓碑镜像
 
+// ── 多端实时同看（用户 2026-10-03：后端接管消息树）─────────────────
+// 每个页面一个随机 client_id：后端把生成事件广播给该账号所有页面（含发起端），
+// 前端用它滤掉「自己发出去的回声」。
+var _ucClientId = 'c' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+var _ucTreeMode = 'off';      // on = 生成内容由后端落盘（前端不再回推该对话）
+var _ucManaged = {};          // id → 1：已有账本、由后端投影维护的对话
+var _ucPendingSync = false;   // 生成中收到的同步通知：结束后补做（旧实现直接丢弃）
+
 // ── 指纹：判断某个对话这次是否真的变了（变了才打新时间戳）──────
 // 不靠"调用 saveBranches 就认为变了"——切换对话、重渲染也会调它，
 // 那会让没变的对话也拿到新时间戳，从而在合并时错误地"赢过"别的设备。
 function _branchFp(b) {
     if (!b) return '';
+    // ★ 2026-09-30：去掉 isTemporary 项（该字段已废弃，全项目再无「临时对话」概念）。
+    //   指纹只用于判断「内容是否真的变了」，不参与任何删除判定。
     return [(b.messages || []).length, b.name || '', (b.notes || []).length,
-            b.isTemporary ? 1 : 0, b.hasContent ? 1 : 0].join('|');
+            b.hasContent ? 1 : 0].join('|');
 }
 
 function _stampChanged() {
@@ -64,6 +74,20 @@ function _stampChanged() {
     });
 }
 
+// ── 墓碑取值（★ 类型防护，2026-09-30 修）─────────────────────
+// 墓碑的值**约定是 ISO 时间戳字符串**，但 2026-09-29 那次「xhq1 的 30 个对话迁移到 xhq2」
+// 留下的是迁移记录对象 {id, name, deletedAt, movedTo}。直接 String(对象) → "[object Object]"，
+// 它的字符序**大于任何 ISO 时间戳**（'[' = 0x5B > '2' = 0x32），于是
+//     updatedAt <= "[object Object]"  恒为 true
+// → 任何拿到这些 id 的对话都被当成「更旧的副本」删掉。叠加计数器退回（活集合最大号
+//   从 88 掉到 59 → 新建必然是 branch-60）→ **每次新建对话都被秒删、且永远建不成**。
+// 这里统一取值：对象取 deletedAt，取不到则返回空串（空串 = 不作墓碑，绝不误删）。
+function _tombTs(v) {
+    if (v == null) return '';
+    if (typeof v === 'object') return String(v.deletedAt || '');
+    return String(v);
+}
+
 // ── 合并（唯一实现，启动 hydrate 与线上同步共用）──────────────
 // 返回 {branches, deleted, added}；added = 本地有、后端没有的对话数（>0 说明要推上去）
 function _mergeBranchSets(localBranches, localDeleted, remote) {
@@ -72,12 +96,12 @@ function _mergeBranchSets(localBranches, localDeleted, remote) {
     var br = {}, dl = {}, added = 0;
 
     Object.keys(localBranches || {}).forEach(function (id) { br[id] = localBranches[id]; });
-    Object.keys(localDeleted || {}).forEach(function (id) { dl[id] = localDeleted[id]; });
+    Object.keys(localDeleted || {}).forEach(function (id) { dl[id] = _tombTs(localDeleted[id]); });
 
     // 后端墓碑 → 删掉本地那份（除非本地那份更新，即"删后又改")
     Object.keys(rd).forEach(function (id) {
-        var ts = String(rd[id] || '');
-        if (br[id] && String(br[id].updatedAt || '') <= ts) delete br[id];
+        var ts = _tombTs(rd[id]);
+        if (ts && br[id] && String(br[id].updatedAt || '') <= ts) delete br[id];
         if (ts > String(dl[id] || '')) dl[id] = ts;
     });
     // 后端对话 → 合并（同 id 取 updatedAt 新的；本地没有的直接收下）
@@ -100,6 +124,16 @@ function _mergeBranchSets(localBranches, localDeleted, remote) {
     Object.keys(dl).forEach(function (id) {
         var b = br[id];
         if (b && String(b.updatedAt || '') > String(dl[id] || '')) delete dl[id];
+    });
+
+    // ★ 2026-09-30 数据归一：清掉已废弃的 isTemporary 字段。
+    //   用户取消「临时对话 / 空草稿 / 默认占位」概念后，该字段再没有任何读取方，
+    //   留着只会在新老数据混用时误导人。**只删字段、绝不碰 updatedAt**
+    //   （碰了就等于凭空"赢过"别的设备的副本）。
+    Object.keys(br).forEach(function (id) {
+        if (br[id] && Object.prototype.hasOwnProperty.call(br[id], 'isTemporary')) {
+            delete br[id].isTemporary;
+        }
     });
 
     return { branches: br, deleted: dl, added: added };
@@ -142,7 +176,11 @@ function _snapshotChats() {
     _stampChanged();
     Object.keys(state.branches || {}).forEach(function (id) {
         var b = state.branches[id];
-        if (b) out[id] = b;
+        if (!b) return;
+        // ★ 后端接管的对话（有账本 → 由 projection 写）：前端不再回推，
+        //   否则 1.5s 后就会用「截断版」盖掉后端写的完整版（自噬）。
+        if (_ucTreeMode === 'on' && _ucManaged[id]) return;
+        out[id] = b;
     });
     var o = localStorage.getItem(_cacheKey(_UC_ORDER));
     var order = [];
@@ -156,7 +194,11 @@ async function hydrateUserChats() {
     try {
         var r = await fetch('/api/user/chats');
         if (!r.ok) { _hydrateFailed(); return false; }
-        remote = (await r.json()).chats || {};
+        var _j = await r.json();
+        remote = _j.chats || {};
+        _ucTreeMode = _j._tree || 'off';
+        _ucManaged = {};
+        (_j._managed || []).forEach(function (id) { _ucManaged[id] = 1; });
     } catch (e) {
         _hydrateFailed();
         return false;
@@ -175,17 +217,23 @@ async function hydrateUserChats() {
 
 /** 后端读不到 → 如实报错（不假装有数据、也不退到旧缓存）。 */
 function _hydrateFailed() {
-    if (typeof showToast === 'function') showToast('读不到对话列表：本机后端没起来？', 'error');
+    if (typeof showToast === 'function') showToast(t('uchat.backendDown'), 'error');
 }
 
 // ── 线上同步（收到 SSE 推送后调用）───────────────
 /** 拉全量并与本地合并；返回真正变了的对话数。生成回复期间跳过（别踩掉流式输出）。 */
 async function syncChatsFromServer() {
-    if (state.isGenerating) return 0;
+    // ★ 生成期间不再「丢弃」通知（旧实现直接 return 0 → 这一次同步永久丢失）：
+    //   记一笔待同步，等本页生成结束立刻补拉（见 flushPendingSync）。
+    if (state.isGenerating) { _ucPendingSync = true; return 0; }
     var r;
     try { r = await fetch('/api/user/chats'); } catch (e) { return 0; }
     if (!r.ok) return 0;
-    var remote = (await r.json()).chats || {};
+    var _j = await r.json();
+    _ucTreeMode = _j._tree || _ucTreeMode;
+    _ucManaged = {};
+    (_j._managed || []).forEach(function (id) { _ucManaged[id] = 1; });
+    var remote = _j.chats || {};
     var cur = state.currentBranchId;
     var m = _mergeBranchSets(state.branches || {}, _chatsDeleted, remote);
     var changed = 0;
@@ -241,8 +289,108 @@ window.addEventListener('pagehide', function () {
     if (_chatsPushTimer) pushUserChats();
 });
 
+// ── 多端实时同看（后端广播的 chats_delta）────────────────────
+// 另一台设备生成时，后端把它的流式事件广播过来；本页把它们拼成一条
+// 「实时预览」消息，实现「A 生成，B 也看得见过程」。生成结束后后端会推
+// chats → 全量拉取，预览消息被后端投影出的正式消息整体替换。
+var _ucRemoteLive = {};       // branch_id → {content, steps, id}
+var _ucLiveTimer = null;
+var _ucLiveBranch = '';
+
+function applyChatsDelta(p) {
+    if (!p || !p.event) return;
+    if (p.client_id && p.client_id === _ucClientId) return;      // 自己的回声 → 丢
+    if (state.isGenerating) { _ucPendingSync = true; return; }   // 本页也在生成 → 结束后补拉
+    var bid = p.branch_id || '';
+    var b = (state.branches || {})[bid];
+    if (!bid || !b) return;                                      // 本页没有这条对话
+    var ev = p.event;
+    var live = _ucRemoteLive[bid];
+    if (!live) { live = _ucRemoteLive[bid] = { content: '', steps: [], id: 'live-' + bid }; }
+    var t = ev.type;
+    if (t === 'token') { live.content += (ev.text || ''); }
+    else if (t === 'reasoning') {
+        // 与发起端 handleReasoning 同语义：连续 reasoning 增量聚合成一个块，
+        // 否则后端按片段广播时，这里会每个片段渲染一个「模型推理」块。
+        var _lastStep = live.steps.length ? live.steps[live.steps.length - 1] : null;
+        if (_lastStep && _lastStep.type === 'model_reasoning') { _lastStep.text += (ev.text || ''); }
+        else { live.steps.push({ type: 'model_reasoning', text: ev.text || '', step: 0 }); }
+    }
+    else if (t === 'tool_call') { live.steps.push({ type: 'tool_call', name: ev.name || '', input: ev.input || '' }); }
+    else if (t === 'tool_result') { live.steps.push({ type: 'tool_result', name: ev.name || '', content: (ev.content || '').substring(0, 500) }); }
+    else if (t === 'final') { live.content = ev.text || live.content; }
+    else { return; }
+    _ucLiveBranch = bid;
+    if (_ucLiveTimer) return;
+    _ucLiveTimer = setTimeout(function () {
+        _ucLiveTimer = null;
+        var id = _ucLiveBranch;
+        var lv = _ucRemoteLive[id];
+        var br = (state.branches || {})[id];
+        if (!lv || !br) return;
+        var msgs = br.messages || (br.messages = []);
+        var last = msgs[msgs.length - 1];
+        if (!last || last.id !== lv.id) {
+            msgs.push({ id: lv.id, role: 'assistant', content: lv.content,
+                        timestamp: new Date().toISOString(), branchId: id,
+                        reasoningSteps: lv.steps, _remoteLive: true });
+        } else {
+            last.content = lv.content;
+            last.reasoningSteps = lv.steps;
+        }
+        if (state.currentBranchId === id && typeof renderMessages === 'function') renderMessages();
+        if (typeof updateHistoryList === 'function') updateHistoryList();
+    }, 150);
+}
+
+/** 生成结束后调用：补做生成期间被推迟的同步 + 收掉实时预览。 */
+async function flushPendingSync() {
+    _ucRemoteLive = {};
+    if (!_ucPendingSync) return;
+    _ucPendingSync = false;
+    await syncChatsFromServer();
+}
+
+/** 消息 id → 账本 turn_id（投影消息形如 msg-u-tXXXX / agent-tXXXX）。 */
+function turnIdOfMessageId(mid) {
+    var m = /^(?:msg-u-|agent-)(t[0-9a-f]+)$/.exec(String(mid || ''));
+    return m ? m[1] : '';
+}
+
+/** 把本地的「编辑消息 / 删除后续消息」报给后端（账本补偿事件）→ 后端重新投影。
+ *  只对「后端接管的对话」有效（它才有账本可套用补偿）。 */
+async function pushChatOps(branchId, ops) {
+    if (_ucTreeMode !== 'on' || !branchId || !(ops && ops.length)) return false;
+    var norm = ops.map(function (op) {
+        var o = {}; for (var k in op) { o[k] = op[k]; }
+        if (o.type === 'truncate' && o.from) {
+            var t1 = turnIdOfMessageId(o.from); if (t1) o.from = t1;
+        }
+        if (o.type === 'edit' && o.target) {
+            var t2 = turnIdOfMessageId(o.target); if (t2) o.target = t2;
+        }
+        // ★ delete 不规整成 turn_id：要区分 msg-u-X（删提问）与 agent-X（删回答），
+        //   投影按完整消息 id 精确剔除（规整后两条会一起被删）。
+        return o;
+    });
+    try {
+        var r = await fetch('/api/user/chat_ops', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ branch_id: branchId, ops: norm })
+        });
+        return r.ok;
+    } catch (e) { return false; }
+}
+
 window.hydrateUserChats = hydrateUserChats;
 window.setUserChats = setUserChats;
 window.pushUserChats = pushUserChats;
 window.markBranchDeleted = markBranchDeleted;
 window.syncChatsFromServer = syncChatsFromServer;
+window.getClientId = function () { return _ucClientId; };
+window.applyChatsDelta = applyChatsDelta;
+window.flushPendingSync = flushPendingSync;
+window.pushChatOps = pushChatOps;
+window.isBranchManaged = function (id) { return _ucTreeMode === 'on' && !!_ucManaged[id]; };
+window.isBranchManaged = function (id) { return _ucTreeMode === 'on' && !!_ucManaged[id]; };
+window.turnIdOfMessageId = turnIdOfMessageId;

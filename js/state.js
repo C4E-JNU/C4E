@@ -84,6 +84,7 @@
                 subagentNudge: 0,
                 subagentWarn: 0,
                 subagentAbort: 86400,       // 一天
+                subagentFeedSteps: false,   // false（默认）=子智能体只把摘要回喂主控，不回喂它读到的正文，防上下文爆炸
                      },
 
             // 侧边栏状态
@@ -116,9 +117,9 @@
         };
 
         var FILE_OPEN_MODE_LABEL = {
-            backend: '后端打开',
-            browser: '浏览器新标签',
-            float: '应用内浮窗'
+            backend: t('misc.fileOpenBackend'),
+            browser: t('misc.fileOpenBrowser'),
+            float: t('misc.fileOpenFloat')
         };
 
         function updateFileOpenModeUI() {
@@ -143,7 +144,7 @@
                 // 记住"在对话界面"：WebView2 被系统回收后整页重载时，靠它原样回到这里
                 try { localStorage.setItem('c4eai-view-mode', 'chat'); } catch (e) {}
                 btn.classList.add('active');
-                if (typeof showToast === 'function') showToast('已进入对话界面', 'success');
+                if (typeof showToast === 'function') showToast(t('misc.enteredChat'), 'success');
             } else {
                 document.body.classList.add('no-scroll-transition');
                 document.body.classList.remove('full-screen-mode');

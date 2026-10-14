@@ -14,19 +14,19 @@
 
             // 更新设置里的名称显示
             const themeNames = {
-                'default': '经典蓝',
-                'midnight': '深夜黑',
-                'emerald': '翡翠绿',
-                'warm': '暖阳橙',
-                'cyber': '赛博风',
-                'pink': '樱花粉',
-                'macaron-pink': '梦境粉',
-                'macaron-green': '梦境绿',
-                'macaron-violet': '梦境紫',
-                'macaron-blue': '梦境蓝'
+                'default': t('bub.themeClassic'),
+                'midnight': t('bub.themeMidnight'),
+                'emerald': t('bub.themeEmerald'),
+                'warm': t('bub.themeWarm'),
+                'cyber': t('bub.themeCyber'),
+                'pink': t('bub.themePink'),
+                'macaron-pink': t('bub.themeMP'),
+                'macaron-green': t('bub.themeMG'),
+                'macaron-violet': t('bub.themeMV'),
+                'macaron-blue': t('bub.themeMB')
             };
             const nameEl = document.getElementById('current-theme-name');
-            if (nameEl) nameEl.textContent = themeNames[themeName] || '未知';
+            if (nameEl) nameEl.textContent = themeNames[themeName] || t('bub.unknown');
 
             // 保存设置
             localStorage.setItem('ragagent-theme', themeName);
@@ -84,13 +84,13 @@
 
             if (!allExtensions.includes(fileExtension)) {
                 // 加入错误列表（显示红色芯片提示用户删除）
-                addErrorAttachment(file, '不支持的格式');
+                addErrorAttachment(file, t('bub.unsupported'));
                 return false;
             }
 
             // 文件大小限制 (50MB)
             if (file.size > 50 * 1024 * 1024) {
-                addErrorAttachment(file, '文件过大(>50MB)');
+                addErrorAttachment(file, t('bub.tooLarge'));
                 return false;
             }
 
@@ -100,7 +100,7 @@
             );
 
             if (isDuplicate) {
-                showToast(`文件已添加: ${file.name}`, 'warning');
+                showToast(t('bub.fileAdded').replace('{name}', file.name), 'warning');
                 return false;
             }
 
@@ -197,10 +197,10 @@
                 if (att._remote) {
                     // 远端文件（已在后端）
                     openUrl = null;  // 不使用 blob URL
-                    title = att.file_id ? '已上传，点击打开' : '...';
+                    title = att.file_id ? t('bub.uploadedOpen') : '...';
                 } else {
                     openUrl = URL.createObjectURL(att.file);
-                    title = att.file_id ? '已上传，点击打开' : '点击打开';
+                    title = att.file_id ? t('bub.uploadedOpen') : t('bub.clickOpen');
                 }
                 return '<div class="file-chip file-chip-clickable" data-id="' + att.id + '"' +
                     (openUrl ? ' data-url="' + openUrl + '"' : '') +
@@ -208,7 +208,7 @@
                     '<span class="file-chip-icon">' + att.icon + '</span>' +
                     '<span class="file-chip-name" title="' + (title) + ': ' + att.name + '">' + att.name + '</span>' +
                     '<span class="file-chip-size">' + formatFileSize(att.size) + '</span>' +
-                    '<button class="file-chip-remove" onclick="removePendingAttachment(\'' + att.id + '\');event.stopPropagation();" title="移除">×</button>' +
+                    '<button class="file-chip-remove" onclick="removePendingAttachment(\'' + att.id + '\');event.stopPropagation();" title="' + t('bub.remove') + '">×</button>' +
                 '</div>';
             }).join('');
             // 错误文件（红色）
@@ -218,7 +218,7 @@
                         <span class="file-chip-icon">${att.icon}</span>
                         <span class="file-chip-name" title="${att.name}">${att.name}</span>
                         <span class="file-chip-size file-chip-error-reason">${att.reason}</span>
-                        <button class="file-chip-remove" onclick="removeErrorAttachment('${att.id}')" title="删除">×</button>
+                        <button class="file-chip-remove" onclick="removeErrorAttachment('${att.id}')" title="${t('bub.deleteTitle')}">×</button>
                     </div>
                 `).join('');
             }
@@ -258,18 +258,18 @@
         function getFileType(fileName) {
             const extension = fileName.split('.').pop().toLowerCase();
             const typeMap = {
-                'jpg': '图片', 'jpeg': '图片', 'png': '图片', 'gif': '图片', 'webp': '图片',
-                'svg': 'SVG矢量图', 'bmp': '位图', 'tiff': 'TIFF图像',
-                'pdf': 'PDF文档', 'docx': 'Word文档', 'txt': '文本文件', 'md': 'Markdown',
-                'rtf': '富文本', 'pptx': 'PPT演示', 'odt': '文本文档',
-                'json': 'JSON数据', 'csv': 'CSV数据', 'xlsx': 'Excel表格',
-                'xls': 'Excel表格', 'xml': 'XML数据', 'log': '日志文件',
-                'toml': 'TOML配置', 'ini': 'INI配置',
-                'js': 'JavaScript', 'py': 'Python', 'java': 'Java', 'cpp': 'C++', 'c': 'C语言',
-                'html': 'HTML网页', 'css': 'CSS样式', 'ts': 'TypeScript',
-                'sh': 'Shell脚本', 'yaml': 'YAML配置', 'yml': 'YAML配置',
-                'sql': 'SQL脚本', 'lua': 'Lua脚本', 'r': 'R语言', 'pl': 'Perl脚本',
-                'tex': 'LaTeX', 'bat': '批处理', 'ps1': 'PowerShell'
+                'jpg': t('bub.ft.image'), 'jpeg': t('bub.ft.image'), 'png': t('bub.ft.image'), 'gif': t('bub.ft.image'), 'webp': t('bub.ft.image'),
+                'svg': t('bub.ft.svg'), 'bmp': t('bub.ft.bmp'), 'tiff': t('bub.ft.tiff'),
+                'pdf': t('bub.ft.pdf'), 'docx': t('bub.ft.docx'), 'txt': t('bub.ft.txt'), 'md': 'Markdown',
+                'rtf': t('bub.ft.rtf'), 'pptx': t('bub.ft.pptx'), 'odt': t('bub.ft.odt'),
+                'json': t('bub.ft.json'), 'csv': t('bub.ft.csv'), 'xlsx': t('bub.ft.xlsx'),
+                'xls': t('bub.ft.xlsx'), 'xml': t('bub.ft.xml'), 'log': t('bub.ft.log'),
+                'toml': t('bub.ft.toml'), 'ini': t('bub.ft.ini'),
+                'js': 'JavaScript', 'py': 'Python', 'java': 'Java', 'cpp': 'C++', 'c': t('bub.ft.c'),
+                'html': t('bub.ft.html'), 'css': t('bub.ft.css'), 'ts': 'TypeScript',
+                'sh': t('bub.ft.sh'), 'yaml': t('bub.ft.yaml'), 'yml': t('bub.ft.yaml'),
+                'sql': t('bub.ft.sql'), 'lua': t('bub.ft.lua'), 'r': t('bub.ft.r'), 'pl': t('bub.ft.pl'),
+                'tex': 'LaTeX', 'bat': t('bub.ft.bat'), 'ps1': 'PowerShell'
             };
             return typeMap[extension] || extension.toUpperCase();
         }
@@ -394,7 +394,7 @@
                 } else if (bub && bub.fileDataKey) {
                     // 从 IndexedDB 读取并触发下载
                     _dbGetFile(bub.fileDataKey).then(data => {
-                        if (!data) { showPassiveToast('文件数据未找到'); return; }
+                        if (!data) { showPassiveToast(t('bub.fileDataNotFound')); return; }
                         const a = document.createElement('a');
                         a.href = data;
                         a.download = bub.filePath || bub.text || 'file';
@@ -402,7 +402,7 @@
                         a.click();
                         document.body.removeChild(a);
                         if (typeof showToast === 'function') {
-                            showToast(`✅ 文件 "${bub.filePath || bub.text}" 已下载`, 'success');
+                            showToast(t('bub.fileDownloaded').replace('{name}', bub.filePath || bub.text), 'success');
                         }
                     });
                 } else if (bub && bub.fileData) {
@@ -414,7 +414,7 @@
                     a.target = '_blank';
                     a.click();
                 } else {
-                    showPassiveToast('该气泡没有关联文件数据');
+                    showPassiveToast(t('bub.noFileData'));
                 }
             } else if (action === 'send-llm') {
                 const bubbleId = bubbleEl ? bubbleEl.dataset.bubbleId : '';
@@ -428,7 +428,7 @@
                 } else if (bub && bub.fileDataKey) {
                     // 从 IndexedDB 读取并重建 File
                     _dbGetFile(bub.fileDataKey).then(data => {
-                        if (!data) { showPassiveToast('文件数据未找到'); return; }
+                        if (!data) { showPassiveToast(t('bub.fileDataNotFound')); return; }
                         const mimeMatch = data.match(/^data:([^;]+);/);
                         const mime = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
                         const byteStr = atob(data.split(',')[1]);
@@ -475,7 +475,7 @@
                         })
                         .catch(err => console.error('打开文件地址失败:', err));
                 } else {
-                    showPassiveToast('该气泡没有后端关联文件，无法打开文件地址');
+                    showPassiveToast(t('bub.noBackendFile'));
                 }
             } else if (action === 'edit-text') {
                 const editModal = document.getElementById('bubble-edit-modal');
@@ -510,7 +510,7 @@
                     editModal.classList.remove('show');
                 });
             } else if (action === 'delete') {
-                if (branch && branch._bubbles && confirm(`确定要删除气泡"${bubbleText}"吗？`)) {
+                if (branch && branch._bubbles && confirm(t('bub.confirmDelete').replace('{name}', bubbleText))) {
                     branch._bubbles = branch._bubbles.filter(b => b.id !== bubbleId);
                     saveBranches();
                     updateHistoryList();
@@ -538,7 +538,7 @@
             addFileBtn.addEventListener('click', () => {
                 if (_bubbleAddBranchId) {
                     const input = document.getElementById('bubble-add-input');
-                    const text = input.value.trim() || '链接文件';
+                    const text = input.value.trim() || t('bub.linkFile');
                     _bubbleAddPanelText = text;
                     closeBubbleAddPanel();
                     bubbleFileInput.click();

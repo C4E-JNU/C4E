@@ -225,7 +225,7 @@
         .file-preview-panel {
             display: none;
             position: fixed;
-            z-index: 9997;                 /* 与笔记编辑浮窗(9999)接近，同层级浮窗 */
+            z-index: var(--z-float);
             top: 110px;
             left: 110px;
             width: 660px;                  /* 与笔记编辑浮窗初始尺寸一致（同款观感） */
@@ -237,8 +237,8 @@
             flex-direction: column;
             background: var(--card-bg);
             border: 1px solid var(--border-color);
-            border-radius: 12px;           /* 与 .floating-editor 一致的圆角 */
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            border-radius: var(--radius-float);
+            box-shadow: var(--shadow-float);
             overflow: hidden;              /* 与笔记编辑浮窗一致，避免内容溢出圆角 */
         }
         .file-preview-panel.active { display: flex; }

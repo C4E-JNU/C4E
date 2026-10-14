@@ -10,13 +10,13 @@
                     return `
                         <div class="mermaid-wrapper" id="wrapper-${mermaidId}">
                             <div class="mermaid-header" onclick="toggleMermaidCollapse('${mermaidId}')">
-                                <div class="mermaid-title">📊 流程图 / 图表</div>
+                                <div class="mermaid-title">${t('msg.fmt.mermaidTitle')}</div>
                                 <div class="mermaid-controls" onclick="event.stopPropagation()">
-                                    <button class="mermaid-btn" onclick="zoomMermaid('${mermaidId}', 0.2)" title="放大">➕</button>
-                                    <button class="mermaid-btn" onclick="zoomMermaid('${mermaidId}', -0.2)" title="缩小">➖</button>
-                                    <button class="mermaid-btn" onclick="copyMermaidCode('${encodeURIComponent(code)}')" title="复制代码">📜</button>
-                                    <button class="mermaid-btn" onclick="copyMermaidImageAsPng('${mermaidId}')" title="复制图片">🖼️</button>
-                                    <button class="mermaid-btn" id="toggle-btn-${mermaidId}" onclick="toggleMermaidCollapse('${mermaidId}')" title="收起/展开">🔓</button>
+                                    <button class="mermaid-btn" onclick="zoomMermaid('${mermaidId}', 0.2)" title="${t('msg.fmt.zoomIn')}">➕</button>
+                                    <button class="mermaid-btn" onclick="zoomMermaid('${mermaidId}', -0.2)" title="${t('msg.fmt.zoomOut')}">➖</button>
+                                    <button class="mermaid-btn" onclick="copyMermaidCode('${encodeURIComponent(code)}')" title="${t('msg.fmt.copyCode')}">📜</button>
+                                    <button class="mermaid-btn" onclick="copyMermaidImageAsPng('${mermaidId}')" title="${t('msg.fmt.copyImg')}">🖼️</button>
+                                    <button class="mermaid-btn" id="toggle-btn-${mermaidId}" onclick="toggleMermaidCollapse('${mermaidId}')" title="${t('msg.fmt.toggle')}">🔓</button>
                                 </div>
                             </div>
                             <div class="mermaid-container" id="container-${mermaidId}">
@@ -38,7 +38,7 @@
                         <div class="code-header">
                             <span class="code-lang">${langLabel}</span>
                             <button class="copy-code-btn" onclick="copyCode(this, '${codeId}')">
-                                📋 复制代码
+                                📋 ${t('msg.fmt.copyCodeBtn')}
                             </button>
                         </div>
                         <pre><code id="${codeId}" class="hljs ${language}">${highlighted}</code></pre>
@@ -52,16 +52,16 @@
                 return `
                     <div class="table-wrapper ${state.tableTheme}" id="${tableId}-wrapper">
                         <div class="table-header">
-                            <div class="table-title">📅 数据表格</div>
+                            <div class="table-title">${t('msg.fmt.tableTitle')}</div>
                             <div class="table-actions">
-                                <button class="table-action-btn" onclick="switchTableStyle()" title="全局切换表格皮肤">
-                                    🎨 换肤
+                                <button class="table-action-btn" onclick="switchTableStyle()" title="${t('msg.fmt.skinTitle')}">
+                                    🎨 ${t('msg.fmt.skin')}
                                 </button>
                                 <button class="table-action-btn" onclick="copyTableToClipboard('${tableId}')">
-                                    📋 复制表格
+                                    📋 ${t('msg.fmt.copyTableBtn')}
                                 </button>
                                 <button class="table-action-btn" onclick="exportTableToExcel('${tableId}')">
-                                    📊 导出 Excel
+                                    📊 ${t('msg.fmt.exportExcelBtn')}
                                 </button>
                             </div>
                         </div>
@@ -113,7 +113,7 @@
                 try {
                     // 1.4 附件卡片预处理：{{file:file_id:文件名}} → 聊天同款 attachment-item 卡片（含 × 删除）
                     processedContent = processedContent.replace(/\{\{file:([0-9a-fA-F]+):([^}]*)\}\}/g, function (m, fid, name) {
-                        var n = (name || '附件').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                        var n = (name || t('edit.fileFallback')).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
                         var f = String(fid);
                         // 打开方式按**渲染上下文**决定（用户 2026-09-26 定）：
                         //   · 聊天回答里的占位符 → openFileById：按「设置」派发（后端打开 / 浏览器新标签 / 应用内浮窗）
@@ -122,10 +122,10 @@
                         return '<span style="display:inline-block;vertical-align:middle;margin:2px 4px;max-width:280px;">'
                             + '<div class="attachment-item attachment-clickable" data-file-id="' + f + '" data-file-name="' + n + '" '
                             + 'onclick="' + _openFn + ' &amp;&amp; ' + _openFn + '(this.dataset.fileId, this.dataset.fileName)" '
-                            + 'title="点击打开（浮窗预览，不支持则下载）">'
+                            + 'title="' + t('msg.fmt.openFile') + '">'
                             + '<span class="attachment-icon">📄</span>'
                             + '<div class="attachment-info"><div class="attachment-name">' + n + '</div></div>'
-                            + '<button class="attachment-remove" title="删除附件（同时删除后端文件）" '
+                            + '<button class="attachment-remove" title="' + t('msg.fmt.delAtt') + '" '
                             + 'onclick="event.stopPropagation(); window.__removeInlineFile &amp;&amp; window.__removeInlineFile(this)">✕</button>'
                             + '</div></span>';
                     });
@@ -176,7 +176,7 @@
                                     <div class="math-block-wrapper">
                                         ${renderedMath}
                                         <button class="copy-math-btn" onclick="copyRawMath(this, '${encodeURIComponent(item.formula)}')">
-                                            复制LaTeX代码
+                                            ${t('msg.fmt.copyLatex')}
                                         </button>
                                     </div>
                                 `;
@@ -204,7 +204,7 @@
                              + '<ol style="padding-left:1.2rem;">'
                              + _fnDefs.map(function (d) {
                                    return '<li id="fn-' + d.id + '" style="margin:.15rem 0;">' + d.text
-                                        + ' <a href="#fnref-' + d.id + '" class="fn-back" title="回到引用处">↩</a></li>';
+                                        + ' <a href="#fnref-' + d.id + '" class="fn-back" title="' + t('msg.fmt.fnBack') + '">↩</a></li>';
                                }).join('')
                              + '</ol></div>';
                     }
@@ -228,7 +228,7 @@
             const formula = decodeURIComponent(encodedFormula);
             navigator.clipboard.writeText(formula).then(() => {
                 const originalText = btn.innerHTML;
-                btn.innerHTML = '✅ 已复制';
+                btn.innerHTML = t('msg.fmt.copied');
                 btn.style.borderColor = 'var(--success)';
                 btn.style.color = 'var(--success)';
                 setTimeout(() => {
@@ -236,10 +236,10 @@
                     btn.style.borderColor = 'var(--primary)';
                     btn.style.color = 'var(--primary)';
                 }, 2000);
-                showPassiveToast('公式已复制');
+                showPassiveToast(t('msg.fmt.formulaCopied'));
             }).catch(err => {
                 console.error('复制失败:', err);
-                showPassiveToast('复制失败');
+                showPassiveToast(t('msg.fmt.copyFailed'));
             });
         }
 
@@ -257,7 +257,7 @@
                 'theme-luxury'
             ];
             const themeNames = [
-                '跟随主题', '莫兰迪紫', '商务灰', '极简白', '金融绿', '活力橙', '黑客风', '学术风', '轻奢金'
+                t('msg.fmt.theme0'), t('msg.fmt.theme1'), t('msg.fmt.theme2'), t('msg.fmt.theme3'), t('msg.fmt.theme4'), t('msg.fmt.theme5'), t('msg.fmt.theme6'), t('msg.fmt.theme7'), t('msg.fmt.theme8')
             ];
 
             let currentIdx = themes.indexOf(state.tableTheme);
@@ -281,9 +281,9 @@
             });
 
             if (nextTheme) {
-                showToast(`所有表格已切换至 ${themeNames[nextIdx]} 风格`, 'success');
+                showToast(t('msg.fmt.themeSwitched').replace('{name}', themeNames[nextIdx]), 'success');
             } else {
-                showToast('所有表格已恢复 经典蓝 风格', 'info');
+                showToast(t('msg.fmt.themeReset'), 'info');
             }
         }
 
@@ -303,7 +303,7 @@
                 selection.removeAllRanges();
 
                 if (successful) {
-                    showPassiveToast('表格已完整复制 (保留格式与配色)');
+                    showPassiveToast(t('msg.fmt.tableCopied'));
                 } else {
                     throw new Error('execCommand failed');
                 }
@@ -318,9 +318,9 @@
                 });
 
                 navigator.clipboard.writeText(text).then(() => {
-                    showPassiveToast('表格内容已复制 (仅纯文本)');
+                    showPassiveToast(t('msg.fmt.tableCopiedText'));
                 }).catch(e => {
-                    showPassiveToast('复制失败');
+                    showPassiveToast(t('msg.fmt.copyFailed'));
                 });
             }
         }
@@ -349,7 +349,7 @@
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            showToast('表格已导出为CSV格式 (Excel可直接打开)', 'success');
+            showToast(t('msg.fmt.exported'), 'success');
         }
 
         // ==================== Mermaid 增强功能 ====================
@@ -359,7 +359,7 @@
         var item = btn.closest ? btn.closest('.attachment-item') : null;
         var fid = item ? item.getAttribute('data-file-id') : (btn.getAttribute && btn.getAttribute('data-file-id'));
         if (!fid) return;
-        if (typeof showPassiveToast === 'function') showPassiveToast('🗑 正在删除附件…');
+        if (typeof showPassiveToast === 'function') showPassiveToast(t('msg.fmt.deletingAtt'));
         // 1) 浮动编辑器打开且正文含此占位符 → 抠掉并实时重渲染
         try {
             var ta = document.getElementById('fe-textarea');
@@ -383,7 +383,7 @@
                     return fetch('/api/notes', {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ note_id: noteId, title: note.title || '未命名笔记', content: c })
+                        body: JSON.stringify({ note_id: noteId, title: note.title || t('edit.noteUntitled'), content: c })
                     });
                 })
                 .then(function (r) { return r ? r.json() : null; })
@@ -398,7 +398,7 @@
             .then(function (r) { return r.json(); })
             .then(function (d) {
                 if (typeof showPassiveToast === 'function')
-                    showPassiveToast(d && d.status === 'ok' ? '🗑 附件已删除' : '⚠️ 删除文件失败');
+                    showPassiveToast(d && d.status === 'ok' ? t('msg.fmt.attDeleted') : t('msg.fmt.delFileFail'));
             })
-            .catch(function () { if (typeof showPassiveToast === 'function') showPassiveToast('⚠️ 删除文件失败'); });
+            .catch(function () { if (typeof showPassiveToast === 'function') showPassiveToast(t('msg.fmt.delFileFail')); });
     };

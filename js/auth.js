@@ -100,7 +100,7 @@
         if (_sessionExpired) return;        // 已经标过，别重复弹提示
         _sessionExpired = true;
         _renderChip();
-        if (typeof showToast === 'function') showToast('共享库会话已过期，点右上角身份芯片重新登录', 'error');
+        if (typeof showToast === 'function') showToast(t('auth.sessionExpiredToast'), 'error');
     }
 
     function _esc(s) {
@@ -138,24 +138,24 @@
                     // 左：品牌栏（底色跟随主题）
                     '<div style="flex:0 0 94px;background:linear-gradient(160deg,var(--primary-soft,#e8f4fd),#e9f8f5);border-right:1px solid var(--border,#eee);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:14px 6px;text-align:center;">' +
                         '<img src="assets/icons/c4e-logo.png" alt="" style="width:34px;height:34px;border-radius:50%;object-fit:contain;background:#fff;padding:2px;box-sizing:border-box;">' +
-                        '<div style="font-size:.64rem;line-height:1.35;color:var(--text-secondary,#5b6676);">江南大学<br>环境计算组</div>' +
+                        '<div style="font-size:.64rem;line-height:1.35;color:var(--text-secondary,#5b6676);">' + t('auth.brand') + '</div>' +
                     '</div>' +
                     // 右：表单
                     '<div style="flex:1;min-width:0;padding:15px 15px 12px;">' +
                         '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.4rem;">' +
-                            '<div style="font-size:.95rem;font-weight:600;" id="auth-mode-title">登录</div>' +
-                            (closable ? '<button id="auth-login-close" title="关闭" style="flex:0 0 auto;width:1.5rem;height:1.5rem;line-height:1;background:none;border:none;border-radius:6px;font-size:.95rem;cursor:pointer;color:var(--text-secondary,#999);">✕</button>' : '') +
+                            '<div style="font-size:.95rem;font-weight:600;" id="auth-mode-title">' + t('auth.login') + '</div>' +
+                            (closable ? '<button id="auth-login-close" title="' + t('auth.close') + '" style="flex:0 0 auto;width:1.5rem;height:1.5rem;line-height:1;background:none;border:none;border-radius:6px;font-size:.95rem;cursor:pointer;color:var(--text-secondary,#999);">✕</button>' : '') +
                         '</div>' +
                         '<div style="display:flex;gap:14px;border-bottom:1px solid var(--border,#eef1f5);margin:.5rem 0 .75rem;">' +
-                            '<button data-m="login" class="auth-tab" type="button">账号登录</button>' +
-                            '<button data-m="register" class="auth-tab" type="button">注册</button>' +
+                            '<button data-m="login" class="auth-tab" type="button">' + t('auth.tabLogin') + '</button>' +
+                            '<button data-m="register" class="auth-tab" type="button">' + t('auth.tabRegister') + '</button>' +
                         '</div>' +
-                        '<input id="auth-login-user" placeholder="用户名" autocomplete="username" style="width:100%;height:34px;padding:0 .6rem;border:1px solid var(--border,#ddd);border-radius:9px;margin-bottom:.5rem;box-sizing:border-box;background:var(--input-bg,#fbfcfd);">' +
-                        '<input id="auth-login-pass" type="password" placeholder="密码" autocomplete="current-password" style="width:100%;height:34px;padding:0 .6rem;border:1px solid var(--border,#ddd);border-radius:9px;margin-bottom:.35rem;box-sizing:border-box;background:var(--input-bg,#fbfcfd);">' +
-                        '<input id="auth-login-pass2" type="password" placeholder="确认密码" autocomplete="new-password" style="display:none;width:100%;height:34px;padding:0 .6rem;border:1px solid var(--border,#ddd);border-radius:9px;margin-bottom:.35rem;box-sizing:border-box;background:var(--input-bg,#fbfcfd);">' +
+                        '<input id="auth-login-user" placeholder="' + t('auth.username') + '" autocomplete="username" style="width:100%;height:34px;padding:0 .6rem;border:1px solid var(--border,#ddd);border-radius:9px;margin-bottom:.5rem;box-sizing:border-box;background:var(--input-bg,#fbfcfd);">' +
+                        '<input id="auth-login-pass" type="password" placeholder="' + t('auth.password') + '" autocomplete="current-password" style="width:100%;height:34px;padding:0 .6rem;border:1px solid var(--border,#ddd);border-radius:9px;margin-bottom:.35rem;box-sizing:border-box;background:var(--input-bg,#fbfcfd);">' +
+                        '<input id="auth-login-pass2" type="password" placeholder="' + t('auth.confirmPassword') + '" autocomplete="new-password" style="display:none;width:100%;height:34px;padding:0 .6rem;border:1px solid var(--border,#ddd);border-radius:9px;margin-bottom:.35rem;box-sizing:border-box;background:var(--input-bg,#fbfcfd);">' +
                         '<div id="auth-login-err" style="color:var(--danger,#d33);font-size:.76rem;min-height:1.05em;margin-bottom:.35rem;"></div>' +
-                        '<button id="auth-login-btn" style="width:100%;height:34px;border:none;border-radius:9px;background:var(--primary,#4a7dff);color:#fff;cursor:pointer;font-size:.9rem;font-weight:600;">登 录</button>' +
-                        '<div id="auth-login-hint" style="font-size:.72rem;color:var(--text-secondary,#888);margin-top:.6rem;text-align:center;line-height:1.4;">登录后可使用共享库与自己的数据库</div>' +
+                        '<button id="auth-login-btn" style="width:100%;height:34px;border:none;border-radius:9px;background:var(--primary,#4a7dff);color:#fff;cursor:pointer;font-size:.9rem;font-weight:600;">' + t('auth.loginBtn') + '</button>' +
+                        '<div id="auth-login-hint" style="font-size:.72rem;color:var(--text-secondary,#888);margin-top:.6rem;text-align:center;line-height:1.4;">' + t('auth.hintLogin') + '</div>' +
                     '</div>' +
                 '</div>' +
             '</div>';
@@ -188,11 +188,11 @@
 
         function _setMode(m) {
             mode = m;
-            title.textContent = m === 'login' ? '登录' : '注册新账号';
-            btn.textContent = m === 'login' ? '登 录' : '注 册';
+            title.textContent = m === 'login' ? t('auth.login') : t('auth.registerTitle');
+            btn.textContent = m === 'login' ? t('auth.loginBtn') : t('auth.registerBtn');
             hint.textContent = m === 'login'
-                ? '登录后可使用共享库与自己的数据库'
-                : '自由注册；注册后私人功能立即可用，数据库需管理员授权';
+                ? t('auth.hintLogin')
+                : t('auth.hintRegister');
             err.textContent = '';
             var p2 = document.getElementById('auth-login-pass2');
             if (p2) {
@@ -218,18 +218,18 @@
 
         function submit() {
             var nm = u.value.trim(), pw = p.value;
-            if (!nm) { err.textContent = '请输入用户名'; u.focus(); return; }
-            if (!pw) { err.textContent = '请输入密码'; p.focus(); return; }
+            if (!nm) { err.textContent = t('auth.enterUser'); u.focus(); return; }
+            if (!pw) { err.textContent = t('auth.enterPass'); p.focus(); return; }
             if (mode === 'register') {
                 var p2 = document.getElementById('auth-login-pass2');
                 if (p2 && p2.value !== pw) {
-                    err.textContent = '两次输入的密码不一致';
+                    err.textContent = t('auth.passMismatch');
                     p2.value = ''; p2.focus(); return;
                 }
             }
             err.textContent = '';
             btn.disabled = true;
-            btn.textContent = mode === 'login' ? '登录中…' : '注册中…';
+            btn.textContent = mode === 'login' ? t('auth.loggingIn') : t('auth.registering');
             var url = mode === 'login' ? '/api/auth/login' : '/api/auth/register';
             // ★ 超时保护：共享库不可达时请求会一直挂着，按钮会永远停在「登录中…」点不动
             //   （用户反馈过：登录一阵子之后按钮失效）。20 秒没应答就当失败，按钮一定恢复可点。
@@ -245,12 +245,12 @@
                   if (mode === 'register') {
                       if (res.status === 200) {
                           hint.style.color = 'var(--success,#2a9d68)';
-                          hint.textContent = '✅ 注册成功！请切换到「登录」页签登录';
+                          hint.textContent = t('auth.registerOk');
                           _setMode('login');
-                          btn.disabled = false; btn.textContent = '登 录';
+                          btn.disabled = false; btn.textContent = t('auth.loginBtn');
                       } else {
-                          err.textContent = res.data.error || '注册失败';
-                          btn.disabled = false; btn.textContent = '注 册';
+                          err.textContent = res.data.error || t('auth.registerFail');
+                          btn.disabled = false; btn.textContent = t('auth.registerBtn');
                       }
                       return;
                   }
@@ -261,14 +261,14 @@
                                                 approved: !!res.data.approved });
                       location.reload();
                   } else {
-                      err.textContent = res.data.error || '登录失败';
-                      btn.disabled = false; btn.textContent = '登 录';
+                      err.textContent = res.data.error || t('auth.loginFail');
+                      btn.disabled = false; btn.textContent = t('auth.loginBtn');
                   }
               }).catch(function (e2) {
                   var aborted = e2 && e2.name === 'AbortError';
-                  err.textContent = aborted ? '请求超时：连不上共享库，请检查网络后重试'
-                                            : '网络错误：连不上共享库';
-                  btn.textContent = mode === 'login' ? '登 录' : '注 册';
+                  err.textContent = aborted ? t('auth.timeout')
+                                            : t('auth.netErr');
+                  btn.textContent = mode === 'login' ? t('auth.loginBtn') : t('auth.registerBtn');
               }).finally(function () {
                   if (timer) clearTimeout(timer);
                   btn.disabled = false;      // 无论成功/失败/超时，按钮都必须恢复可点
@@ -295,19 +295,19 @@
                            '#auth-admin-list .auth-urow:hover{background:var(--hover,#fafbfd);} ' +
                            '#auth-admin-list .auth-urow .auth-ib:hover{border-color:var(--primary,#4a7dff);color:var(--primary,#4a7dff);}</style>' +
                     '<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.7rem;">' +
-                        '<div style="font-size:1rem;font-weight:600;flex:0 0 auto;">用户管理</div>' +
-                        '<input id="auth-admin-search" placeholder="搜索用户名…" style="flex:1;min-width:0;height:26px;padding:0 .5rem;border:1px solid var(--border,#ddd);border-radius:8px;font-size:.78rem;">' +
-                        '<button id="auth-admin-new-toggle" title="新建账号" style="flex:0 0 auto;font-size:.76rem;padding:.22rem .6rem;border:none;border-radius:8px;background:var(--primary,#4a7dff);color:#fff;cursor:pointer;">＋ 新建</button>' +
-                        '<button id="auth-admin-close" title="关闭" style="flex:0 0 auto;width:1.6rem;height:1.6rem;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text-secondary,#999);">✕</button>' +
+                        '<div style="font-size:1rem;font-weight:600;flex:0 0 auto;">' + t('auth.userMgmt') + '</div>' +
+                        '<input id="auth-admin-search" placeholder="' + t('auth.searchUser') + '" style="flex:1;min-width:0;height:26px;padding:0 .5rem;border:1px solid var(--border,#ddd);border-radius:8px;font-size:.78rem;">' +
+                        '<button id="auth-admin-new-toggle" title="' + t('auth.newAccount') + '" style="flex:0 0 auto;font-size:.76rem;padding:.22rem .6rem;border:none;border-radius:8px;background:var(--primary,#4a7dff);color:#fff;cursor:pointer;">' + t('auth.newBtn') + '</button>' +
+                        '<button id="auth-admin-close" title="' + t('auth.close') + '" style="flex:0 0 auto;width:1.6rem;height:1.6rem;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text-secondary,#999);">✕</button>' +
                     '</div>' +
-                    '<div id="auth-admin-list" style="margin-bottom:.5rem;font-size:.86rem;">加载中…</div>' +
+                    '<div id="auth-admin-list" style="margin-bottom:.5rem;font-size:.86rem;">' + t('auth.loading') + '</div>' +
                     // 新建表单默认收起（原来常驻占一大块）
                     '<div id="auth-admin-create-box" style="display:none;border-top:1px solid var(--border,#eee);padding-top:.7rem;">' +
                         '<div style="display:flex;gap:.4rem;flex-wrap:wrap;">' +
-                            '<input id="auth-admin-newuser" placeholder="用户名" style="flex:1;min-width:90px;height:30px;padding:0 .5rem;border:1px solid var(--border,#ddd);border-radius:8px;box-sizing:border-box;">' +
-                            '<input id="auth-admin-newpw" placeholder="密码(≥6位)" style="flex:1;min-width:90px;height:30px;padding:0 .5rem;border:1px solid var(--border,#ddd);border-radius:8px;box-sizing:border-box;">' +
-                            '<select id="auth-admin-newrole" style="height:30px;padding:0 .3rem;border:1px solid var(--border,#ddd);border-radius:8px;"><option value="0">0·游客</option><option value="1">1·蓝色</option><option value="2">2·紫色</option><option value="3">3·橙色</option><option value="4">4·红色</option><option value="5">5·金色</option></select>' +
-                            '<button id="auth-admin-create" style="height:30px;padding:0 .9rem;border:none;border-radius:8px;background:var(--primary,#4a7dff);color:#fff;cursor:pointer;">创建</button>' +
+                            '<input id="auth-admin-newuser" placeholder="' + t('auth.username') + '" style="flex:1;min-width:90px;height:30px;padding:0 .5rem;border:1px solid var(--border,#ddd);border-radius:8px;box-sizing:border-box;">' +
+                            '<input id="auth-admin-newpw" placeholder="' + t('auth.password6') + '" style="flex:1;min-width:90px;height:30px;padding:0 .5rem;border:1px solid var(--border,#ddd);border-radius:8px;box-sizing:border-box;">' +
+                            '<select id="auth-admin-newrole" style="height:30px;padding:0 .3rem;border:1px solid var(--border,#ddd);border-radius:8px;">' + [0,1,2,3,4,5].map(function(i){ return '<option value="' + i + '">' + i + '·' + t('auth.lv' + i) + '</option>'; }).join('') + '</select>' +
+                            '<button id="auth-admin-create" style="height:30px;padding:0 .9rem;border:none;border-radius:8px;background:var(--primary,#4a7dff);color:#fff;cursor:pointer;">' + t('auth.create') + '</button>' +
                         '</div>' +
                     '</div>' +
                     '<div id="auth-admin-msg" style="font-size:.78rem;min-height:1.1em;margin-top:.4rem;"></div>' +
@@ -336,8 +336,8 @@
                 var isRootMe = !!d.is_root;   // 仅 admin：可删账号、可授 L5
                 // 等级元数据（颜色/名称）
                 var LV = [
-                    { n: '游客', c: '#9aa9be' }, { n: '蓝色', c: '#3b82f6' }, { n: '紫色', c: '#a855f7' },
-                    { n: '橙色', c: '#f59e0b' }, { n: '红色', c: '#ef4444' }, { n: '金色', c: '#eab308' }
+                    { n: t('auth.lv0'), c: '#9aa9be' }, { n: t('auth.lv1'), c: '#3b82f6' }, { n: t('auth.lv2'), c: '#a855f7' },
+                    { n: t('auth.lv3'), c: '#f59e0b' }, { n: t('auth.lv4'), c: '#ef4444' }, { n: t('auth.lv5'), c: '#eab308' }
                 ];
                 el.innerHTML = (d.users || []).map(function (u) {
                     var isRoot = (u.username === 'admin');
@@ -346,7 +346,7 @@
                     var ops = '';
                     // 删除账号：仅主管理员（金色与管理员一致，但删账号排除）
                     if (!isRoot && isRootMe) {
-                        ops = '<button class="auth-del auth-ib" data-u="' + _esc(u.username) + '" title="删除账号" style="width:24px;height:24px;border:1px solid var(--border,#ddd);border-radius:7px;background:var(--card-bg,#fff);cursor:pointer;font-size:.72rem;line-height:1;color:var(--danger,#d33);">🗑</button>';
+                        ops = '<button class="auth-del auth-ib" data-u="' + _esc(u.username) + '" title="' + t('auth.delAccount') + '" style="width:24px;height:24px;border:1px solid var(--border,#ddd);border-radius:7px;background:var(--card-bg,#fff);cursor:pointer;font-size:.72rem;line-height:1;color:var(--danger,#d33);">🗑</button>';
                     }
                     // 等级选择器：主管理员可选 0-5；金色(L5) 可选 0-4；其他不可选
                     var lvSel = '';
@@ -358,19 +358,19 @@
                             opts += '<option value="' + i + '"' + (i === lv ? ' selected' : '') + '>' +
                                     i + '·' + LV[i].n + '</option>';
                         }
-                        lvSel = '<select class="auth-lv" data-u="' + _esc(u.username) + '" title="调整等级" style="height:24px;padding:0 .2rem;border:1px solid var(--border,#ddd);border-radius:7px;font-size:.72rem;">' + opts + '</select>';
+                        lvSel = '<select class="auth-lv" data-u="' + _esc(u.username) + '" title="' + t('auth.adjustLevel') + '" style="height:24px;padding:0 .2rem;border:1px solid var(--border,#ddd);border-radius:7px;font-size:.72rem;">' + opts + '</select>';
                     }
                     var usage = (u.qwen_tokens_today != null && u.qwen_tokens_today > 0)
-                        ? '<span style="font-size:.7rem;color:var(--gray,#999);">千问' + (u.qwen_tokens_today >= 1e6 ? (u.qwen_tokens_today/1e6).toFixed(1)+'M' : Math.round(u.qwen_tokens_today/1e3)+'k') + '/日</span>' : '';
+                        ? '<span style="font-size:.7rem;color:var(--gray,#999);">' + t('auth.qwenDaily').replace('{n}', u.qwen_tokens_today >= 1e6 ? (u.qwen_tokens_today/1e6).toFixed(1)+'M' : Math.round(u.qwen_tokens_today/1e3)+'k') + '</span>' : '';
                     // 头像 + 用户名 + 等级徽章；操作（改等级/重置密码/删除）收进右侧，悬停该行才出现
                     return '<div class="auth-urow" data-name="' + _esc(u.username.toLowerCase()) + '" style="display:flex;align-items:center;gap:.5rem;padding:.4rem .35rem;border-bottom:1px solid var(--border,#f1f3f7);">' +
                         '<span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:' + meta.c + ';color:#fff;font-size:.68rem;font-weight:600;flex:0 0 auto;">' + _esc(u.username.slice(0, 1).toUpperCase()) + '</span>' +
-                        '<span style="flex:1;min-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + _esc(u.username) + (isRoot ? ' <span style="font-size:.66rem;color:#b8860b;">主管理员</span>' : '') + '</span>' +
+                        '<span style="flex:1;min-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + _esc(u.username) + (isRoot ? ' <span style="font-size:.66rem;color:#b8860b;">' + t('auth.rootAdmin') + '</span>' : '') + '</span>' +
                         usage +
                         '<span style="flex:0 0 auto;font-size:.68rem;font-weight:600;padding:1px 7px;border-radius:99px;color:' + meta.c + ';background:' + meta.c + '22;border:1px solid ' + meta.c + '55;">L' + lv + ' · ' + meta.n + '</span>' +
                         '<span class="auth-ops" style="flex:0 0 auto;display:flex;gap:4px;align-items:center;opacity:0;transition:opacity .12s;">' +
                             lvSel +
-                            '<button class="auth-rpw auth-ib" data-u="' + _esc(u.username) + '" title="重置密码" style="width:24px;height:24px;border:1px solid var(--border,#ddd);border-radius:7px;background:var(--card-bg,#fff);cursor:pointer;font-size:.72rem;line-height:1;color:var(--text-secondary,#5b6676);">🔑</button>' +
+                            '<button class="auth-rpw auth-ib" data-u="' + _esc(u.username) + '" title="' + t('auth.resetPass') + '" style="width:24px;height:24px;border:1px solid var(--border,#ddd);border-radius:7px;background:var(--card-bg,#fff);cursor:pointer;font-size:.72rem;line-height:1;color:var(--text-secondary,#5b6676);">🔑</button>' +
                             ops +
                         '</span>' +
                         '</div>';
@@ -385,41 +385,41 @@
                         }).then(function (r) { return r.json(); }).then(function (d2) {
                             var m = document.getElementById('auth-admin-msg');
                             if (m) m.textContent = d2.error ? ('⚠️ ' + d2.error)
-                                : ('✅ 已将 ' + sel.dataset.u + ' 调整为 ' + nlv + '·' + LV[nlv].n);
+                                : t('auth.levelSet').replace('{u}', sel.dataset.u).replace('{lv}', nlv + '·' + LV[nlv].n);
                             reload();
                         });
                     });
                 });
                 el.querySelectorAll('.auth-rpw').forEach(function (b) {
                     b.addEventListener('click', function () {
-                        var npw = prompt('为 ' + b.dataset.u + ' 设置新密码（≥4位）：');
+                        var npw = prompt(t('auth.setNewPass').replace('{u}', b.dataset.u));
                         if (!npw) return;
                         window.fetch('/api/auth/users/password', {
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ username: b.dataset.u, password: npw })
                         }).then(function (r) { return r.json(); }).then(function (d2) {
                             var m = document.getElementById('auth-admin-msg');
-                            if (m) m.textContent = d2.error ? ('⚠️ ' + d2.error) : '✅ 已重置 ' + b.dataset.u + ' 的密码';
+                            if (m) m.textContent = d2.error ? ('⚠️ ' + d2.error) : t('auth.passReset').replace('{u}', b.dataset.u);
                         });
                     });
                 });
                 // 注：原「开通/收回数据库授权」按钮已由等级选择器取代（L1+ 即可用数据库）
                 el.querySelectorAll('.auth-del').forEach(function (b) {
                     b.addEventListener('click', function () {
-                        if (!confirm('确定删除账号 ' + b.dataset.u + '？其云端个人目录（笔记/附件）将一并删除，不可恢复。')) return;
+                        if (!confirm(t('auth.delAccountConfirm').replace('{u}', b.dataset.u))) return;
                         window.fetch('/api/auth/users/delete', {
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ username: b.dataset.u })
                         }).then(function (r) { return r.json(); }).then(function (d2) {
                             var m = document.getElementById('auth-admin-msg');
-                            if (m) m.textContent = d2.error ? ('⚠️ ' + d2.error) : '✅ 已删除 ' + b.dataset.u;
+                            if (m) m.textContent = d2.error ? ('⚠️ ' + d2.error) : t('auth.deleted').replace('{u}', b.dataset.u);
                             reload();
                         });
                     });
                 });
             }).catch(function () {
                 var el = document.getElementById('auth-admin-list');
-                if (el) el.innerHTML = '<span style="color:var(--danger,#d33);">加载失败</span>';
+                if (el) el.innerHTML = '<span style="color:var(--danger,#d33);">' + t('auth.loadFail') + '</span>';
             });
         }
         document.getElementById('auth-admin-new-toggle').addEventListener('click', function () {
@@ -436,13 +436,13 @@
             var u = document.getElementById('auth-admin-newuser').value.trim();
             var pw = document.getElementById('auth-admin-newpw').value;
             var lv = parseInt(document.getElementById('auth-admin-newrole').value, 10);
-            var LVN2 = ['游客', '蓝色', '紫色', '橙色', '红色', '金色'];
+            var LVN2 = [t('auth.lv0'), t('auth.lv1'), t('auth.lv2'), t('auth.lv3'), t('auth.lv4'), t('auth.lv5')];
             var m = document.getElementById('auth-admin-msg');
             window.fetch('/api/auth/users', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username: u, password: pw, level: lv })
             }).then(function (r) { return r.json(); }).then(function (d) {
-                if (m) m.textContent = d.error ? ('⚠️ ' + d.error) : ('✅ 已创建 ' + u + '（' + (LVN2[lv] || lv) + '）');
+                if (m) m.textContent = d.error ? ('⚠️ ' + d.error) : t('auth.created').replace('{u}', u).replace('{lv}', (LVN2[lv] || lv));
                 if (!d.error) { document.getElementById('auth-admin-newuser').value = ''; document.getElementById('auth-admin-newpw').value = ''; reload(); }
             });
         });
@@ -451,13 +451,13 @@
 
     // ── 用户身份（③方案B）：顶栏只留一个小头像（未登录=小「登录」按钮），
     //    完整账号行放到侧栏底部 —— 就是 Codex / VS Code 的做法 ──
-    var _LV_N = ['游客', '蓝色', '紫色', '橙色', '红色', '金色'];
+    var _LV_N = [t('auth.lv0'), t('auth.lv1'), t('auth.lv2'), t('auth.lv3'), t('auth.lv4'), t('auth.lv5')];
     var _LV_C = ['#9aa9be', '#3b82f6', '#a855f7', '#f59e0b', '#ef4444', '#eab308'];
 
     function _lvInfo(me) {
         var isRoot = (me.username === 'admin');
         var lv = (typeof me.level === 'number') ? me.level : (isRoot ? 5 : (me.approved ? 1 : 0));
-        return { n: lv, color: _LV_C[lv] || _LV_C[0], name: _LV_N[lv] || '游客', isRoot: isRoot };
+        return { n: lv, color: _LV_C[lv] || _LV_C[0], name: _LV_N[lv] || t('auth.lv0'), isRoot: isRoot };
     }
 
     function _canManage(me) {
@@ -481,10 +481,10 @@
         if (above) m.style.bottom = (window.innerHeight - r.top + 6) + 'px';
         else m.style.top = (r.bottom + 6) + 'px';
         var it = 'padding:6px 10px;border-radius:7px;font-size:.84rem;cursor:pointer;color:var(--text-secondary,inherit);';
-        m.innerHTML = (_canManage(me) ? '<div data-a="admin" style="' + it + '">👥 用户管理</div>' : '') +
-            (_sessionExpired ? '<div data-a="relogin" style="' + it + 'color:var(--danger,#ef4444);">🔑 重新登录（会话已过期）</div>' : '') +
-            '<div data-a="switch" style="' + it + '">🔁 切换账号</div>' +
-            '<div data-a="logout" style="' + it + '">🚪 退出登录</div>';
+        m.innerHTML = (_canManage(me) ? '<div data-a="admin" style="' + it + '">' + t('auth.userMgmtMenu') + '</div>' : '') +
+            (_sessionExpired ? '<div data-a="relogin" style="' + it + 'color:var(--danger,#ef4444);">' + t('auth.relogin') + '</div>' : '') +
+            '<div data-a="switch" style="' + it + '">' + t('auth.switchAcct') + '</div>' +
+            '<div data-a="logout" style="' + it + '">' + t('auth.logout') + '</div>';
         document.body.appendChild(m);
         _acctMenu = m;
         m.querySelectorAll('div').forEach(function (d) {
@@ -525,16 +525,16 @@
         mini.id = 'auth-user-chip';
         mini.type = 'button';
         if (isGuest) {
-            mini.textContent = '🔑 登录';
-            mini.title = '未登录：本地功能照常用；登录后可使用共享库工具与数据库';
+            mini.textContent = t('auth.loginChip');
+            mini.title = t('auth.guestTitle');
             mini.style.cssText = 'font-size:.76rem;padding:.2rem .55rem;border:1px solid var(--border);' +
                 'border-radius:999px;background:var(--card-bg,#fff);color:var(--text-secondary,inherit);' +
                 'cursor:pointer;line-height:1.5;white-space:nowrap;';
             mini.addEventListener('click', function () { window.__userAskedLogin = true; _openLogin(true); });
         } else {
             mini.textContent = me.username.slice(0, 1).toUpperCase();
-            mini.title = '账号 · ' + info.name + (info.isRoot ? '（主管理员）' : '') +
-                (_sessionExpired ? ' · 共享库会话已过期，点这里重新登录' : '');
+            mini.title = t('auth.acctPrefix') + info.name + (info.isRoot ? t('auth.rootSuffix') : '') +
+                (_sessionExpired ? t('auth.expiredSuffix') : '');
             mini.style.cssText = 'position:relative;width:26px;height:26px;padding:0;border:none;border-radius:50%;' +
                 'cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:.72rem;' +
                 'font-weight:600;color:#fff;background:linear-gradient(135deg,#7cc7ec,#7edcd8);';
@@ -562,14 +562,14 @@
                 (isGuest ? '#c2cbd8' : 'linear-gradient(135deg,#7cc7ec,#7edcd8)') + ';">' +
                 (isGuest ? '?' : _esc(me.username.slice(0, 1).toUpperCase())) + '</span>';
             var tail = isGuest
-                ? '<span style="flex:0 0 auto;font-size:.72rem;color:var(--text-secondary,#8a94a3);">点这里登录</span>'
+                ? '<span style="flex:0 0 auto;font-size:.72rem;color:var(--text-secondary,#8a94a3);">' + t('auth.clickToLogin') + '</span>'
                 : '<span style="flex:0 0 auto;font-size:.66rem;font-weight:600;padding:1px 6px;border-radius:99px;' +
                   'color:' + info.color + ';background:' + info.color + '22;border:1px solid ' + info.color + '55;">L' + info.n + '</span>' +
                   '<span style="flex:0 0 auto;color:var(--text-secondary,#8a94a3);">⋯</span>';
             b.innerHTML = av + '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;' +
-                'white-space:nowrap;">' + (isGuest ? '未登录' : _esc(me.username)) + '</span>' + tail;
-            b.title = isGuest ? '未登录：点这里登录共享库'
-                              : (info.name + (info.isRoot ? ' · 主管理员' : '') + ' · 点这里打开账号菜单');
+                'white-space:nowrap;">' + (isGuest ? t('auth.notLoggedIn') : _esc(me.username)) + '</span>' + tail;
+            b.title = isGuest ? t('auth.guestRowTitle')
+                              : (info.name + (info.isRoot ? t('auth.rootDotAdmin') : '') + t('auth.openAcctMenu'));
             b.addEventListener('click', function () {
                 if (isGuest) { window.__userAskedLogin = true; _openLogin(true); return; }
                 _openAcctMenu(b, true);

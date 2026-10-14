@@ -243,13 +243,43 @@
     /* ── 内容渲染 ─────────────────────────────────────── */
     function _renderLoading(msg) {
         var b = _bodyEl(); if (!b) return;
-        b.innerHTML = '<div class="file-preview-hint">' + _esc(msg || '加载中…') + '</div>';
+        b.innerHTML = '<div class="file-preview-hint">' + _esc(msg || t('fp.loading')) + '</div>';
     }
 
     function _renderText(text, hint) {
         var b = _bodyEl(); if (!b) return;
-        b.innerHTML = (hint ? '<div class="file-preview-note">' + _esc(hint) + '</div>' : '') +
-            '<pre class="file-preview-text">' + _esc(text) + '</pre>';
+        var head = hint ? '<div class="file-preview-note">' + _esc(hint) + '</div>' : '';
+        var ext = _extOf(_cur.name);
+        // .md/.markdown 走与对话框、笔记框**同一个**渲染器（formatting.js 的 formatMessage），
+        // ctx='note' 使文中 {{file:xxx}} 占位同样触发 openDbFile 二级浮窗。
+        // 2026-09-28 用户报：产出的小窗只能看到源码，要求像笔记框那样渲染 → 默认渲染 + 可切源码。
+        if ((ext === 'md' || ext === 'markdown') && text && typeof window.formatMessage === 'function') {
+            var html = '';
+            try { html = window.formatMessage(text, true, 'note') || ''; } catch (e) { html = ''; }
+            if (html) {
+                b.innerHTML = head +
+                    '<div class="file-preview-togglebar">' +
+                        '<button type="button" class="file-preview-tg active" data-mode="md">' + t('fp.render') + '</button>' +
+                        '<button type="button" class="file-preview-tg" data-mode="raw">' + t('fp.source') + '</button>' +
+                    '</div>' +
+                    '<div class="file-preview-md message-content">' + html + '</div>' +
+                    '<pre class="file-preview-text" style="display:none">' + _esc(text) + '</pre>';
+                var mdEl = b.querySelector('.file-preview-md');
+                var rawEl = b.querySelector('.file-preview-text');
+                Array.prototype.forEach.call(b.querySelectorAll('.file-preview-tg'), function (btn) {
+                    btn.addEventListener('click', function () {
+                        var raw = btn.getAttribute('data-mode') === 'raw';
+                        if (mdEl) mdEl.style.display = raw ? 'none' : '';
+                        if (rawEl) rawEl.style.display = raw ? '' : 'none';
+                        Array.prototype.forEach.call(b.querySelectorAll('.file-preview-tg'), function (o) {
+                            o.classList.toggle('active', o === btn);
+                        });
+                    });
+                });
+                return;
+            }
+        }
+        b.innerHTML = head + '<pre class="file-preview-text">' + _esc(text) + '</pre>';
     }
 
     function _renderBody() {
@@ -265,7 +295,7 @@
             b.innerHTML = '<div class="file-preview-center"><img class="file-preview-img" alt="' +
                 _esc(_cur.name) + '"></div>';
             var _im = b.querySelector('img');
-            _im.onerror = function () { _renderText('', '图片加载失败（本实例与共享库均未找到该文件）。'); };
+            _im.onerror = function () { _renderText('', t('fp.imgFail')); };
             _im.src = '/api/file/' + encodeURIComponent(id);
             return;
         }
@@ -277,35 +307,35 @@
             return;
         }
         if (OFFICE_EXT.indexOf(ext) >= 0) {
-            _renderLoading('正在读取后端解析文本…');
+            _renderLoading(t('fp.readingParsed'));
             _fetchText(id, function (t) {
                 if (!t) {
-                    _renderText('', '浏览器无法直接渲染 .' + ext + ' 排版，且后端没有该文件的解析文本。可用上方 ⬇️ 下载，或点 🖥️ 用本机 ' +
-                        (['docx', 'doc', 'odt', 'rtf'].indexOf(ext) >= 0 ? 'Word' : (['xlsx', 'xls'].indexOf(ext) >= 0 ? 'Excel' : 'PowerPoint')) +
-                        ' 打开。');
+                    _renderText('', t('fp.officeNoText')
+                        .replace('{ext}', ext)
+                        .replace('{app}', ['docx', 'doc', 'odt', 'rtf'].indexOf(ext) >= 0 ? 'Word' : (['xlsx', 'xls'].indexOf(ext) >= 0 ? 'Excel' : 'PowerPoint')));
                     return;
                 }
-                _renderText(t, '⚠️ 浏览器无法直接渲染 .' + ext + ' 的排版，以下是后端解析出的纯文本内容（点 🖥️ 可用本机应用打开原文件）。');
+                _renderText(t, t('fp.officeText').replace('{ext}', ext));
             });
             return;
         }
         if (TEXT_EXT.indexOf(ext) >= 0) {
-            _renderLoading('正在读取文本…');
+            _renderLoading(t('fp.readingText'));
             _fetchText(id, function (t) {
-                if (!t) { _renderText('', '该文件没有可用文本，点 ⬇️ 下载查看。'); return; }
+                if (!t) { _renderText('', t('fp.noText')); return; }
                 _renderText(t, '');
             });
             return;
         }
         // 其它二进制：给提示 + 操作
-        _renderText('', '该类型（.' + (ext || '未知') + '）无法在浏览器内预览。点上方 🖥️ 用本机默认应用打开，或点 ⬇️ 下载。');
+        _renderText('', t('fp.cantPreview').replace('{ext}', ext || t('fp.unknown')));
     }
 
     /* ── 打开 / 关闭 ──────────────────────────────────── */
     function openFilePreviewFloat(fileId, fileName) {
         var p = _el();
         if (!p) return;
-        if (!fileId) { _toast('该文件没有后端数据，无法浮窗预览'); return; }
+        if (!fileId) { _toast(t('fp.noBackend')); return; }
         _cur.fileId = fileId;
         _cur.name = fileName || 'file';
         var t = document.getElementById('file-preview-title');
@@ -332,10 +362,10 @@
         fetch('/api/file/' + encodeURIComponent(fileId) + '/open', { method: 'POST' })
             .then(function (r) { return r.json(); })
             .then(function (d) {
-                if (d && d.status === 'unsupported') _toast(d.message || '当前部署不支持本机打开');
+                if (d && d.status === 'unsupported') _toast(d.message || t('fp.unsupported'));
                 else if (d && d.message) _toast(d.message, 'success');
             })
-            .catch(function () { _toast('用默认应用打开失败'); });
+            .catch(function () { _toast(t('fp.openNativeFail')); });
     }
 
     function _download(fileId) {
@@ -379,7 +409,7 @@
         } else {
             _cur.fileId = fileId; _cur.name = fileName || 'file';   // 供 _download 取文件名
             _download(fileId);
-            _toast('该类型（.' + (ext || '未知') + '）浏览器无法预览，已下载');
+            _toast(t('fp.cantPreviewDownloaded').replace('{ext}', ext || t('fp.unknown')));
         }
         return true;
     };

@@ -25,7 +25,7 @@
         function copyMermaidCode(encodedCode) {
             const code = decodeURIComponent(encodedCode);
             navigator.clipboard.writeText(code).then(() => {
-                showPassiveToast('Mermaid 源代码已复制');
+                showPassiveToast(t('tool.mermaidCopied'));
             });
         }
 
@@ -34,7 +34,7 @@
             if (!svg) return;
 
             try {
-                showToast('正在准备图片...', 'info');
+                showToast(t('tool.preparingImage'), 'info');
                 const serializer = new XMLSerializer();
                 const source = '<?xml version="1.0" standalone="no"?>\r\n' + serializer.serializeToString(svg);
 
@@ -56,7 +56,7 @@
                         try {
                             const data = [new ClipboardItem({ 'image/png': blob })];
                             navigator.clipboard.write(data).then(() => {
-                                showToast('流程图已作为图片复制到剪贴板', 'success');
+                                showToast(t('tool.diagramCopied'), 'success');
                             });
                         } catch (e) {
                             // 降级：如果不支持直接复制图片，尝试下载
@@ -65,14 +65,14 @@
                             a.href = url;
                             a.download = 'mermaid_diagram.png';
                             a.click();
-                            showToast('浏览器不支持直接复制图片，已为您开启下载', 'warning');
+                            showToast(t('tool.fallbackDownload'), 'warning');
                         }
                     });
                 };
                 img.src = url;
             } catch (err) {
                 console.error('Copy image error:', err);
-                showToast('复制图片失败', 'error');
+                showToast(t('tool.copyImageFail'), 'error');
             }
         }
 
@@ -90,8 +90,7 @@
                 var code = el.textContent || '';
                 function failed() {
                     el.innerHTML = '<div style="text-align:left;color:#b45309;font-size:.82rem;">'
-                        + '⚠️ 这段 Mermaid 代码没能渲染。常见原因：节点文字里含 <code>&gt;</code> <code>,</code>'
-                        + ' <code>?</code> <code>( )</code> 等特殊字符却没加引号（写成 A["效率 &gt; 90% ？"] 即可）。'
+                        + t('tool.mermaidFail')
                         + '<pre style="white-space:pre-wrap;word-break:break-all;background:rgba(0,0,0,.03);padding:.5rem;border-radius:6px;margin-top:.4rem;">'
                         + code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
                         + '</pre></div>';
@@ -111,13 +110,13 @@
 
             navigator.clipboard.writeText(text).then(() => {
                 const originalText = btn.innerHTML;
-                btn.innerHTML = '✅ 已复制';
+                btn.innerHTML = t('tool.copied');
                 setTimeout(() => {
                     btn.innerHTML = originalText;
                 }, 2000);
             }).catch(err => {
                 console.error('复制失败:', err);
-                showToast('复制失败', 'error');
+                showToast(t('tool.copyFail'), 'error');
             });
         }
 
@@ -176,7 +175,7 @@
               contextSizeText.textContent = tokens >= 1000 ? (tokens / 1000).toFixed(1) + 'K' : String(tokens);
               if (threshold > 0 && tokens > threshold) {
                   contextSizeText.classList.add('over-threshold');
-                  contextSizeText.title = '超出预期Token数阈值 ' + threshold.toLocaleString();
+                  contextSizeText.title = t('tool.overThreshold').replace('{n}', threshold.toLocaleString());
               } else {
                   contextSizeText.classList.remove('over-threshold');
                   contextSizeText.title = '';

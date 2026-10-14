@@ -172,11 +172,13 @@ class ContextBudget:
     """
 
     def __init__(self, window_tokens: int = 262144, max_output_tokens: int = 8192,
-                 threshold_percent: float = 0.75, keep_recent: int = 6):
+                 threshold_percent: float = 0.75, keep_recent: int = 6,
+                 trigger_override: int = 0):
         self.window_tokens = int(window_tokens)
         self.max_output_tokens = int(max_output_tokens)
         self.threshold_percent = float(threshold_percent)
         self.keep_recent = int(keep_recent)
+        self.trigger_override = max(0, int(trigger_override or 0))   # 前端显式设定的触发线；0 = 自动
         self.last_prompt_tokens = 0        # 来自 API usage
         self.messages_since_real_usage = 0
         self.consecutive_failures = 0
@@ -197,7 +199,21 @@ class ContextBudget:
 
     @property
     def trigger_tokens(self) -> int:
-        return int((self.window_tokens - self.max_output_tokens) * self.threshold_percent)
+        """清理触发线（超过它才开始把旧工具结果换占位符）。
+
+        · 前端显式设定 context_budget → 用它（上限为窗口本身，不大于窗口）
+        · 否则自动：(窗口 − 输出预留) × 75%
+          - 输出预留取 min(max_output, 窗口/4)：输出上限若被填得比窗口还大（UI 可填任意值），
+            原公式会算出**负数**触发线 → 每轮都判「该清」（真实踩过的坑）
+          - 最终**保底 ≥ 1024**，绝不返回 0 或负数
+
+        注意：触发线只是「开始清理」的软线，**不是硬约束**——本机不会依据它或窗口值报错/截断，
+        真的超出模型能力由模型端报错（源头报错才算真报错）。
+        """
+        if self.trigger_override > 0:
+            return max(1, min(self.trigger_override, self.window_tokens))
+        reserve = min(max(0, self.max_output_tokens), max(1, self.window_tokens // 4))
+        return max(1024, int((self.window_tokens - reserve) * self.threshold_percent))
 
     def should_compress(self, prompt_tokens=None) -> bool:
         if self.in_compression or self.consecutive_failures >= 3:
@@ -213,8 +229,9 @@ class ContextBudget:
             return False, "压缩进行中（防递归）"
         pt = prompt_tokens if prompt_tokens is not None else self.last_prompt_tokens
         if pt >= self.trigger_tokens:
-            return True, "用量 %d ≥ 触发线 %d（窗口 %d 的 %.0f%%）" % (
-                pt, self.trigger_tokens, self.window_tokens, self.threshold_percent * 100)
+            src = ("用户设定 context budget=%d" % self.trigger_override) if self.trigger_override > 0 \
+                else "自动：窗口 %d 的 %.0f%%" % (self.window_tokens, self.threshold_percent * 100)
+            return True, "用量 %d ≥ 触发线 %d（%s）" % (pt, self.trigger_tokens, src)
         return False, "用量 %d < 触发线 %d" % (pt, self.trigger_tokens)
 
     def record_compress_result(self, ok: bool) -> None:

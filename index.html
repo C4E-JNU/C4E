@@ -1,18 +1,23 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>C4EAI Quine Agent</title>
+    <title>C4EAI TruthCross Agent</title>
+    <!-- ★ FOUC 防护（2026-10-06）：WebView2/浏览器首帧在 CSS 就绪前会把原始 HTML 文本画出来
+         （用户看到的"右上角杂乱的字"）。body 先隐去，DOMContentLoaded（= 本地 CSS 全部应用）后显示。
+         用 visibility 而非 opacity：无过渡、首帧即终态；html 底色对齐默认浅色主题。 -->
+    <style>html{background:#f6f7f9}body{visibility:hidden}body.fouc-on{visibility:visible}</style>
+    <script>addEventListener('DOMContentLoaded',function(){requestAnimationFrame(function(){document.body.classList.add('fouc-on')})});</script>
     <!-- 站点图标（标签页 / 书签 / 手机主屏）= C4E 字标，源图：C4E-mark-透明底.png
          字标是浅蓝渐变，在浅色标签栏上对比不足（16px 几乎看不见）→ 统一用加深 30% 的版本生成。
          ?v=2 是必需的：浏览器对 favicon 的缓存极顽固，换图不破缓存会一直显示旧图标。 -->
-    <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/c4e-app-32.png?v=4">
-    <link rel="icon" type="image/png" sizes="16x16" href="assets/icons/c4e-app-16.png?v=4">
-    <link rel="icon" type="image/png" href="assets/icons/c4e-app-48.png?v=4">
-    <link rel="icon" type="image/x-icon" href="assets/icons/c4e-app.ico?v=4">
-    <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png?v=4">
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/c4e-app-32.png?v=5">
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/icons/c4e-app-16.png?v=5">
+    <link rel="icon" type="image/png" href="assets/icons/c4e-app-48.png?v=5">
+    <link rel="icon" type="image/x-icon" href="assets/icons/c4e-app.ico?v=5">
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png?v=5">
     <!--与代码高亮和Markdown渲染相关的CDN-->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js"></script>
@@ -29,19 +34,19 @@
     <script src="https://unpkg.com/neo4j-driver@5"></script>
 
     <!-- 本地样式文件 -->
-    <link rel="stylesheet" href="css/variables.css?v=7">
-    <link rel="stylesheet" href="css/reset.css?v=4">
-    <link rel="stylesheet" href="css/layout.css?v=42">
-    <link rel="stylesheet" href="css/sidebar.css?v=18">
-    <link rel="stylesheet" href="css/messages.css?v=7">
-    <link rel="stylesheet" href="css/input.css?v=22">
-    <link rel="stylesheet" href="css/modals.css?v=6">
+    <link rel="stylesheet" href="css/variables.css?v=10">
+    <link rel="stylesheet" href="css/reset.css?v=5">
+    <link rel="stylesheet" href="css/layout.css?v=56">
+    <link rel="stylesheet" href="css/sidebar.css?v=25">
+    <link rel="stylesheet" href="css/messages.css?v=12">
+    <link rel="stylesheet" href="css/input.css?v=23">
+    <link rel="stylesheet" href="css/modals.css?v=8">
     <link rel="stylesheet" href="css/xiaoe.css?v=9">
-    <link rel="stylesheet" href="css/remote.css?v=2">
+    <link rel="stylesheet" href="css/remote.css?v=5">
     <link rel="stylesheet" href="css/window.css?v=5">
-    <link rel="stylesheet" href="css/components.css?v=16">
+    <link rel="stylesheet" href="css/components.css?v=18">
     <link rel="stylesheet" href="css/agent.css?v=14">
-    <link rel="stylesheet" href="css/settings.css?v=5">
+    <link rel="stylesheet" href="css/settings.css?v=8">
 
     
 
@@ -76,7 +81,7 @@
             <div class="header-chat-title" id="header-chat-title"></div>
             <!-- 主题按键：点开色板浮层（唯一入口；旧的 ⋯ 面板已废） -->
             <div class="theme-slot">
-                <button type="button" class="theme-btn" id="theme-btn" title="主题" aria-label="切换主题">
+                <button type="button" class="theme-btn" id="theme-btn" title="Theme" aria-label="Theme" data-i18n-title="theme.title">
                     <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true">
                         <path d="M8 1.6a6.4 6.4 0 100 12.8c1 0 1.7-.8 1.7-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.6-.5-1.1 0-.9.7-1.6 1.6-1.6h1.6A3.1 3.1 0 0014.4 6C14 3.4 11.3 1.6 8 1.6z"/>
                         <circle cx="4.8" cy="6" r="1" fill="currentColor" stroke="none"/>
@@ -86,16 +91,16 @@
                 </button>
                 <div class="theme-popover" id="theme-popover">
                     <div class="global-theme-switcher header-theme-switcher">
-                        <div class="theme-dot active" data-theme="default" title="经典蓝" onclick="setGlobalTheme('default')"></div>
-                        <div class="theme-dot" data-theme="midnight" title="深夜黑" onclick="setGlobalTheme('midnight')"></div>
-                        <div class="theme-dot" data-theme="emerald" title="翡翠绿" onclick="setGlobalTheme('emerald')"></div>
-                        <div class="theme-dot" data-theme="warm" title="琥珀护眼" onclick="setGlobalTheme('warm')"></div>
-                        <div class="theme-dot" data-theme="cyber" title="赛博2077" onclick="setGlobalTheme('cyber')"></div>
-                        <div class="theme-dot" data-theme="pink" title="樱花粉" onclick="setGlobalTheme('pink')"></div>
-                        <div class="theme-dot" data-theme="macaron-green" title="梦境绿" onclick="setGlobalTheme('macaron-green')"></div>
-                        <div class="theme-dot" data-theme="macaron-violet" title="梦境紫" onclick="setGlobalTheme('macaron-violet')"></div>
-                        <div class="theme-dot" data-theme="macaron-pink" title="梦境粉" onclick="setGlobalTheme('macaron-pink')"></div>
-                        <div class="theme-dot" data-theme="macaron-blue" title="梦境蓝" onclick="setGlobalTheme('macaron-blue')"></div>
+                        <div class="theme-dot active" data-theme="default" title="Classic" data-i18n-title="theme.classic onclick="setGlobalTheme('default')"></div>
+                        <div class="theme-dot" data-theme="midnight" title="Midnight" data-i18n-title="theme.midnight onclick="setGlobalTheme('midnight')"></div>
+                        <div class="theme-dot" data-theme="emerald" title="Emerald" data-i18n-title="theme.emerald onclick="setGlobalTheme('emerald')"></div>
+                        <div class="theme-dot" data-theme="warm" title="Amber" data-i18n-title="theme.warm onclick="setGlobalTheme('warm')"></div>
+                        <div class="theme-dot" data-theme="cyber" title="Cyberpunk" data-i18n-title="theme.cyber onclick="setGlobalTheme('cyber')"></div>
+                        <div class="theme-dot" data-theme="pink" title="Sakura" data-i18n-title="theme.pink onclick="setGlobalTheme('pink')"></div>
+                        <div class="theme-dot" data-theme="macaron-green" title="Mint Dream" data-i18n-title="theme.mg onclick="setGlobalTheme('macaron-green')"></div>
+                        <div class="theme-dot" data-theme="macaron-violet" title="Violet Dream" data-i18n-title="theme.mv onclick="setGlobalTheme('macaron-violet')"></div>
+                        <div class="theme-dot" data-theme="macaron-pink" title="Rose Dream" data-i18n-title="theme.mp onclick="setGlobalTheme('macaron-pink')"></div>
+                        <div class="theme-dot" data-theme="macaron-blue" title="Azure Dream" data-i18n-title="theme.mb onclick="setGlobalTheme('macaron-blue')"></div>
                     </div>
                 </div>
             </div>
@@ -110,64 +115,64 @@
             <!-- 右侧字标：空间挤压（.tight）时收起只留 logo —— 溢出阶梯见 js/topbar.js -->
             <div class="header-brand" id="header-brand">
                 <span class="brand-name">C4EAI</span>
-                <span class="brand-sub">江南大学环境计算组</span>
+                <span class="brand-sub" data-i18n="brand.sub">Environmental Computing Group · Jiangnan University</span>
             </div>
             <!-- 桌面外壳（exe）窗口三键：浏览器无 .desktop-app 整块隐藏，字标自动右推 -->
             <div class="win-controls" id="win-controls">
-                    <button class="win-btn" id="win-min" type="button" title="最小化" aria-label="最小化"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5.5h10" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
-                    <button class="win-btn" id="win-max" type="button" title="最大化" aria-label="最大化"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
-                    <button class="win-btn" id="win-close" type="button" title="关闭" aria-label="关闭"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0.5 0.5l9 9M9.5 0.5l-9 9" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+                    <button class="win-btn" id="win-min" type="button" title="Minimize" aria-label="Minimize" data-i18n-title="win.min"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5.5h10" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+                    <button class="win-btn" id="win-max" type="button" title="Maximize" aria-label="Maximize" data-i18n-title="win.max"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+                    <button class="win-btn" id="win-close" type="button" title="Close" aria-label="Close" data-i18n-title="win.close"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0.5 0.5l9 9M9.5 0.5l-9 9" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
                 </div>
         </div>
     </header>
 
     <!-- 对话重命名小浮层 -->
     <div class="popup-panel" id="rename-branch-modal">
-        <h3>重命名对话</h3>
-        <input type="text" id="rename-branch-name-input" class="branch-name-input" placeholder="输入新的对话名称">
+        <h3 data-i18n="rename.title">Rename Conversation</h3>
+        <input type="text" id="rename-branch-name-input" class="branch-name-input" placeholder="New name" data-i18n-ph="rename.ph">
         <div class="popup-actions">
-            <button class="chat-btn" id="cancel-rename-btn">取消</button>
-            <button class="key-btn" id="confirm-rename-btn">重命名</button>
+            <button class="chat-btn" id="cancel-rename-btn" data-i18n="btn.cancel">Cancel</button>
+            <button class="key-btn" id="confirm-rename-btn" data-i18n="btn.rename">Rename</button>
         </div>
     </div>
 
     <!-- 数据库面板（浮动窗，与笔记面板同形态；条目按用户分组展示） -->
     <div class="notes-panel" id="database-panel" style="top:140px;left:auto;right:40px;width:520px;height:600px;">
         <div class="notes-panel-header" id="db-panel-header">
-            <span class="notes-panel-title">🗄️ 数据库</span>
+            <span class="notes-panel-title" data-i18n="db.title">🗄️ Database</span>
             <span id="database-status-badge" style="font-size:0.78rem;color:var(--gray);margin-left:.5rem;">0 个条目</span>
             <div class="notes-panel-actions">
                 <!-- 上传/添加按钮已下沉到每个文件夹行（用户 2026-09-25 定）—— 见树渲染 -->
                 <!-- 筛选/排序：外置 -->
                 <span class="db-filter-wrap">
-                    <button id="db-f-owner-btn" title="按上传者筛选" aria-haspopup="true">
+                    <button id="db-f-owner-btn" title="Filter by uploader" aria-haspopup="true" data-i18n-title="db.f.owner">
                         <span id="db-f-owner-label">👤 全部</span> ▾
                     </button>
                     <div class="db-filter-menu" id="db-f-owner-menu" role="menu" hidden></div>
                 </span>
                 <span class="db-filter-wrap">
-                    <button id="db-f-year-btn" title="按上传年份筛选" aria-haspopup="true">
+                    <button id="db-f-year-btn" title="Filter by year" aria-haspopup="true" data-i18n-title="db.f.year">
                         <span id="db-f-year-label">📅 全部</span> ▾
                     </button>
                     <div class="db-filter-menu" id="db-f-year-menu" role="menu" hidden></div>
                 </span>
                 <span class="db-filter-wrap">
-                    <button id="db-f-sort-btn" title="排序方式" aria-haspopup="true">
+                    <button id="db-f-sort-btn" title="Sort order" aria-haspopup="true" data-i18n-title="db.f.sort">
                         <span id="db-f-sort-label">🕒 最新</span> ▾
                     </button>
                     <div class="db-filter-menu" id="db-f-sort-menu" role="menu" hidden>
-                        <button class="db-filter-item active" data-sort="time" role="menuitem">🕒 上传时间（新→旧）</button>
-                        <button class="db-filter-item" data-sort="time_asc" role="menuitem">🕒 上传时间（旧→新）</button>
-                        <button class="db-filter-item" data-sort="title" role="menuitem">🔤 名称</button>
+                        <button class="db-filter-item active" data-sort="time" role="menuitem" data-i18n="db.sort.new">🕒 Newest first</button>
+                        <button class="db-filter-item" data-sort="time_asc" role="menuitem" data-i18n="db.sort.old">🕒 Oldest first</button>
+                        <button class="db-filter-item" data-sort="title" role="menuitem" data-i18n="db.sort.name">🔤 Name</button>
                     </div>
                 </span>
-                <button id="db-close-btn" class="notes-close-btn" title="关闭">×</button>
+                <button id="db-close-btn" class="notes-close-btn" title="Close" data-i18n-title="btn.close">×</button>
             </div>
         </div>
         <input type="file" id="db-file-input" style="display:none;" multiple
             accept="image/*,.txt,.md,.js,.py,.c,.cpp,.h,.html,.css,.json,.csv,.log,.yaml,.yml,.sql,.sh,.xml,.ts,.java,.go,.rs,.docx,.pdf,.pptx,.odt,.rtf,.toml,.ini,.tex">
         <div class="notes-empty" id="db-empty" style="display:none;">
-            <span>暂无条目</span>
+            <span data-i18n="db.empty">No items</span>
         </div>
         <div class="notes-list" id="db-doc-list" style="flex:1;overflow-y:auto;padding:0.6rem;"></div>
     </div>
@@ -177,94 +182,80 @@
     <div class="settings-overlay" id="settings-overlay"></div>
     <div class="settings-panel" id="settings-panel">
         <div class="settings-head">
-            <span class="settings-title">设置</span>
+            <span class="settings-title" data-i18n="set.title">Settings</span>
             <button class="key-btn" id="save-settings">保存</button>
-            <button class="close-panel-btn" id="close-settings" title="关闭">×</button>
+            <button class="close-panel-btn" id="close-settings" title="Close" data-i18n-title="btn.close">×</button>
         </div>
         <div class="settings-body">
             <nav class="settings-nav" id="settings-nav">
-                <button type="button" class="settings-nav-item active" data-pane="pane-model" title="模型与参数"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/></svg><span class="nav-label">模型与参数</span></button>
-                <button type="button" class="settings-nav-item" data-pane="pane-agent" title="智能体"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v2"/><path d="M15 2v2"/><path d="M9 20v2"/><path d="M15 20v2"/><path d="M2 9h2"/><path d="M2 15h2"/><path d="M20 9h2"/><path d="M20 15h2"/></svg><span class="nav-label">智能体</span></button>
-                <button type="button" class="settings-nav-item" data-pane="pane-service" title="连接与服务"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span class="nav-label">连接与服务</span></button>
-                <button type="button" class="settings-nav-item" data-pane="pane-ui" title="界面"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13.5" cy="6.5" r=".6"/><circle cx="17.5" cy="10.5" r=".6"/><circle cx="8.5" cy="7.5" r=".6"/><circle cx="6.5" cy="12.5" r=".6"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.83-.44-1.12-.29-.29-.44-.65-.44-1.13A1.64 1.64 0 0 1 14.44 16h2c3.05 0 5.55-2.5 5.55-5.55C21.97 6.01 17.46 2 12 2z"/></svg><span class="nav-label">界面</span></button>
+                <button type="button" class="settings-nav-item active" data-pane="pane-model" title="Model & Parameters" data-i18n-title="nav.model"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/></svg><span class="nav-label" data-i18n="nav.model">Model & Parameters</span></button>
+                <button type="button" class="settings-nav-item" data-pane="pane-providers" title="Providers" data-i18n-title="nav.providers"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="7" rx="1.5"/><rect x="4" y="14" width="16" height="7" rx="1.5"/><path d="M8 6.5h.01"/><path d="M8 17.5h.01"/><path d="M12 6.5h4"/><path d="M12 17.5h4"/></svg><span class="nav-label" data-i18n="nav.providers">Providers</span></button>
+                <button type="button" class="settings-nav-item" data-pane="pane-agent" title="Agent" data-i18n-title="nav.agent"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v2"/><path d="M15 2v2"/><path d="M9 20v2"/><path d="M15 20v2"/><path d="M2 9h2"/><path d="M2 15h2"/><path d="M20 9h2"/><path d="M20 15h2"/></svg><span class="nav-label" data-i18n="nav.agent">Agent</span></button>
+                <button type="button" class="settings-nav-item" data-pane="pane-service" title="Connections & Services" data-i18n-title="nav.service"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span class="nav-label" data-i18n="nav.service">Connections & Services</span></button>
+                <button type="button" class="settings-nav-item" data-pane="pane-ui" title="Interface" data-i18n-title="nav.ui"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13.5" cy="6.5" r=".6"/><circle cx="17.5" cy="10.5" r=".6"/><circle cx="8.5" cy="7.5" r=".6"/><circle cx="6.5" cy="12.5" r=".6"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.83-.44-1.12-.29-.29-.44-.65-.44-1.13A1.64 1.64 0 0 1 14.44 16h2c3.05 0 5.55-2.5 5.55-5.55C21.97 6.01 17.46 2 12 2z"/></svg><span class="nav-label" data-i18n="nav.ui">Interface</span></button>
             </nav>
             <div class="settings-panes">
                 <section class="settings-pane active" id="pane-model">
-                    <h3>模型与参数</h3>
+                    <h3 data-i18n="pane.model">Model &amp; Parameters</h3>
                         <div class="setting-item">
                                                        <label class="setting-label">
-                                                           温度 (Temperature)
+                                                           <span data-i18n="set.temp">Temperature</span>
                                                 <span class="setting-value" id="temp-value">0.7</span>
                                             </label>
                                             <input type="range" min="0" max="2" step="0.1" value="0.7" class="slider" id="temperature">
-                                            <div class="setting-desc">
-                                                控制随机性：较低值更确定性，较高值更有创造性
-                                            </div>
+                                            <div class="setting-desc" data-i18n="set.temp.desc">Lower = more deterministic; higher = more creative.</div>
                                         </div>
                         <div class="setting-item">
                                             <label class="setting-label">
-                                                上下文轮次
+                                                <span data-i18n="set.ctx">Context turns</span>
                                                 <span class="setting-value" id="context-value">10</span>
                                             </label>
                                             <input type="range" min="1" max="50" step="1" value="10" class="slider" id="context-length">
-                                            <div class="setting-desc">
-                                                模型记住的对话轮次数量
-                                            </div>
+                                            <div class="setting-desc" data-i18n="set.ctx.desc">Conversation turns retained in the model context.</div>
                                         </div>
                         <div class="setting-item">
                                              <label class="setting-label">
-                                                 最大输出 Token 数
+                                                 <span data-i18n="set.maxtokens">Max output tokens</span>
                                                  <span class="setting-value" id="max-tokens-value">65536</span>
                                              </label>
                                              <input type="number" min="100" max="393216" step="100" value="65536" class="number-input"
                                                  id="max-tokens">
-                                             <div class="setting-desc">
-                                                 每次请求发给模型的 max_tokens：单次回答最多能生成多少 token，超了会被服务端截断。<br>
-                                                 DeepSeek 官方合法范围 1~393216（384K）；不传时默认「非思考 8K / 思考 64K」。思考模式下思维链也占这份额度，所以设太小会让正文很短（甚至为空）。<br>
-                                                 ⚠️ 填大不会让回答变长（何时停由模型决定），但超过服务端真实上限会被 400 拒收。想要长代码/长报告，建议 64K 以上。<br>
-                                                 该值还参与「清理触发线」计算（用来预留输出空间）。回答被截断且正夹着工具调用时，本轮会中止并提示调大它。
-                                             </div>
+                                             <div class="setting-desc"><span data-i18n="set.maxtokens.desc">Per-response token cap (reasoning counts toward it). DeepSeek range 1&ndash;393,216; exceeding the server limit is rejected.</span></div>
                                          </div>
                         <div class="setting-item">
                                              <label class="setting-label">
-                                                 模型上下文窗口 context window
+                                                 <span data-i18n="set.ctxwin">Context window</span>
                                                  <span class="setting-value" id="context-window-value">262144</span>
                                              </label>
                                              <input type="number" min="1024" max="2000000" step="1000" value="262144" class="number-input"
                                                  id="context-window">
-                                             <div class="setting-desc">
-                                                 模型一次最多能接收的 token 数（hard limit，由模型本身决定，如 256K / 1M）。<br>
-                                                 它只用于计算「什么时候开始清理旧工具结果」，本机不会因为超过此值而报错、截断或中断对话；真的超过模型能力时，只由模型服务端报错（那才是真的超上下文）。<br>
-                                                 👉 填真实值最稳：填小 → 更早开始清理（保守，不报错）；填大 → 更晚清理，超了交给服务端。<br>
-                                                 👉 本值不与所选模型自动绑定，请按实际调用的模型填（256K 填 262144，1M 填 1048576）。
-                                             </div>
+                                             <div class="setting-desc"><span data-i18n="set.ctxwin.desc">Model context size (256K = 262144, 1M = 1048576). Only controls when old tool results are compacted.</span></div>
                                          </div>
                         <div class="setting-item">
                                              <label class="setting-label">
-                                                 清理触发线 context budget
+                                                 <span data-i18n="set.budget">Compaction threshold</span>
                                                  <span class="setting-value" id="context-budget-value">0（自动）</span>
                                              </label>
                                              <input type="number" min="0" max="2000000" step="1000" value="0" class="number-input"
                                                  id="context-budget">
-                                             <div class="setting-desc">
-                                                 发送给模型的 token 估算量（或 API 真实用量）达到此值时，开始把较早的工具结果替换成占位符——只动工具结果，你和 AI 的正文、技能正文永不清。<br>
-                                                 0 = 自动：(上下文窗口 − 输出预留) × 75%，并保底 ≥ 1024。<br>
-                                                 ⚠️ 设得过大＝几乎不清理，上下文会一路涨到模型窗口，最终由服务端报错；设得过小＝频繁清理（可能每轮都在清旧工具结果）。
-                                             </div>
+                                             <div class="setting-desc"><span data-i18n="set.budget.desc">Estimated context size that triggers compaction of old tool results. 0 = auto: (window &minus; reserve) &times; 75%.</span></div>
                                          </div>
                         <div class="setting-item">
                                              <label class="setting-label">
-                                                 预期输入Token数（阈值）
+                                                 <span data-i18n="set.expected">Expected input tokens (warn)</span>
                                                  <span class="setting-value" id="expected-context-tokens-value">4000</span>
                                              </label>
                                              <input type="number" min="100" max="32000" step="100" value="4000" class="number-input"
                                                  id="expected-context-tokens">
-                                             <div class="setting-desc">
-                                                当前发送给LLM的Token数超过此值时，界面红字加粗警告（仅提示，不影响输入）
-                                            </div>
+                                             <div class="setting-desc" data-i18n="set.expected.desc">Shows a red warning when tokens sent to the model exceed this value.</div>
                                         </div>
+</section>
+
+                <section class="settings-pane" id="pane-providers">
+                    <h3 data-i18n="pane.providers">Providers</h3>
+                    <div class="settings-pane-desc" data-i18n="pane.providers.desc">Provider endpoints, API keys, and model management.</div>
                         <div class="setting-item provider-settings-block">
-                                            <label class="setting-label">模型与服务商配置</label>
+                                            <label class="setting-label" data-i18n="pp.config">Provider Configuration</label>
                                         <div class="models-content-wrapper">
                                             <div class="provider-layout">
                                                 <!-- 左侧服务商列表 -->
@@ -280,7 +271,7 @@
                                                             <span id="current-provider-name">DeepSeek</span>
                                                         </div>
                                                         <button class="action-btn" id="delete-provider-btn"
-                                                            style="display: none; background: var(--error); color: white;">删除服务商</button>
+                                                            style="display: none; background: var(--error); color: white;" data-i18n="pp.delete">Delete Provider</button>
                                                     </div>
 
                                                     <!-- 配置表单 -->
@@ -296,12 +287,12 @@
                                                         </div>
                                                     </div>
                                                     <div style="display: flex; justify-content: flex-end;">
-                                                        <button class="save-config-btn" id="save-provider-config">保存当前配置</button>
+                                                        <button class="save-config-btn" id="save-provider-config" data-i18n="pp.save">Save</button>
                                                     </div>
 
                                                     <!-- 模型列表 -->
                                                     <div>
-                                                        <h4 style="margin-bottom: 1rem; color: var(--dark);">可用模型</h4>
+                                                        <h4 style="margin-bottom: 1rem; color: var(--dark);" data-i18n="pp.models">Available Models</h4>
                                                         <div class="models-grid-compact" id="provider-models-list">
                                                             <!-- JS动态生成 -->
                                                         </div>
@@ -310,179 +301,169 @@
                                             </div>
                                         </div>
                                         </div>
+                
                 </section>
+
                 <section class="settings-pane" id="pane-agent">
-                    <h3>智能体</h3>
+                    <h3 data-i18n="pane.agent">Agent</h3>
                         <div class="config-section">
-                                                            <div class="config-section-title">Agent 引擎</div>
+                                                            <div class="config-section-title" data-i18n="pa.engine">Agent Engine</div>
                                                                                                                         <label class="config-option">
                                                                 <input type="radio" name="agent-engine" value="custom" id="engine-custom" checked>
-                                                                <span class="config-option-label">自定义流式 <span class="config-option-desc">裸API手写循环，显示🧠思考</span></span>
+                                                                <span class="config-option-label"><span data-i18n="pa.engine.custom">Custom streaming</span> <span class="config-option-desc" data-i18n="pa.engine.custom.d">Direct API loop · shows reasoning</span></span>
                                                             </label>
                                                             <label class="config-option">
                                                                 <input type="radio" name="agent-engine" value="langchain" id="engine-langchain">
-                                                                <span class="config-option-label">LangChain 流式 <span class="config-option-desc">框架循环，无思考链</span></span>
+                                                                <span class="config-option-label"><span data-i18n="pa.engine.lc">LangChain streaming</span> <span class="config-option-desc" data-i18n="pa.engine.lc.d">Framework loop · no reasoning trace</span></span>
                                                             </label>
                                                         
                                                             <div style="margin-top:0.6rem;">
-                                                                <label class="config-option-label" style="margin-bottom:0.3rem;display:block;">工具循环轮次</label>
+                                                                <label class="config-option-label" style="margin-bottom:0.3rem;display:block;" data-i18n="pa.rounds">Tool-loop rounds</label>
                                                                 <select id="agent-max-rounds" class="neo4j-input" style="width:100%;">
-                                                                    <option value="8">8 轮</option>
-                                                                    <option value="20">20 轮</option>
-                                                                    <option value="50">50 轮</option>
-                                                                    <option value="0">无限</option>
+                                                                    <option value="8" data-i18n="pa.rounds.8">8 rounds</option>
+                                                                    <option value="20" data-i18n="pa.rounds.20">20 rounds</option>
+                                                                    <option value="50" data-i18n="pa.rounds.50">50 rounds</option>
+                                                                    <option value="0" data-i18n="pa.rounds.inf">Unlimited</option>
                                                                 </select>
                                                             </div>
                                                         </div>
                         <div class="config-section">
-                                                            <div class="config-section-title">子智能体</div>
+                                                            <div class="config-section-title" data-i18n="pa.sub">Subagents</div>
                                                             <label class="config-option" style="margin-bottom:.5rem;">
                                                                 <input type="checkbox" id="subagent-enabled" checked>
-                                                                <span class="config-option-label">启用子智能体
-                                                                    <span class="config-option-desc">主智能体可派子智能体并行处理独立子任务（需在下方工具区勾选 delegate_task）</span>
+                                                                <span class="config-option-label"><span data-i18n="pa.sub.enable">Enable subagents</span>
+                                                                    <span class="config-option-desc" data-i18n="pa.sub.enable.d">Master agent may spawn subagents for independent subtasks (requires the delegate_task tool).</span>
                                                                 </span>
                                                             </label>
                                                             <label class="config-option" style="margin-bottom:.5rem;">
                                                                 <input type="checkbox" id="subagent-feed-steps">
-                                                                <span class="config-option-label">回喂子智能体完整步骤
-                                                                    <span class="config-option-desc">默认关闭。关闭时主智能体只收到子智能体的结论摘要（含调用过的工具名与步骤数），
-                                                                    不收到子智能体读到的正文 —— 这是防上下文爆炸的关键；
-                                                                    前端仍可完整看到子智能体过程。仅在需要主智能体逐字复核子智能体读到什么时才打开。</span>
+                                                                <span class="config-option-label"><span data-i18n="pa.sub.feed">Feed full subagent steps</span>
+                                                                    <span class="config-option-desc" data-i18n="pa.sub.feed.d">Off = master receives a summary only (prevents context bloat). Enable only for verbatim review.</span>
                                                                 </span>
                                                             </label>
                                                             <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem .6rem;">
-                                                                <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">轮次/个（0=无限）
-                                                                    <input type="number" id="subagent-rounds" min="0" step="1" value="0" title="每个子智能体的工具循环上限；0 = 无限（用户 2026-09-27：不要锁死）"
+                                                                <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;"><span data-i18n="pa.sub.rounds">Rounds each (0 = unlimited)</span>
+                                                                    <input type="number" id="subagent-rounds" min="0" step="1" value="0" title="Per-subagent tool-loop cap; 0 = unlimited" data-i18n-title="pa.sub.rounds.t"
                                                                            class="neo4j-input" style="width:100%;box-sizing:border-box;">
                                                                 </label>
-                                                                <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">并发上限
+                                                                <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;"><span data-i18n="pa.sub.parallel">Parallel limit</span>
                                                                     <input type="number" id="subagent-parallel" min="1" max="8" step="1" value="8"
                                                                            class="neo4j-input" style="width:100%;box-sizing:border-box;">
                                                                 </label>
-                                                                <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">最多子任务
+                                                                <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;"><span data-i18n="pa.sub.maxtasks">Max subtasks</span>
                                                                     <input type="number" id="subagent-maxtasks" min="1" max="8" step="1" value="8"
                                                                            class="neo4j-input" style="width:100%;box-sizing:border-box;">
                                                                 </label>
                                                             </div>
-                                                            <div style="font-size:.72rem;color:var(--gray);line-height:1.5;margin-top:.4rem;">
-                                                                <b>轮次/个</b>＝每个子智能体内部最多跑几轮工具循环；<br>
-                                                                <b>并发上限</b>＝同时最多并行运行几个子智能体（其余排队等待）；<br>
-                                                                <b>最多子任务</b>＝一次 delegate 最多接受几个子任务，超出的会被丢弃。
+                                                            <div style="font-size:.72rem;color:var(--gray);line-height:1.5;margin-top:.4rem;" data-i18n="pa.sub.legend">
+                                                                <b>Rounds</b> = per-subagent tool-loop cap · <b>Parallel</b> = concurrent subagents · <b>Max subtasks</b> = per delegate call (excess dropped).
                                                             </div>
-                                                            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem .6rem;margin-top:.6rem;">
-                                                                <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">催促(秒)
-                                                                    <input type="number" id="subagent-nudge" min="0" max="604800" step="10" value="0"
-                                                                           class="neo4j-input" style="width:100%;box-sizing:border-box;">
-                                                                </label>
-                                                                <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">警告(秒)
-                                                                    <input type="number" id="subagent-warn" min="0" max="604800" step="10" value="0"
-                                                                           class="neo4j-input" style="width:100%;box-sizing:border-box;">
-                                                                </label>
-                                                                <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">终止(秒)
+                                                            <div style="margin-top:.6rem;">
+                                                                <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;width:160px;"><span data-i18n="pa.abort">Timeout (s)</span>
                                                                     <input type="number" id="subagent-abort" min="0" max="604800" step="10" value="86400"
                                                                            class="neo4j-input" style="width:100%;box-sizing:border-box;">
                                                                 </label>
                                                             </div>
-                                                            <div style="font-size:.72rem;color:var(--gray);line-height:1.5;margin-top:.4rem;">
-                                                                子智能体三级超时（秒，0=关闭该级，每个子智能体独立计时）：催促→注入「尽快收尾」；警告→注入「立即给结论」；终止→中断并返回已完成部分。
+                                                            <div style="font-size:.72rem;color:var(--gray);line-height:1.5;margin-top:.4rem;" data-i18n="pa.sub.abort.d">
+                                                                Seconds; 0 = off, timed per subagent. Timed-out subagents keep finished progress and can be resumed in the main chat.
                                                             </div>
                                                         </div>
                         <div class="config-section">
-                                                            <div class="config-section-title">超时保护（主智能体）</div>
-                                                            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem .6rem;">
-                                                                <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">催促(秒)
-                                                                    <input type="number" id="timeout-nudge" min="0" max="604800" step="10" value="0"
-                                                                           class="neo4j-input" style="width:100%;box-sizing:border-box;">
-                                                                </label>
-                                                                <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">警告(秒)
-                                                                    <input type="number" id="timeout-warn" min="0" max="604800" step="10" value="0"
-                                                                           class="neo4j-input" style="width:100%;box-sizing:border-box;">
-                                                                </label>
-                                                                <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;">终止(秒)
+                                                            <div class="config-section-title" data-i18n="pa.timeout">Timeout (Master Agent)</div>
+                                                            <div style="margin-top:.6rem;">
+                                                                <label style="display:flex;flex-direction:column;font-size:.78rem;color:var(--gray);gap:2px;width:160px;"><span data-i18n="pa.abort">Timeout (s)</span>
                                                                     <input type="number" id="timeout-abort" min="0" max="604800" step="10" value="86400"
                                                                            class="neo4j-input" style="width:100%;box-sizing:border-box;">
                                                                 </label>
                                                             </div>
-                                                            <div style="font-size:.72rem;color:var(--gray);line-height:1.5;margin-top:.4rem;">
-                                                                主智能体三级超时（秒，0=关闭该级）：催促→注入「尽快收尾」；警告→注入「立即作答」；终止→强制结束并返回超时说明。
+                                                            <div style="font-size:.72rem;color:var(--gray);line-height:1.5;margin-top:.4rem;" data-i18n="pa.timeout.d">
+                                                                Seconds; 0 = off. On timeout the run ends; per-turn checkpoints let the next message resume it.
                                                             </div>
                                                         </div>
                         <div class="config-section">
-                                                            <div class="config-section-title">权限模式</div>
+                                                            <div class="config-section-title" data-i18n="pa.perm">Permission Mode</div>
                                                                                                                         <label class="config-option">
                                                                 <input type="radio" name="permission-mode" value="safe" id="perm-safe" checked>
-                                                                <span class="config-option-label">安全模式 <span class="config-option-desc">仅 workspace</span></span>
+                                                                <span class="config-option-label"><span data-i18n="pa.perm.safe">Safe</span> <span class="config-option-desc" data-i18n="pa.perm.safe.d">Workspace only</span></span>
                                                             </label>
                                                             <label class="config-option">
                                                                 <input type="radio" name="permission-mode" value="ask" id="perm-ask">
-                                                                <span class="config-option-label">询问模式 <span class="config-option-desc">可读项目+写技能</span></span>
+                                                                <span class="config-option-label"><span data-i18n="pa.perm.ask">Ask</span> <span class="config-option-desc" data-i18n="pa.perm.ask.d">Read project + write skills</span></span>
                                                             </label>
                                                             <label class="config-option">
                                                                 <input type="radio" name="permission-mode" value="full" id="perm-full">
-                                                                <span class="config-option-label">完全访问 <span class="config-option-desc">任意读写</span></span>
+                                                                <span class="config-option-label"><span data-i18n="pa.perm.full">Full access</span> <span class="config-option-desc" data-i18n="pa.perm.full.d">Unrestricted read/write</span></span>
                                                             </label>
                                                         
                                                         </div>
                         <div class="config-section">
-                                                            <div class="config-section-title">工具 <span style="font-size:0.75rem;color:var(--gray);font-weight:normal">（按分组勾选 = LLM 可用；数据来自后端 tools_registry）</span></div>
+                                                            <div class="config-section-title"><span data-i18n="pa.tools">Tools</span> <span style="font-size:0.75rem;color:var(--gray);font-weight:normal" data-i18n="pa.tools.d">(checked = available to the LLM; from backend tools_registry)</span></div>
                                                             <div id="tools-groups-container" style="min-height:2rem;">
                                                                 <!-- 由 agent_config.js 从后端 /api/tools 按分组动态渲染 -->
-                                                                <div style="font-size:0.8rem;color:var(--gray);padding:0.25rem 0;">加载中...</div>
+                                                                <div style="font-size:0.8rem;color:var(--gray);padding:0.25rem 0;" data-i18n="loading">Loading…</div>
                                                             </div>
                                                          </div>
                         <div class="config-section">
                                                         <div class="config-section-title">Skill</div>
                                                         <div id="skills-config-container">
                                                             <!-- 由 JS 从 skills/index.json 动态生成 -->
-                                                            <div style="font-size:0.8rem;color:var(--gray);padding:0.25rem 0;">加载中...</div>
+                                                            <div style="font-size:0.8rem;color:var(--gray);padding:0.25rem 0;" data-i18n="loading">Loading…</div>
                                                         </div>
                                                         </div>
                 </section>
                 <section class="settings-pane" id="pane-service">
-                    <h3>连接与服务</h3>
+                    <h3 data-i18n="pane.service">Connections &amp; Services</h3>
                         <div class="config-section">
-                                                            <div class="config-section-title">Neo4j 连接 <div class="neo4j-status-dot" id="neo4j-status-dot" title="Neo4j 连接状态"></div></div>
+                                                            <div class="config-section-title"><span data-i18n="svc.neo4j">Neo4j Connection</span> <div class="neo4j-status-dot" id="neo4j-status-dot" title="Neo4j connection status" data-i18n-title="svc.neo4j.t"></div></div>
                                                             <div class="neo4j-connect-form">
                                                                 <input type="text" class="neo4j-input" id="panel-neo4j-uri" placeholder="neo4j+s://..." value="">
                                                                 <div class="neo4j-row">
-                                                                    <input type="text" class="neo4j-input" id="panel-neo4j-user" placeholder="用户名" value="">
-                                                                    <input type="password" class="neo4j-input" id="panel-neo4j-pass" placeholder="密码">
+                                                                    <input type="text" class="neo4j-input" id="panel-neo4j-user" placeholder="Username" value="" data-i18n-ph="svc.user">
+                                                                    <input type="password" class="neo4j-input" id="panel-neo4j-pass" placeholder="Password" data-i18n-ph="svc.pass">
                                                                 </div>
-                                                                <button class="neo4j-connect-btn" id="panel-neo4j-connect">连接</button>
+                                                                <button class="neo4j-connect-btn" id="panel-neo4j-connect" data-i18n="svc.connect">Connect</button>
                                                                 <span class="neo4j-connect-msg" id="panel-neo4j-msg"></span>
                                                             </div>
                                                         </div>
                         <div class="config-section">
-                                                            <div class="config-section-title">MinerU 解析配置 <span style="font-size:0.75rem;color:var(--gray);font-weight:normal">（PDF→Markdown，随保存提交）</span></div>
+                                                            <div class="config-section-title"><span data-i18n="svc.mineru">MinerU (PDF &rarr; Markdown)</span> <span style="font-size:0.75rem;color:var(--gray);font-weight:normal" data-i18n="svc.mineru.d">(applied on save)</span></div>
                                                             <div class="neo4j-connect-form">
                                                                 <input type="password" class="neo4j-input" id="panel-mineru-token" placeholder="MinerU API Token / Key" autocomplete="off">
                                                                 <div class="neo4j-row" style="margin-top:6px;">
-                                                                    <button class="neo4j-connect-btn" id="panel-mineru-save" style="background:var(--primary);color:#fff;">保存 Token</button>
+                                                                    <button class="neo4j-connect-btn" id="panel-mineru-save" style="background:var(--primary);color:#fff;" data-i18n="svc.mineru.save">Save Token</button>
                                                                     <span class="neo4j-connect-msg" id="panel-mineru-msg"></span>
                                                                 </div>
                                                             </div>
                                                         </div>
                 </section>
                 <section class="settings-pane" id="pane-ui">
-                    <h3>界面</h3>
+                    <h3 data-i18n="pane.ui">Interface</h3>
                         <div class="setting-item">
                                                         <label class="setting-label">
-                                                            文件打开方式
-                                                            <span class="setting-value" id="file-open-mode-value">后端打开</span>
+                                                            <span data-i18n="ui.lang">Language</span>
+                                                            <span class="setting-value" id="lang-value">English</span>
                                                         </label>
-                                                        <div class="mode-seg" id="file-open-mode-group">
-                                                            <button type="button" class="mode-seg-btn" data-mode="backend">后端打开</button>
-                                                            <button type="button" class="mode-seg-btn" data-mode="browser">浏览器新标签</button>
-                                                            <button type="button" class="mode-seg-btn" data-mode="float">应用内浮窗</button>
-                                                        </div>
-                                                        <div class="setting-desc">
-                                                            后端打开：用本机默认应用（Word/Excel/看图器）打开；浏览器新标签：新标签页预览/下载；应用内浮窗：在页面内浮窗预览，不跳出应用
+                                                        <div class="mode-seg" id="lang-group">
+                                                            <button type="button" class="mode-seg-btn active" data-lang="en" data-i18n="ui.lang.en">English</button>
+                                                            <button type="button" class="mode-seg-btn" data-lang="zh" data-i18n="ui.lang.zh">中文</button>
                                                         </div>
                                                     </div>
                         <div class="setting-item">
                                                         <label class="setting-label">
-                                                            小e 桌宠
-                                                            <span class="setting-value" id="xiaoe-enabled-value">已开启</span>
+                                                            <span data-i18n="ui.fileopen">File opening</span>
+                                                            <span class="setting-value" id="file-open-mode-value" data-i18n="ui.fileopen.backend">System app</span>
+                                                        </label>
+                                                        <div class="mode-seg" id="file-open-mode-group">
+                                                            <button type="button" class="mode-seg-btn" data-mode="backend" data-i18n="ui.fileopen.backend">System app</button>
+                                                            <button type="button" class="mode-seg-btn" data-mode="browser" data-i18n="ui.fileopen.browser">Browser tab</button>
+                                                            <button type="button" class="mode-seg-btn" data-mode="float" data-i18n="ui.fileopen.float">In-app window</button>
+                                                        </div>
+                                                        <div class="setting-desc" data-i18n="ui.fileopen.desc">System app: open with the OS default program · Browser tab: preview/download in a new tab · In-app window: floating preview without leaving the app.</div>
+                                                    </div>
+                        <div class="setting-item">
+                                                        <label class="setting-label">
+                                                            <span data-i18n="ui.xiaoe">Desk Pet (Xiao-e)</span>
+                                                            <span class="setting-value" id="xiaoe-enabled-value" data-i18n="ui.xiaoe.on">On</span>
                                                         </label>
                                                         <div style="margin-top: 0.5rem;">
                                                             <label class="switch">
@@ -490,91 +471,89 @@
                                                                 <span class="slider-round"></span>
                                                             </label>
                                                         </div>
-                                                        <div class="setting-desc">
-                                                            页面上那只云朵团。点它聊天（问功能/用法），双击敲打、连点发飙、拖着玩、右键换天气；60 秒不理它会睡着。小e 不保存任何记录，关掉即忘
-                                                        </div>
+                                                        <div class="setting-desc" data-i18n="ui.xiaoe.desc">The cloud companion: click to chat, double-click to poke, drag to play, right-click for weather. Stores nothing.</div>
                                                     </div>
                     <div class="settings-group">
-                        <h3>界面字号</h3>
+                        <h3 data-i18n="ui.fonts">Font Sizes</h3>
                             <div class="setting-item">
                                                     <label class="setting-label">
-                                                        对话管理字号
+                                                        <span data-i18n="ui.font.conv">Conversation list</span>
                                                         <span class="setting-value" id="font-conv-value">0.9</span>
                                                     </label>
                                                     <input type="range" min="0.6" max="1.6" step="0.05" value="0.9" class="slider" id="font-size-conv">
-                                                    <div class="setting-desc">侧边栏的对话名称列表</div>
+                                                    <div class="setting-desc" data-i18n="ui.font.conv.d">Sidebar conversation titles</div>
                                                 </div>
                             <div class="setting-item">
                                                     <label class="setting-label">
-                                                        历史记录字号
+                                                        <span data-i18n="ui.font.history">History preview</span>
                                                         <span class="setting-value" id="font-history-value">0.8</span>
                                                     </label>
                                                     <input type="range" min="0.5" max="1.5" step="0.05" value="0.8" class="slider" id="font-size-history">
-                                                    <div class="setting-desc">侧边栏每条历史消息的预览文字</div>
+                                                    <div class="setting-desc" data-i18n="ui.font.history.d">Sidebar history preview text</div>
                                                 </div>
                             <div class="setting-item">
                                                     <label class="setting-label">
-                                                        对话回复消息字号
+                                                        <span data-i18n="ui.font.messages">Chat message</span>
                                                         <span class="setting-value" id="font-messages-value">0.95</span>
                                                     </label>
                                                     <input type="range" min="0.6" max="1.8" step="0.05" value="0.95" class="slider" id="font-size-messages">
-                                                    <div class="setting-desc">聊天区 AI/用户回复气泡内的文字</div>
+                                                    <div class="setting-desc" data-i18n="ui.font.messages.d">Text inside chat bubbles</div>
                                                 </div>
                             <div class="setting-item">
                                                     <label class="setting-label">
-                                                        笔记字号
+                                                        <span data-i18n="ui.font.notes">Notes</span>
                                                         <span class="setting-value" id="font-notes-value">0.9</span>
                                                     </label>
                                                     <input type="range" min="0.6" max="1.8" step="0.05" value="0.9" class="slider" id="font-size-notes">
-                                                    <div class="setting-desc">笔记卡片的标题与正文</div>
+                                                    <div class="setting-desc" data-i18n="ui.font.notes.d">Note card titles and body</div>
                                                 </div>
                             <div class="setting-item">
                                                     <label class="setting-label">
-                                                        思考链/推理字号
+                                                        <span data-i18n="ui.font.thinking">Reasoning</span>
                                                         <span class="setting-value" id="font-thinking-value">0.7</span>
                                                     </label>
                                                     <input type="range" min="0.5" max="1.8" step="0.05" value="0.7" class="slider" id="font-size-thinking">
-                                                    <div class="setting-desc">聊天区思考链与推理内容的文字</div>
+                                                    <div class="setting-desc" data-i18n="ui.font.thinking.d">Reasoning and thinking text</div>
                                                 </div>
                             <div class="setting-item">
                                                     <label class="setting-label">
-                                                        微提示/轻提示字号
+                                                        <span data-i18n="ui.font.toast">Toast</span>
                                                         <span class="setting-value" id="font-toast-value">0.85</span>
                                                     </label>
                                                     <input type="range" min="0.5" max="1.8" step="0.05" value="0.85" class="slider" id="font-size-toast">
-                                                    <div class="setting-desc">右上角自动消失的轻提示（如"已复制"）</div>
+                                                    <div class="setting-desc" data-i18n="ui.font.toast.d">Transient toasts (e.g. "Copied")</div>
                                                 </div>
                             <div class="setting-item">
                                                     <label class="setting-label">
-                                                        弹窗浮层字号
+                                                        <span data-i18n="ui.font.popup">Popup</span>
                                                         <span class="setting-value" id="font-popup-value">0.85</span>
                                                     </label>
                                                     <input type="range" min="0.5" max="1.8" step="0.05" value="0.85" class="slider" id="font-size-popup">
-                                                    <div class="setting-desc">简单操作的小浮层（如重命名/编辑气泡）</div>
+                                                    <div class="setting-desc" data-i18n="ui.font.popup.d">Small popup panels (rename, edit)</div>
                                                 </div>
                             <div class="setting-item">
                                                     <label class="setting-label">
-                                                        大模态框字号
+                                                        <span data-i18n="ui.font.modal">Modal</span>
                                                         <span class="setting-value" id="font-modal-value">0.9</span>
                                                     </label>
                                                     <input type="range" min="0.5" max="1.8" step="0.05" value="0.9" class="slider" id="font-size-modal">
-                                                    <div class="setting-desc">居中大模态框（如添加模型/服务商/数据库）</div>
+                                                    <div class="setting-desc" data-i18n="ui.font.modal.d">Centered modals (add model/provider)</div>
                                                 </div>
                             <div class="setting-item">
                                                     <label class="setting-label">
-                                                        浮动编辑器字号
+                                                        <span data-i18n="ui.font.edit">Editor</span>
                                                         <span class="setting-value" id="font-edit-value">0.9</span>
                                                     </label>
                                                     <input type="range" min="0.5" max="1.8" step="0.05" value="0.9" class="slider" id="font-size-edit">
-                                                    <div class="setting-desc">编辑消息/笔记的浮动 Markdown 编辑器</div>
+                                                    <div class="setting-desc" data-i18n="ui.font.edit.d">Floating Markdown editor</div>
                                                 </div>
                             <div class="setting-item">
                                                     <div class="font-tier-btns">
-                                                        <button class="config-secondary-btn" id="reset-font-small-btn" onclick="resetFontTier('small')">重置为小字号</button>
-                                                        <button class="config-secondary-btn" id="reset-font-medium-btn" onclick="resetFontTier('medium')">重置为中字号</button>
-                                                        <button class="config-secondary-btn" id="reset-font-large-btn" onclick="resetFontTier('large')">重置为大字号</button>
+                                                        <button class="config-secondary-btn" id="reset-font-small-btn" onclick="resetFontTier('small')" data-i18n="ui.font.small">Small preset</button>
+                                                        <button class="config-secondary-btn" id="reset-font-medium-btn" onclick="resetFontTier('medium')" data-i18n="ui.font.medium">Medium preset</button>
+                                                        <button class="config-secondary-btn" id="reset-font-large-btn" onclick="resetFontTier('large')" data-i18n="ui.font.large">Large preset</button>
                                                     </div>
-                                                    <div class="setting-desc">小字号为默认：对话管理 0.85 / 历史 0.65 / 回复 0.75 / 笔记 0.75 / 思考链 0.7 / 编辑器 0.9 / 模态框 0.9 / 浮层 0.85 / 提示 0.85，每级递增 0.15</div>
+                                                    <div class="setting-desc" data-i18n="ui.font.tiers">Small is the default; each tier scales all sizes by +0.15.</div>
                                                 </div>
                     </div>
                 </section>
@@ -589,26 +568,26 @@
         <section class="hero">
             <div style="text-align:center;">
                 <img src="assets/icons/c4e-logo.png" alt="C4EAI" class="hero-logo">
-                <div style="text-align:center;font-size:1.6rem;font-weight:600;letter-spacing:.1em;margin-top:.35rem;">Quine</div>
-                <div style="text-align:center;font-size:1.35rem;letter-spacing:.22em;text-transform:uppercase;opacity:.75;margin-top:.3rem;">Literature Management &amp; Shared Wiki AI Agent</div>
+                <div style="text-align:center;font-size:1.6rem;font-weight:600;letter-spacing:.1em;margin-top:.35rem;">TruthCross</div>
+                <div style="text-align:center;font-size:1.35rem;letter-spacing:.22em;text-transform:uppercase;opacity:.75;margin-top:.3rem;">Fenton Literature Mining &amp; Knowledge Graph Agent</div>
             </div>
-            <div><button id="start-experience" class="cta-button" style="margin-top:2.2rem;">立即开始探索 →</button></div>
+            <div><button id="start-experience" class="cta-button" style="margin-top:2.2rem;" data-i18n="hero.start">Get Started →</button></div>
 
             <!-- 远程控制：手机/其他电脑用固定地址打开这台电脑的 C4EAI（隧道见项目根 tunnel.py） -->
-            <button id="remote-ctrl-btn" class="remote-ctrl-btn" type="button" title="手机/其他电脑远程访问这台电脑">
-                <span class="remote-dot"></span>远程控制
+            <button id="remote-ctrl-btn" class="remote-ctrl-btn" type="button" title="Access this machine from a phone or another computer" data-i18n-title="remote.btn.t">
+                <span class="remote-dot"></span><span data-i18n="remote.btn">Remote Access</span>
             </button>
             <div id="remote-ctrl-panel" class="remote-ctrl-panel" hidden>
-                <h4>📱 远程控制</h4>
-                <p class="remote-tip">手机或其他电脑打开下面这个地址，就能用这台电脑上的 C4EAI。地址是固定的，本机 IP 变了也照样能开。</p>
+                <div class="remote-ctrl-head"><span class="remote-ctrl-title" data-i18n="remote.title">📱 Remote Access</span><button id="remote-ctrl-close" class="remote-ctrl-close" title="Close" data-i18n-title="btn.close">×</button></div>
+                <p class="remote-tip" data-i18n="remote.tip">Open this address on another device to access this machine. The address is stable across IP changes.</p>
                 <div class="remote-ctrl-row">
                     <input id="remote-ctrl-url" type="text" readonly value="—">
-                    <button id="remote-ctrl-copy" type="button">复制</button>
+                    <button id="remote-ctrl-copy" type="button" data-i18n="btn.copy">Copy</button>
                 </div>
                 <div class="remote-ctrl-qr" id="remote-ctrl-qr"></div>
-                <div class="remote-ctrl-status" id="remote-ctrl-status">读取中…</div>
+                <div class="remote-ctrl-status" id="remote-ctrl-status" data-i18n="remote.loading">Loading…</div>
                 <div class="remote-ctrl-row" style="margin-top:.6rem;">
-                    <button id="remote-ctrl-toggle" type="button" style="flex:1;" hidden>开启隧道</button>
+                    <button id="remote-ctrl-toggle" type="button" style="flex:1;" hidden data-i18n="remote.tunnel">Start Tunnel</button>
                 </div>
             </div>
         </section>
@@ -618,23 +597,23 @@
         <!-- 添加自定义模型/服务商的模态框（统一 .modal/.modal-content） -->
         <div class="modal" id="add-custom-modal">
             <div class="modal-content" style="max-width:420px;">
-                <h3>添加自定义模型</h3>
+                <h3 data-i18n="m.model">Add Custom Model</h3>
                 <div class="form-group-item">
                     <label class="form-label">模型名称 (Display Name)</label>
-                    <input type="text" class="form-input" id="custom-model-name" placeholder="例如: My Llama 3">
+                    <input type="text" class="form-input" id="custom-model-name" placeholder="e.g. My Llama 3">
                 </div>
                 <div class="form-group-item">
                     <label class="form-label">模型ID (Model ID)</label>
                     <input type="text" class="form-input" id="custom-model-id"
-                        placeholder="例如: meta-llama/Llama-2-7b-chat-hf">
+                        placeholder="e.g. meta-llama/Llama-3-8B-Instruct">
                 </div>
                 <div class="form-group-item">
                     <label class="form-label">模型描述 (Description)</label>
-                    <input type="text" class="form-input" id="custom-model-desc" placeholder="例如: 高性能创意辅助模型">
+                    <input type="text" class="form-input" id="custom-model-desc" placeholder="e.g. General-purpose assistant">
                 </div>
                 <div class="modal-actions">
                     <button class="chat-btn" id="cancel-add-model">取消</button>
-                    <button class="save-config-btn" id="confirm-add-model">添加</button>
+                    <button class="save-config-btn" id="confirm-add-model" data-i18n="btn.add">Add</button>
                 </div>
             </div>
         </div>
@@ -642,22 +621,22 @@
         <!-- 添加自定义服务商模态框 -->
         <div class="modal" id="add-provider-modal">
             <div class="modal-content" style="max-width:420px;">
-                <h3>添加自定义服务商</h3>
+                <h3 data-i18n="m.provider">Add Custom Provider</h3>
                 <div class="form-group-item">
-                    <label class="form-label">服务商名称</label>
-                    <input type="text" class="form-input" id="new-provider-name" placeholder="例如: LocalLLM">
+                    <label class="form-label" data-i18n="m.provider.name">Provider Name</label>
+                    <input type="text" class="form-input" id="new-provider-name" placeholder="e.g. LocalLLM">
                 </div>
                 <div class="form-group-item">
-                    <label class="form-label">默认Base URL</label>
+                    <label class="form-label" data-i18n="m.provider.url">Default Base URL</label>
                     <input type="text" class="form-input" id="new-provider-url" placeholder="http://localhost:11434/v1">
                 </div>
                 <div class="form-group-item">
-                    <label class="form-label">简介（可选）</label>
-                    <input type="text" class="form-input" id="new-provider-desc" placeholder="一句话说明这个服务商">
+                    <label class="form-label" data-i18n="m.provider.desc">Description (optional)</label>
+                    <input type="text" class="form-input" id="new-provider-desc" placeholder="One-line description" data-i18n-ph="m.provider.desc.ph">
                 </div>
                 <div class="modal-actions">
                     <button class="chat-btn" id="cancel-add-provider">取消</button>
-                    <button class="save-config-btn" id="confirm-add-provider">创建</button>
+                    <button class="save-config-btn" id="confirm-add-provider" data-i18n="btn.create">Create</button>
                 </div>
             </div>
         </div>
@@ -671,13 +650,13 @@
                     <div class="sidebar-top-bar">
                         <div class="sidebar-top-bar-title" onclick="toggleSidebarHeader()" style="display: flex; align-items: center; cursor: pointer; flex:1; user-select:none;">
                             <div class="c4e-sidebar-art-logo"><img src="assets/icons/c4e-ring-v5.png" alt="C4E"></div>
-                            <h3 class="sidebar-title" style="margin: 0;">Quine</h3>
+                            <h3 class="sidebar-title" style="margin: 0;">TruthCross</h3>
                         </div>
                         <div class="sidebar-actions">
-                            <button class="action-icon-btn icon-only" id="full-screen-toggle" title="返回主页" style="font-size:1rem;line-height:1;">
+                            <button class="action-icon-btn icon-only" id="full-screen-toggle" title="Home" style="font-size:1rem;line-height:1;" data-i18n-title="sb.home">
                                 ⌂
                             </button>
-                            <button class="action-icon-btn primary-circle" id="new-chat-btn" title="新建对话">
+                            <button class="action-icon-btn primary-circle" id="new-chat-btn" title="New chat" data-i18n-title="sb.new">
                                 <span class="icon" style="font-size: 1rem; line-height: 0;">＋</span>
                             </button>
                         </div>
@@ -687,17 +666,17 @@
                     <div class="sidebar-search-area">
                         <div class="search-input-wrapper">
                             <span class="search-icon">🔍</span>
-                            <input type="text" class="search-input" id="history-search" placeholder="搜索（点击C4E图标可以收起该区域）">
+                            <input type="text" class="search-input" id="history-search" placeholder="Search" data-i18n-ph="sb.search">
                         </div>
                     </div>
 
                     <!-- 过滤与操作行 -->
                     <div class="sidebar-controls-row">
                         <div class="history-filters">
-                            <button class="filter-btn active" data-filter="all">全部</button>
-                            <button class="filter-btn" data-filter="user">用户</button>
-                            <button class="filter-btn" data-filter="assistant">AI</button>
-                            <button class="filter-btn" id="notes-toggle-btn">笔记</button>
+                            <button class="filter-btn active" data-filter="all" data-i18n="sb.all">All</button>
+                            <button class="filter-btn" data-filter="user" data-i18n="sb.user">User</button>
+                            <button class="filter-btn" data-filter="assistant" data-i18n="sb.ai">AI</button>
+                            <button class="filter-btn" id="notes-toggle-btn" data-i18n="sb.notes">Notes</button>
                         </div>
                     </div>
                 </div>
@@ -705,9 +684,9 @@
                 <div class="history-list" id="history-list">
                     <div class="empty-state">
                         <div class="empty-state-icon">💭</div>
-                        <div class="empty-state-text">暂无对话历史</div>
-                        <button class="new-chat-btn" id="new-chat-btn-empty">
-                            + 开始新的对话
+                        <div class="empty-state-text" data-i18n="sb.empty">No conversations yet</div>
+                        <button class="new-chat-btn" id="new-chat-btn-empty" data-i18n="sb.start">
+                            + Start New Chat
                         </button>
                     </div>
                 </div>
@@ -716,25 +695,25 @@
             </div>
 
             <!-- 左右占比分隔拖条（历史侧栏 ↔ 聊天） -->
-            <div class="sidebar-resizer" id="sidebar-resizer" title="拖动调整历史/聊天左右占比"></div>
+            <div class="sidebar-resizer" id="sidebar-resizer" title="Drag to resize sidebar" data-i18n-title="sb.resize"></div>
 
             <!-- 侧边栏切换按钮 (仅全屏模式显示，提到 chat-main 外面避免被遮挡) -->
-            <button id="sidebar-toggle-btn" class="sidebar-toggle-btn" title="切换侧边栏">
+            <button id="sidebar-toggle-btn" class="sidebar-toggle-btn" title="Toggle sidebar" data-i18n-title="sb.toggle">
                  <!-- Icon via CSS -->
              </button>
 
              <!-- 笔记面板 -->
              <div class="notes-panel" id="notes-panel">
                  <div class="notes-panel-header">
-                     <span class="notes-panel-title">📝 对话笔记</span>
+                     <span class="notes-panel-title" data-i18n="notes.title">📝 Chat Notes</span>
                      <div class="notes-panel-actions">
-                         <button id="notes-scope-btn" title="在本对话的笔记 / 全部笔记之间切换">📚 全部</button>
-                         <button id="notes-add-btn">＋ 添加笔记</button>
-                         <button id="notes-close-btn" class="notes-close-btn" title="关闭笔记">×</button>
+                         <button id="notes-scope-btn" title="Toggle: this conversation / all notes" data-i18n-title="notes.scope.t" data-i18n="notes.scope">📚 All</button>
+                         <button id="notes-add-btn" data-i18n="notes.add">＋ Add Note</button>
+                         <button id="notes-close-btn" class="notes-close-btn" title="Close notes" data-i18n-title="notes.close">×</button>
                      </div>
                  </div>
                  <div class="notes-empty" id="notes-empty">
-                     <span>暂无笔记</span>
+                     <span data-i18n="notes.empty">No notes</span>
                  </div>
                  <div class="notes-list" id="notes-list"></div>
              </div>
@@ -745,38 +724,46 @@
                 <div class="chat-container">
 
                     <!-- 智能体思考：收起浮动键（对话区右侧留白，垂直居中）—— 只在屏幕上真的有未收起的思考时出现 -->
-                    <button class="reasoning-rail-btn" id="reasoning-rail-btn" hidden title="收起智能体推理">
+                    <!-- 「立即终止」浮动键：贴着「收起思考」键正下方（用户 2026-10-13 定）。只在生成中出现。 -->
+                    <button class="reasoning-rail-btn agent-stop-btn" id="agent-stop-btn" hidden title="Stop this run (finished progress is kept; ask a follow-up to resume)" data-i18n-title="gen.stop.t">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <rect x="6" y="6" width="12" height="12" rx="2"/>
+                        </svg>
+                        <span class="rrb-label" data-i18n="gen.stop">Stop</span>
+                    </button>
+
+                    <button class="reasoning-rail-btn" id="reasoning-rail-btn" hidden title="Collapse agent reasoning" data-i18n-title="gen.collapse.t">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path d="M4 14h16"/><path d="M8 18l-4-4 4-4"/>
                         </svg>
-                        <span class="rrb-label">收起思考</span>
+                        <span class="rrb-label" data-i18n="gen.collapse">Collapse</span>
                     </button>
 
                     <div class="messages-container" id="messages-container">
                         <div class="message assistant" data-id="welcome">
-                            <div class="message-content">
-                                您好！我是 <b>Quine</b>（C4EAI Quine Agent）—— 实验室通用智能体，文献管理与共享 wiki 方向。<br>
-                                我能帮您：<b>① GraphRAG 图谱检索</b>（Neo4j 协作知识图谱）｜<b>② 多智能体协作</b>（专有子智能体并行处理）｜<b>③ 数据分析与代码执行</b>｜<b>④ 组内共享数据库</b>（文献/笔记上传与语义检索）｜<b>⑤ RAG 知识检索</b>｜<b>⑥ 高阶文献翻译</b>（MinerU 解析归档→图文并茂中文全译）｜<b>⑦ 文献内容审查</b>（图/表/段落三轨对账·矛盾裁决）｜<b>⑧ 联网搜索与文件处理</b>。<br>
-                                直接提问即可；点输入框左侧 📎 上传文献。模型默认「本地千问」，免费不限量。
+                            <div class="message-content" data-i18n="welcome" data-i18n-html="1">
+                                Hello — I am <b>TruthCross</b>, an agent for Fenton literature mining and catalytic-degradation knowledge graphs.<br>
+                                Capabilities: <b>1) Knowledge-graph querying</b> (Neo4j + GraphRAG) · <b>2) Full literature-mining pipeline</b> (dedup screening → MinerU archiving → work orders → figure/curve extraction → cross-checking → ledger → graph ingestion) · <b>3) Contradiction auditing</b> (Q1–Q4 findings, A–E severity, three-track reconciliation) · <b>4) PDF parsing &amp; archiving</b> (full text + per-caption crops) · <b>5) Scripting &amp; data analysis</b> · <b>6) File handling &amp; web search</b>.<br>
+                                Ask directly, or attach a PDF via 📎 on the left of the input box.
                             </div>
                         </div>
                     </div>
 
                     <div class="typing-indicator" id="typing-indicator">
-                        AI正在思考中...
+                        <span data-i18n="gen.thinking">Thinking…</span>
                     </div>
 
                     <div class="input-area">
                         <!-- 文件上传面板 (可展开/收起) -->
                         <div class="file-upload-panel" id="file-upload-panel">
                             <div class="upload-panel-header">
-                                <span class="upload-panel-title">📎 添加文件</span>
+                                <span class="upload-panel-title" data-i18n="up.title">📎 Add Files</span>
                                 <button class="close-panel-btn" id="close-upload-panel">×</button>
                             </div>
                             <div class="upload-drop-zone" id="upload-drop-zone">
                                 <div class="upload-icon-large">📁</div>
-                                <div class="upload-text">点击或拖拽文件到此处</div>
-                                <div class="upload-hint">支持: 图片(jpg/png/gif/webp/bmp/svg) | 文档(pdf/docx/txt/md/rtf/pptx/odt)<br>数据(json/csv/xml/log/toml/ini) | 代码(js/py/html/css/java/ts/go/rs 等50+格式)<br>⚠️ .xlsx/.xls 需转为 .csv 后上传</div>
+                                <div class="upload-text" data-i18n="up.drop">Click or drag files here</div>
+                                <div class="upload-hint" data-i18n="up.hint">Images · documents (pdf/docx/txt/md/rtf/pptx/odt) · data (json/csv/xml/log/toml/ini) · code (50+ formats). Convert .xlsx/.xls to .csv first.</div>
                             </div>
                             <div class="selected-files-list" id="selected-files-list"></div>
                             <input type="file" id="file-attachment-input" multiple
@@ -788,31 +775,31 @@
 
                         <!-- 展开的消息输入区域 -->
                         <div class="expanded-message-area" id="expanded-message-area">
-                            <textarea id="expanded-textarea" class="expanded-textarea" placeholder="在此输入消息，支持多行输入..."></textarea>
+                            <textarea id="expanded-textarea" class="expanded-textarea" placeholder="Type a message (multi-line)…" data-i18n-ph="in.expanded"></textarea>
                         </div>
 
                         <!-- 输入行 -->
                         <!-- 现代化输入条 -->
                         <div class="modern-input-bar">
                             <!-- 附件 -->
-                            <button class="tool-icon-btn" id="attachment-btn" title="上传文件">
+                            <button class="tool-icon-btn" id="attachment-btn" title="Attach files" data-i18n-title="in.attach">
                                 <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
                             </button>
                             <!-- 展开消息 -->
-                            <button class="expand-btn" id="expand-btn" title="展开消息输入">
+                            <button class="expand-btn" id="expand-btn" title="Expand input" data-i18n-title="in.expand">
                                 <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
                             </button>
 
                             <!-- 输入框 -->
                             <div class="input-field-container">
-                                <textarea id="message-input" class="modern-input" placeholder="发消息..."
-                                    rows="1"></textarea>
+                                <textarea id="message-input" class="modern-input" placeholder="Type a message…"
+                                    rows="1" data-i18n-ph="in.main"></textarea>
                             </div>
 
                             <!-- 右侧操作区 -->
                             <div class="input-actions-right">
                                 <!-- 模型选择 (紧凑) -->
-                                <div class="compact-model-select" title="选择模型">
+                                <div class="compact-model-select" title="Select model" data-i18n-title="in.model">
                                     <select id="chat-model-selector">
                                         <option value="" disabled selected>API</option>
                                     </select>
@@ -820,21 +807,21 @@
 
 
                                 <!-- 发送给 LLM 的上下文 Token 数（含压缩） -->
-                                <div class="context-size-display" id="context-size-display" title="当前发送给LLM的Token数（考虑上下文压缩）">
+                                <div class="context-size-display" id="context-size-display" title="Tokens sent to the model (after compaction)" data-i18n-title="in.ctx">
                                     <span id="context-size-text">0</span>
                                 </div>
 
 
                                 <!-- 设置按钮 -->
-                                <button class="tool-icon-btn" id="settings-btn" title="设置">
-                                    <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>
+                                <button class="tool-icon-btn" id="settings-btn" title="Settings" data-i18n-title="set.title">
+                                    <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                                 </button>
 
                                 <!-- 全屏开关 (图标) -->
                                 <!-- 已移至侧边栏 -->
 
                                 <!-- 发送按钮 (圆形) -->
-                                <button id="send-btn" class="send-circle-btn btn-disabled" title="发送">
+                                <button id="send-btn" class="send-circle-btn btn-disabled" title="Send" data-i18n-title="in.send">
                                     <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
                                 </button>
                             </div>
@@ -848,57 +835,58 @@
 
 
     <!-- 脚本文件 (按依赖顺序) -->
-    <script src="js/state.js?v=20"></script>
+    <script src="js/i18n.js?v=1"></script>
+    <script src="js/state.js?v=21"></script>
     <!-- 个人设置后端存储（必须在其它模块之前：hydrate 要把后端设置灌回缓存） -->
     <script src="js/user_settings.js?v=2"></script>
-    <script src="js/user_chats.js?v=6"></script>
+    <script src="js/user_chats.js?v=9"></script>
     <script src="js/events.js?v=1"></script>
-    <script src="js/dom.js?v=6"></script>
-    <script src="js/settings.js?v=11"></script>
-    <script src="js/image_tools.js?v=3"></script>
-    <script src="js/file_preview.js?v=12"></script>
-    <script src="js/auth.js?v=24"></script>
-    <script src="js/api.js?v=17"></script>
-    <script src="js/database.js?v=21"></script>
-    <script src="js/sidebar.js?v=37"></script>
-    <script src="js/branching.js?v=20"></script>
-    <script src="js/provider.js?v=9"></script>
-    <script src="js/messages.js?v=15"></script>
+    <script src="js/dom.js?v=10"></script>
+    <script src="js/settings.js?v=12"></script>
+    <script src="js/image_tools.js?v=4"></script>
+    <script src="js/file_preview.js?v=13"></script>
+    <script src="js/auth.js?v=25"></script>
+    <script src="js/api.js?v=19"></script>
+    <script src="js/database.js?v=22"></script>
+    <script src="js/sidebar.js?v=40"></script>
+    <script src="js/branching.js?v=22"></script>
+    <script src="js/provider.js?v=11"></script>
+    <script src="js/messages.js?v=19"></script>
     <script src="js/editing.js?v=3"></script>
-    <script src="js/formatting.js?v=6"></script>
-    <script src="js/tools.js?v=4"></script>
-    <script src="js/graph_rag.js?v=22"></script>
-    <script src="js/note_refs.js?v=2"></script>
-    <script src="js/subagent_view.js?v=3"></script>
+    <script src="js/formatting.js?v=7"></script>
+    <script src="js/tools.js?v=6"></script>
+    <script src="js/graph_rag.js?v=25"></script>
+    <script src="js/note_refs.js?v=3"></script>
+    <script src="js/subagent_view.js?v=4"></script>
     <!-- 前端工具注册表已删除（工具全部由后端提供） -->
     <script src="js/skill_system.js?v=3"></script>
-    <script src="js/agent_config.js?v=14"></script>
-    <script src="js/ui.js?v=11"></script>
-    <script src="js/bubbles.js?v=5"></script>
-    <script src="js/bubble_actions.js?v=3"></script>
+    <script src="js/agent_config.js?v=15"></script>
+    <script src="js/ui.js?v=14"></script>
+    <script src="js/bubbles.js?v=6"></script>
+    <script src="js/bubble_actions.js?v=4"></script>
     <script src="js/utils.js?v=2"></script>
     <script src="js/main.js?v=6"></script>
-    <script src="js/xiaoe.js?v=8"></script>
-    <script src="js/topbar.js?v=12"></script>
+    <script src="js/xiaoe.js?v=9"></script>
+    <script src="js/topbar.js?v=13"></script>
     <script src="js/vendor/qrcode.min.js"></script>
-    <script src="js/remote.js?v=2"></script>
-    <script src="js/window_controls.js?v=6"></script>
+    <script src="js/remote.js?v=4"></script>
+    <script src="js/window_controls.js?v=7"></script>
 
     <div class="popup-panel bubble-context-menu" id="bubble-context-menu">
-        <button class="menu-item" data-action="open-file">📂 打开文件</button>
-        <button class="menu-item" data-action="send-llm">🤖 发送给 LLM</button>
-        <button class="menu-item" data-action="open-location">📁 打开文件地址</button>
-        <button class="menu-item" data-action="edit-text">✏️ 编辑文字</button>
-        <button class="menu-item danger" data-action="delete">🗑️ 删除</button>
+        <button class="menu-item" data-action="open-file" data-i18n="bub.open">📂 Open File</button>
+        <button class="menu-item" data-action="send-llm" data-i18n="bub.llm">🤖 Send to LLM</button>
+        <button class="menu-item" data-action="open-location" data-i18n="bub.loc">📁 Open Location</button>
+        <button class="menu-item" data-action="edit-text" data-i18n="bub.edit">✏️ Edit Text</button>
+        <button class="menu-item danger" data-action="delete" data-i18n="bub.del">🗑️ Delete</button>
     </div>
 
     <!-- 添加气泡面板 -->
     <div class="popup-panel bubble-add-panel" id="bubble-add-panel">
-        <input type="text" id="bubble-add-input" placeholder="输入气泡文字...">
+        <input type="text" id="bubble-add-input" placeholder="Bubble text…" data-i18n-ph="bub.ph">
         <div class="panel-btns">
-            <button class="btn-add-text" id="bubble-add-text-btn">添加文字</button>
-            <button class="btn-add-file" id="bubble-add-file-btn">链接文件</button>
-            <button class="btn-cancel" id="bubble-add-cancel">取消</button>
+            <button class="btn-add-text" id="bubble-add-text-btn" data-i18n="bub.addtext">Add Text</button>
+            <button class="btn-add-file" id="bubble-add-file-btn" data-i18n="bub.addfile">Link File</button>
+            <button class="btn-cancel" id="bubble-add-cancel" data-i18n="btn.cancel">Cancel</button>
         </div>
     </div>
 
@@ -907,86 +895,86 @@
 
     <!-- 气泡编辑小浮层 -->
     <div class="popup-panel" id="bubble-edit-modal">
-        <h3>编辑气泡文字</h3>
-        <input type="text" id="bubble-edit-input" placeholder="输入新的气泡文字">
+        <h3 data-i18n="bub.edittitle">Edit Bubble Text</h3>
+        <input type="text" id="bubble-edit-input" placeholder="New bubble text" data-i18n-ph="bub.editph">
         <div class="popup-actions">
             <button class="chat-btn" onclick="document.getElementById('bubble-edit-modal').classList.remove('show')">取消</button>
-            <button class="key-btn" id="bubble-edit-confirm">确定</button>
+            <button class="key-btn" id="bubble-edit-confirm" data-i18n="btn.ok">OK</button>
         </div>
     </div>
 
     <!-- 统一浮动 Markdown 编辑器（可拖动、可调整大小） -->
     <div class="floating-editor" id="floating-editor">
         <div class="fe-header" id="fe-header">
-            <span class="fe-title" id="fe-title">编辑内容</span>
-            <button class="fe-close" title="关闭" onclick="window.__feCancel && window.__feCancel()">×</button>
+            <span class="fe-title" id="fe-title" data-i18n="ed.title">Edit Content</span>
+            <button class="fe-close" title="Close" data-i18n-title="btn.close" onclick="window.__feCancel && window.__feCancel()">×</button>
         </div>
         <div class="fe-title-row" id="fe-title-row" style="display:none;">
             <input type="text" id="fe-title-input" placeholder="标题">
         </div>
         <div class="fe-toolbar">
-            <button class="fe-btn" id="fe-undo" title="撤销" onclick="window.__feUndo && window.__feUndo()">↶</button>
-            <button class="fe-btn" id="fe-redo" title="重做" onclick="window.__feRedo && window.__feRedo()">↷</button>
+            <button class="fe-btn" id="fe-undo" title="Undo" data-i18n-title="ed.undo" onclick="window.__feUndo && window.__feUndo()">↶</button>
+            <button class="fe-btn" id="fe-redo" title="Redo" data-i18n-title="ed.redo" onclick="window.__feRedo && window.__feRedo()">↷</button>
             <span class="fe-sep"></span>
-            <button class="fe-btn" title="加粗" onclick="window.__feWrap('**','**')"><b>B</b></button>
-            <button class="fe-btn" title="斜体" onclick="window.__feWrap('*','*')"><i>I</i></button>
-            <button class="fe-btn" title="删除线" onclick="window.__feWrap('~~','~~')"><s>S</s></button>
+            <button class="fe-btn" title="Bold" data-i18n-title="ed.bold" onclick="window.__feWrap('**','**')"><b>B</b></button>
+            <button class="fe-btn" title="Italic" data-i18n-title="ed.italic" onclick="window.__feWrap('*','*')"><i>I</i></button>
+            <button class="fe-btn" title="Strikethrough" data-i18n-title="ed.strike" onclick="window.__feWrap('~~','~~')"><s>S</s></button>
             <span class="fe-sep"></span>
-            <button class="fe-btn" title="标题1" onclick="window.__feLine('# ')">H1</button>
-            <button class="fe-btn" title="标题2" onclick="window.__feLine('## ')">H2</button>
-            <button class="fe-btn" title="标题3" onclick="window.__feLine('### ')">H3</button>
-            <button class="fe-btn" title="无序列表" onclick="window.__feLine('- ')">• 列表</button>
-            <button class="fe-btn" title="有序列表" onclick="window.__feLine('1. ')">1. 列表</button>
-            <button class="fe-btn" title="引用" onclick="window.__feLine('> ')">❝ 引用</button>
+            <button class="fe-btn" title="Heading 1" data-i18n-title="ed.h1" onclick="window.__feLine('# ')">H1</button>
+            <button class="fe-btn" title="Heading 2" data-i18n-title="ed.h2" onclick="window.__feLine('## ')">H2</button>
+            <button class="fe-btn" title="Heading 3" data-i18n-title="ed.h3" onclick="window.__feLine('### ')">H3</button>
+            <button class="fe-btn" title="Bulleted list" data-i18n-title="ed.ul" data-i18n="ed.ul.l" onclick="window.__feLine('- ')">• List</button>
+            <button class="fe-btn" title="Numbered list" data-i18n-title="ed.ol" data-i18n="ed.ol.l" onclick="window.__feLine('1. ')">1. List</button>
+            <button class="fe-btn" title="Quote" data-i18n-title="ed.quote" data-i18n="ed.quote.l" onclick="window.__feLine('> ')">❝ Quote</button>
             <span class="fe-sep"></span>
-            <button class="fe-btn" title="行内代码" onclick="window.__feWrap('`','`')">&lt;代码&gt;</button>
-            <button class="fe-btn" title="代码块" onclick="window.__feWrap('```\n','\n```')">代码块</button>
-            <button class="fe-btn" title="插入图片" onclick="window.__feInsertImage && window.__feInsertImage()">图片</button>
-            <button class="fe-btn" title="插入文档附件（pdf/docx/xlsx 等任意文件）" onclick="window.__feInsertFile && window.__feInsertFile()">📎 附件</button>
-            <button class="fe-btn" title="插入表格" onclick="window.__feInsertTable && window.__feInsertTable()">▦ 表格</button>
-            <button class="fe-btn" title="编辑选中的图片" onclick="window.__feEditImage && window.__feEditImage()">✂️编辑图片</button>
-            <button class="fe-btn" title="链接" onclick="window.__feLink()">链接</button>
+            <button class="fe-btn" title="Inline code" data-i18n-title="ed.code" data-i18n="ed.code.l" onclick="window.__feWrap('`','`')">&lt;Code&gt;</button>
+            <button class="fe-btn" title="Code block" data-i18n-title="ed.codeblock" data-i18n="ed.codeblock.l" onclick="window.__feWrap('```\n','\n```')">Code</button>
+            <button class="fe-btn" title="Insert image" data-i18n-title="ed.img" data-i18n="ed.img.l" onclick="window.__feInsertImage && window.__feInsertImage()">Image</button>
+            <button class="fe-btn" title="Insert attachment (any file)" data-i18n-title="ed.attach" data-i18n="ed.attach.l" onclick="window.__feInsertFile && window.__feInsertFile()">📎 File</button>
+            <button class="fe-btn" title="Insert table" data-i18n-title="ed.table" data-i18n="ed.table.l" onclick="window.__feInsertTable && window.__feInsertTable()">▦ Table</button>
+            <button class="fe-btn" title="Edit selected image" data-i18n-title="ed.editimg" data-i18n="ed.editimg.l" onclick="window.__feEditImage && window.__feEditImage()">✂️ Image</button>
+            <button class="fe-btn" title="Link" data-i18n-title="ed.link" data-i18n="ed.link.l" onclick="window.__feLink()">Link</button>
             <span class="fe-sep"></span>
             <!-- 字号复合按钮：左=应用(显示当前档位)，右=展开下拉 -->
             <div class="fe-combo" data-combo="font">
-                <button class="fe-btn fe-combo-apply" id="fe-font-apply" title="应用字号" onclick="window.__feSize()">
-                    <span>字</span><span id="fe-font-value" style="font-size:0.7em;color:var(--gray);">正常</span>
+                <button class="fe-btn fe-combo-apply" id="fe-font-apply" title="Apply font size" data-i18n-title="ed.fontsize" onclick="window.__feSize()">
+                    <span>A</span><span id="fe-font-value" style="font-size:0.7em;color:var(--gray);" data-i18n="ed.normal">Normal</span>
                 </button>
-                <button class="fe-btn fe-combo-arrow" title="选择字号" onclick="window.__feDropdown('font', this)">▾</button>
+                <button class="fe-btn fe-combo-arrow" title="Choose font size" data-i18n-title="ed.fontsize.s" onclick="window.__feDropdown('font', this)">▾</button>
             </div>
             <!-- 着色复合按钮：左=应用(显示当前色标)，右=展开下拉 -->
             <div class="fe-combo" data-combo="color">
-                <button class="fe-btn fe-combo-apply" id="fe-color-apply" title="应用着色" onclick="window.__feColor()">
+                <button class="fe-btn fe-combo-apply" id="fe-color-apply" title="Apply color" data-i18n-title="ed.color" onclick="window.__feColor()">
                     <span style="font-weight:600;">A</span><span class="fe-color-bar" id="fe-color-bar"></span>
                 </button>
-                <button class="fe-btn fe-combo-arrow" title="选择颜色" onclick="window.__feDropdown('color', this)">▾</button>
+                <button class="fe-btn fe-combo-arrow" title="Choose color" data-i18n-title="ed.color.s" onclick="window.__feDropdown('color', this)">▾</button>
             </div>
             <!-- 隐藏的原生控件：作为当前选择存储 + 供 applySize/applyColor 读取 -->
             <select class="fe-size" id="fe-fontsize" style="display:none;">
-                <option value="0.8em">小</option>
-                <option value="1em" selected>正常</option>
-                <option value="1.2em">大</option>
-                <option value="1.5em">特大</option>
+                <option value="0.8em" data-i18n="ed.size.small">Small</option>
+                <option value="1em" selected data-i18n="ed.size.normal">Normal</option>
+                <option value="1.2em" data-i18n="ed.size.large">Large</option>
+                <option value="1.5em" data-i18n="ed.size.xl">XL</option>
             </select>
             <input type="color" id="fe-color" style="display:none;" value="#e02020">
         </div>
         <div class="fe-body" id="fe-body">
-            <textarea class="fe-textarea" id="fe-textarea" placeholder="输入 Markdown 内容…"></textarea>
+            <textarea class="fe-textarea" id="fe-textarea" placeholder="Enter Markdown…" data-i18n-ph="ed.body"></textarea>
         </div>
         <div class="fe-footer">
-            <button class="fe-cancel" onclick="window.__feCancel && window.__feCancel()">取消</button>
-            <button class="fe-save" onclick="window.__feSave && window.__feSave()">保存</button>
+            <button class="fe-cancel" onclick="window.__feCancel && window.__feCancel()" data-i18n="btn.cancel">Cancel</button>
+            <button class="fe-save" onclick="window.__feSave && window.__feSave()" data-i18n="btn.save">Save</button>
         </div>
     </div>
 
     <!-- 文件浮窗预览（应用内打开，可拖动/缩放/记忆位置，仿笔记浮窗） -->
     <div class="file-preview-panel" id="file-preview-panel">
         <div class="file-preview-header" id="file-preview-header">
-            <span class="file-preview-title" id="file-preview-title">文件预览</span>
+            <span class="file-preview-title" id="file-preview-title" data-i18n="fp.title">File Preview</span>
             <div class="file-preview-actions">
-                <button id="file-preview-open-native" title="用本机默认应用打开">🖥️</button>
-                <button id="file-preview-download" title="下载">⬇️</button>
-                <button id="file-preview-close-btn" class="file-preview-close-btn" title="关闭">×</button>
+                <button id="file-preview-open-native" title="Open with system default app" data-i18n-title="fp.native">🖥️</button>
+                <button id="file-preview-download" title="Download" data-i18n-title="fp.download">⬇️</button>
+                <button id="file-preview-close-btn" class="file-preview-close-btn" title="Close" data-i18n-title="btn.close">×</button>
             </div>
         </div>
         <div class="file-preview-body" id="file-preview-body"></div>

@@ -184,7 +184,7 @@
             // 清理触发线（context budget）：0 = 自动
             if (contextBudgetInput) contextBudgetInput.addEventListener('input', (e) => {
                 const v = document.getElementById('context-budget-value');
-                if (v) v.textContent = (parseInt(e.target.value) > 0) ? e.target.value : '0（自动）';
+                if (v) v.textContent = (parseInt(e.target.value) > 0) ? e.target.value : t('misc.auto');
             });
 
             expectedContextTokensInput.addEventListener('input', (e) => {
@@ -210,7 +210,7 @@
               const rawDataToggle = document.getElementById('raw-data-toggle');
               if (rawDataToggle) {
                   rawDataToggle.addEventListener('change', () => {
-                      document.getElementById('raw-data-status').textContent = rawDataToggle.checked ? '开启' : '关闭';
+                      document.getElementById('raw-data-status').textContent = rawDataToggle.checked ? t('misc.on') : t('misc.off');
                   });
               }
 
@@ -233,7 +233,7 @@
 
         // ==================== 更新聊天区模型选择器 ====================
         function updateChatModelSelector() {
-            chatModelSelector.innerHTML = '<option value="" disabled selected>选择模型</option>';
+            chatModelSelector.innerHTML = t('in.model.opt');
 
             // 只显示已“亮起”（激活）且已配置API的模型
             let hasAnyOption = false;
@@ -255,7 +255,7 @@
             if (!hasAnyOption) {
                 const option = document.createElement('option');
                 option.value = '';
-                option.textContent = '请先配置并“亮起”模型';
+                option.textContent = t('misc.noModelActive');
                 option.disabled = true;
                 chatModelSelector.appendChild(option);
             }
@@ -290,7 +290,7 @@
                 pop.style.top = (rr.bottom + 6) + 'px';
                 pop.style.left = Math.max(8, Math.min(rr.left, window.innerWidth - 320)) + 'px';
             }
-            pop.innerHTML = '<div class="wa-pop-title">选择工作区域</div><div class="wa-pop-list" id="wa-pop-list"><div class="wa-item wa-loading">加载中…</div></div>';
+            pop.innerHTML = '<div class="wa-pop-title">' + t('misc.wa.select') + '</div><div class="wa-pop-list" id="wa-pop-list"><div class="wa-item wa-loading">' + t('loading') + '</div></div>';
             document.addEventListener('click', _waPickerOutside, true);
             _waFetch('/api/user/work_areas').then(function (d) {
                 var areas = (d && d.areas) || [];
@@ -304,13 +304,13 @@
                     item.innerHTML = '<span class="wa-item-icon">📁</span><span class="wa-item-name"></span><span class="wa-item-path"></span>';
                     item.querySelector('.wa-item-name').textContent = a.name;
                     item.querySelector('.wa-item-path').textContent = a.project_dir;
-                    item.title = a.project_dir + '\n产物: ' + a.output_dir;
+                    item.title = a.project_dir + '\n' + t('misc.wa.output') + a.output_dir;
                     item.addEventListener('click', function () { closeWaPicker(); createNewConversation(a.id); });
                     list.appendChild(item);
                 });
                 var addBtn = document.createElement('div');
                 addBtn.className = 'wa-item wa-add';
-                addBtn.innerHTML = '<span class="wa-item-icon">＋</span><span class="wa-item-name">新建工作区域…</span>';
+                addBtn.innerHTML = '<span class="wa-item-icon">＋</span><span class="wa-item-name">' + t('misc.wa.new') + '</span>';
                 addBtn.addEventListener('click', function () { _waShowCreateForm(pop); });
                 list.appendChild(addBtn);
             });
@@ -321,11 +321,11 @@
             var form = document.createElement('div');
             form.className = 'wa-form';
             form.innerHTML =
-                '<div class="wa-form-title">新建工作区域</div>' +
-                '<label>名称</label><input type="text" id="wa-f-name" placeholder="如：TruthCross 数据挖掘">' +
-                '<label>项目文件夹</label><div class="wa-f-row"><input type="text" id="wa-f-proj" placeholder="D:\…"><button type="button" class="wa-f-browse" data-t="proj">浏览…</button></div>' +
-                '<label>产物文件夹</label><div class="wa-f-row"><input type="text" id="wa-f-out" placeholder="默认 项目文件夹\\output"><button type="button" class="wa-f-browse" data-t="out">浏览…</button></div>' +
-                '<div class="wa-f-actions"><button type="button" id="wa-f-ok">创建并开始对话</button><button type="button" id="wa-f-cancel">取消</button></div>' +
+                '<div class="wa-form-title">' + t('misc.wa.newTitle') + '</div>' +
+                '<label>' + t('misc.wa.name') + '</label><input type="text" id="wa-f-name" placeholder="如：TruthCross 数据挖掘">' +
+                '<label>' + t('misc.wa.proj') + '</label><div class="wa-f-row"><input type="text" id="wa-f-proj" placeholder="D:\…"><button type="button" class="wa-f-browse" data-t="proj">' + t('misc.browse') + '</button></div>' +
+                '<label>' + t('misc.wa.out') + '</label><div class="wa-f-row"><input type="text" id="wa-f-out" placeholder="默认 项目文件夹\\output"><button type="button" class="wa-f-browse" data-t="out">' + t('misc.browse') + '</button></div>' +
+                '<div class="wa-f-actions"><button type="button" id="wa-f-ok">' + t('misc.wa.createStart') + '</button><button type="button" id="wa-f-cancel">' + t('btn.cancel') + '</button></div>' +
                 '<div class="wa-f-err" id="wa-f-err"></div>';
             list.appendChild(form);
             form.querySelector('#wa-f-name').focus();
@@ -349,14 +349,14 @@
                 var proj = form.querySelector('#wa-f-proj').value.trim();
                 var out = form.querySelector('#wa-f-out').value.trim();
                 var err = form.querySelector('#wa-f-err');
-                if (!proj) { err.textContent = '请填写项目文件夹'; return; }
-                err.textContent = '创建中…';
+                if (!proj) { err.textContent = t('misc.wa.needProj'); return; }
+                err.textContent = t('misc.creating');
                 _waFetch('/api/user/work_areas', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name: name, project_dir: proj, output_dir: out })
                 }).then(function (r) {
-                    if (!r || r.status !== 'ok' || !r.area) { err.textContent = (r && r.error) || '创建失败'; return; }
+                    if (!r || r.status !== 'ok' || !r.area) { err.textContent = (r && r.error) || t('misc.createFailed'); return; }
                     closeWaPicker();
                     createNewConversation(r.area.id);
                 });
@@ -382,7 +382,7 @@
             while (existingNumbers.indexOf(convNumber) !== -1) {
                 convNumber++;
             }
-            var convName = convNumber === 1 ? '新建对话' : '新建对话' + convNumber;
+            var convName = convNumber === 1 ? t('misc.conv.new') : t('misc.conv.new') + convNumber;
 
             var newBranchId = 'branch-' + state.branchCounter;
             state.branchCounter++;
@@ -418,7 +418,7 @@
 
             // 显示提示消息
             const feedbackTarget = document.activeElement === newChatBtnEmpty ? newChatBtnEmpty : newChatBtn;
-            showActionFeedback('新建对话已创建', 'success', feedbackTarget);
+            showActionFeedback(t('msg.conv.created'), 'success', feedbackTarget);
         }
 
         // ── saveTempConversation 已于 2026-09-30 删除 ─────────────────────────────
@@ -436,16 +436,16 @@
 
         // ==================== 统一的消息发送函数 ====================
 
-        // 生成中的按钮 = 「⚡立即回答」（用户 2026-09-27 定）：不中断连接、不丢已探索的内容，
-        // 只给后端一个"马上收尾出答案"的信号 —— 后端注入与超时警告同款的催促提示，然后照常输出。
+        // 生成中的按钮 = 「⚡催促回答」（原「立即回答」，2026-10-13 随按钮改名；用户 2026-09-27 定）：
+        // 不中断连接、不丢已探索的内容，只给后端一个"马上收尾出答案"的信号，然后照常输出。
         async function requestImmediateAnswer() {
             if (!state.isGenerating) return;
             try {
                 const r = await fetch('/api/agent/nudge', { method: 'POST' });
                 if (!r.ok) throw new Error('HTTP ' + r.status);
-                showToast('已请求立即回答：它会用现有信息收尾', 'success');
+                showToast(t('msg.urged'), 'success');
             } catch (e) {
-                showToast('❌ 请求失败：' + (e && e.message ? e.message : '网络错误'), 'error');
+                showToast(t('msg.reqFailed') + (e && e.message ? e.message : t('msg.netErr')), 'error');
             }
         }
 
@@ -468,7 +468,7 @@
             }
 
             if (!lastUserMessage) {
-                addSystemMessageWithDelete('无法继续生成：未找到上文问题。');
+                addSystemMessageWithDelete(t('msg.continueNoQ'));
                 return;
             }
 

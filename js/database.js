@@ -56,7 +56,7 @@ function initDatabase() {
                     x.classList.toggle('active', x === b);
                 });
                 document.getElementById('db-f-sort-label').textContent =
-                    s === 'title' ? '🔤 名称' : (s === 'time_asc' ? '🕒 最早' : '🕒 最新');
+                    s === 'title' ? t('db.sort.name') : (s === 'time_asc' ? t('db.sort.oldest') : t('db.sort.newest'));
                 _sm.hidden = true;
                 refreshDocumentList();
             });
@@ -73,11 +73,11 @@ function initDatabase() {
                 await uploadDocument(f);
             } catch (err) {
                 console.warn('数据库上传失败:', f.name, err);
-                if (typeof showToast === 'function') showToast('上传失败：' + f.name, 'error');
+                if (typeof showToast === 'function') showToast(t('db.uploadFailed') + f.name, 'error');
             }
         }
         if (files.length > 1 && typeof showToast === 'function') {
-            showToast('已上传 ' + files.length + ' 个文件', 'success');
+            showToast(t('db.uploadedPrefix') + files.length + t('db.filesSuffix'), 'success');
         }
     });
 }
@@ -245,15 +245,15 @@ function closeDatabaseModal() {
 async function uploadDocument(file) {
     var me = (typeof window.getAuthUser === 'function') ? window.getAuthUser() : null;
     if (!me || me.username === 'guest') {
-        showToast('🔐 数据库在共享服务器：请先点击右上角「登录」', 'info');
+        showToast(t('db.needLogin'), 'info');
         if (typeof window.openLoginModal === 'function') window.openLoginModal();
         return;
     }
     if (!me.approved && me.role !== 'admin') {
-        showToast('⏳ 已注册，等待管理员开通数据库权限后即可上传', 'info');
+        showToast(t('db.waitApprove'), 'info');
         return;
     }
-    showToast('正在上传到共享数据库...', 'info');
+    showToast(t('db.uploading'), 'info');
     try {
         const fd = new FormData();
         fd.append('file', file);
@@ -263,15 +263,15 @@ async function uploadDocument(file) {
         const resp = await fetch(_u, { method: 'POST', body: fd });
         const data = await resp.json();
         if (!resp.ok) {
-            showToast('❌ 上传失败: ' + (data.error || resp.status), 'error');
+            showToast(t('db.uploadFail') + (data.error || resp.status), 'error');
             return;
         }
-        showToast(`✅ 「${file.name}」已存入${_fname ? '「' + _fname + '」' : '共享库'}，全组可检索`, 'success');
+        showToast(t('db.uploadOk').replace('{name}', file.name).replace('{folder}', _fname ? '「' + _fname + '」' : t('db.sharedLib')), 'success');
         if (_fid) _dbTree.openGroup[_fid] = true;   // 展开刚放进的夹
         _dbUploadFolder = '';
         refreshDocumentList();
     } catch (e) {
-        showToast('❌ 上传失败: ' + e.message, 'error');
+        showToast(t('db.uploadFail') + e.message, 'error');
     }
 }
 
@@ -289,7 +289,7 @@ var _dbEntries = [];   // 最近一次条目缓存（供编辑回显）
 function _dbEntryBodyHtml(n) {
     return n.content
         ? formatMessage(n.content, true, 'note')
-        : '<span style="color:var(--gray);font-style:italic;">空条目</span>';
+        : '<span style="color:var(--gray);font-style:italic;">' + t('db.emptyEntry') + '</span>';
 }
 
 // 给容器内渲染出的附件卡片（.msg-file-card）追加 × 删除按钮。
@@ -314,13 +314,13 @@ function _enhanceFileCardDelete(container, getNote, onChanged) {
         var btn = document.createElement('button');
         btn.className = 'file-card-del';
         btn.textContent = '×';
-        btn.title = '从条目中移除该附件（不删文件）';
+        btn.title = t('db.removeAttachTitle');
         btn.style.cssText = 'margin-left:4px;border:none;background:none;color:var(--danger);cursor:pointer;font-size:.95rem;line-height:1;padding:0 2px;';
         btn.addEventListener('click', function (e) {
             e.stopPropagation();
             var fid = card.dataset.fileId;
             if (!fid) return;
-            if (!confirm('从条目中移除该附件占位？（文件本身保留）')) return;
+            if (!confirm(t('db.removeAttachConfirm'))) return;
             var re = new RegExp('\\n?\\{\\{file:' + fid + ':[^}]*\\}\\}\\n?', 'g');
             var newContent = (note.content || '').replace(re, '\n');
             fetch('/api/notes', {
@@ -330,13 +330,13 @@ function _enhanceFileCardDelete(container, getNote, onChanged) {
             }).then(function (r) { return r.json(); }).then(function (d) {
                 if (d.status === 'ok') {
                     note.content = newContent;
-                    if (typeof showPassiveToast === 'function') showPassiveToast('已移除附件占位');
+                    if (typeof showPassiveToast === 'function') showPassiveToast(t('db.attachRemoved'));
                     if (onChanged) onChanged();
                 } else {
-                    if (typeof showPassiveToast === 'function') showPassiveToast('❌ 更新失败', 'error');
+                    if (typeof showPassiveToast === 'function') showPassiveToast(t('db.updateFail'), 'error');
                 }
             }).catch(function () {
-                if (typeof showPassiveToast === 'function') showPassiveToast('❌ 更新失败', 'error');
+                if (typeof showPassiveToast === 'function') showPassiveToast(t('db.updateFail'), 'error');
             });
         });
         card.appendChild(btn);
@@ -385,7 +385,7 @@ function _renderGroupChildren(parentGid, rootKind, noteLookup, myName, isAdmin) 
         // 空夹也显示（可先搭骨架）—— 用户 2026-09-25 定
         var isOpen = !!_dbTree.openGroup[g.id];
         var caret = (kidCount || mine.length) ? '▶' : '';
-        var sysBadge = g.system ? '<span class="db-tsys">系统</span>' : '';
+        var sysBadge = g.system ? '<span class="db-tsys">' + t('db.system') + '</span>' : '';
         var h = '<div class="db-tnode" data-gid="' + g.id + '">';
         h += '<div class="db-tnode-row' + (isOpen ? ' open' : '') + '" data-gid="' + g.id + '">';
         h += '<span class="db-tcaret' + (isOpen ? ' open' : '') + '">' + caret + '</span>';
@@ -393,15 +393,15 @@ function _renderGroupChildren(parentGid, rootKind, noteLookup, myName, isAdmin) 
         h += '<span class="db-tcount">' + mine.length + '</span>';
         h += '<span class="db-tacts">';
         // ★ 每个夹自己带「上传 / ＋笔记」（用户 2026-09-25 定：按钮下沉到分组）
-        h += '<button data-gact="upload" data-gid="' + g.id + '" title="上传文档到「' + escHtml(g.name) + '」（此夹内的附件会自动解析成文字）">📤</button>';
-        h += '<button data-gact="addentry" data-gid="' + g.id + '" title="在此夹新建笔记条目">＋</button>';
-        h += '<button data-gact="add" data-gid="' + g.id + '" title="在此夹下新建子文件夹">🗂️</button>';
-        h += '<button data-gact="edit" data-gid="' + g.id + '" title="编辑名称与简介">✏️</button>';
-        if (!g.system) h += '<button data-gact="del" data-gid="' + g.id + '" title="删除文件夹（内容不会删除）">×</button>';
+        h += '<button data-gact="upload" data-gid="' + g.id + '" title="' + t('db.uploadToFolder').replace('{name}', escHtml(g.name)) + '">📤</button>';
+        h += '<button data-gact="addentry" data-gid="' + g.id + '" title="' + t('db.addEntryHere') + '">＋</button>';
+        h += '<button data-gact="add" data-gid="' + g.id + '" title="' + t('db.addSubfolder') + '">🗂️</button>';
+        h += '<button data-gact="edit" data-gid="' + g.id + '" title="' + t('db.editNameIntro') + '">✏️</button>';
+        if (!g.system) h += '<button data-gact="del" data-gid="' + g.id + '" title="' + t('db.delFolder') + '">×</button>';
         h += '</span></div>';
         var intro = (g.intro || '').trim();
         h += '<div class="db-tintro' + (intro ? '' : ' empty') + '">'
-            + (intro ? escHtml(intro) : '（无简介，点 ✏️ 添加）') + '</div>';
+            + (intro ? escHtml(intro) : t('db.noIntro')) + '</div>';
         if (isOpen) {
             h += '<div class="db-tchildren">';
             h += _renderGroupChildren(g.id, rootKind, noteLookup, myName, isAdmin);
@@ -418,14 +418,14 @@ function _dbEntryCardHtml(n, myName, isAdmin) {
     var owner = n.owner || 'admin';
     var canEdit = (owner === myName) || isAdmin;
     var collapsed = _dbEntryCollapsed[n.id] !== undefined ? _dbEntryCollapsed[n.id] : true;
-    var refBtn = '<button class="db-entry-ref" data-id="' + n.id + '" title="引用给智能体（发送时带上该条目全文，可让它增删改查）" style="background:none;border:none;cursor:pointer;font-size:.9rem;padding:.1rem .3rem;">📌</button>';
+    var refBtn = '<button class="db-entry-ref" data-id="' + n.id + '" title="' + t('db.refTitle') + '" style="background:none;border:none;cursor:pointer;font-size:.9rem;padding:.1rem .3rem;">📌</button>';
     var actions = refBtn + (canEdit
-        ? ('<button class="db-entry-edit" data-id="' + n.id + '" title="编辑条目" style="background:none;border:none;cursor:pointer;font-size:.95rem;padding:.1rem .3rem;">✏️</button>'
-        +  '<button class="db-entry-del" data-id="' + n.id + '" title="删除条目" style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:1.05rem;padding:.1rem .3rem;">×</button>')
+        ? ('<button class="db-entry-edit" data-id="' + n.id + '" title="' + t('db.editEntry') + '" style="background:none;border:none;cursor:pointer;font-size:.95rem;padding:.1rem .3rem;">✏️</button>'
+        +  '<button class="db-entry-del" data-id="' + n.id + '" title="' + t('db.delEntry') + '" style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:1.05rem;padding:.1rem .3rem;">×</button>')
         : '');
     return '<div class="note-card" data-eid="' + n.id + '" data-owner="' + escHtml(owner) + '">'
         + '<div class="note-card-header db-entry-toggle" data-id="' + n.id + '" style="cursor:pointer;">'
-        + '<span class="note-card-title">' + escHtml(n.title || '未命名条目') + '</span>'
+        + '<span class="note-card-title">' + escHtml(n.title || t('db.unnamed')) + '</span>'
         + '<div class="note-card-header-actions" style="display:flex;gap:.15rem;" onclick="event.stopPropagation();">' + actions + '</div>'
         + '</div>'
         // 正文按需渲染：列表只给目录（不带正文），展开时才取这一条的正文。
@@ -479,11 +479,11 @@ async function refreshDocumentList() {
     const badge = document.getElementById('database-status-badge');
     var me = (typeof window.getAuthUser === 'function') ? window.getAuthUser() : null;
     if (!me || me.username === 'guest') {
-        badge.textContent = '未登录';
-        container.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--gray);">🔐 数据库在共享服务器：请先点击右上角「登录」</div>';
+        badge.textContent = t('db.notLoggedIn');
+        container.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--gray);">' + t('db.needLogin') + '</div>';
         return;
     }
-    container.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--gray);">加载中…</div>';
+    container.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--gray);">' + t('db.loading') + '</div>';
 
     try {
         // 拉全部条目（含 kind/folder_id/owner/时间，**不含正文** —— 正文按需取）
@@ -521,10 +521,10 @@ async function refreshDocumentList() {
         _refreshFilterMenus(all);
 
         if (!all.length) {
-            badge.textContent = '0 个条目';
+            badge.textContent = t('db.zeroEntries');
             container.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--gray);font-size:0.9rem;">'
-                + (_dbTree.owner || _dbTree.year ? '当前筛选条件下没有条目<br><span style="font-size:.78rem;">试试把「👤 / 📅」改回「全部」</span>'
-                   : '暂无条目<br><span style="font-size:.78rem;">点「📤 上传」或「＋ 笔记」</span>') + '</div>';
+                + (_dbTree.owner || _dbTree.year ? t('db.emptyFiltered')
+                   : t('db.emptyHint')) + '</div>';
             return;
         }
 
@@ -545,15 +545,15 @@ async function refreshDocumentList() {
             html += '<div class="db-tnode" data-gid="">';
             html += '<div class="db-tnode-row" data-gid="">'
                 + '<span class="db-tcaret">▶</span>'
-                + '<span class="db-tname">📁 未归属</span>'
+                + '<span class="db-tname">' + t('db.orphan') + '</span>'
                 + '<span class="db-tcount">' + orphan.length + '</span></div>';
-            html += '<div class="db-tintro empty">这些条目还没有归入任何文件夹（可右键移动到目标夹）</div>';
+            html += '<div class="db-tintro empty">' + t('db.orphanHint') + '</div>';
             html += '</div>';
         }
         container.innerHTML = html;
-        badge.textContent = all.length + ' 个条目'
+        badge.textContent = all.length + t('db.entriesSuffix')
             + (_dbTree.owner ? ' · ' + _dbTree.owner : '')
-            + (_dbTree.year ? ' · ' + _dbTree.year + '年' : '');
+            + (_dbTree.year ? ' · ' + _dbTree.year + t('db.yearSuffix') : '');
 
         // 附件卡片 × 删除
         _enhanceFileCardDelete(container, function (noteId) {
@@ -592,7 +592,7 @@ async function refreshDocumentList() {
             card.addEventListener('contextmenu', function (ev) {
                 ev.preventDefault();
                 var owner = card.dataset.owner || '';
-                if (!((owner === myName) || isAdmin)) { showToast('只能移动自己的条目'); return; }
+                if (!((owner === myName) || isAdmin)) { showToast(t('db.moveOwnOnly')); return; }
                 _showMoveMenu(ev.clientX, ev.clientY, card.dataset.eid);
             });
         });
@@ -639,7 +639,7 @@ async function refreshDocumentList() {
         });
     } catch (e) {
         console.error('加载数据库条目失败:', e);
-        container.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--error);">加载失败</div>';
+        container.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--error);">' + t('db.loadFail') + '</div>';
     }
 }
 
@@ -651,7 +651,7 @@ function _refreshFilterMenus(notes) {
     var om = document.getElementById('db-f-owner-menu');
     if (om) {
         var items = ['<button class="db-filter-item' + (_dbTree.owner === '' ? ' active' : '')
-                     + '" data-owner="" role="menuitem">👤 全部上传者</button>'];
+                     + '" data-owner="" role="menuitem">' + t('db.allOwners') + '</button>'];
         Object.keys(owners).sort().forEach(function (o) {
             items.push('<button class="db-filter-item' + (_dbTree.owner === o ? ' active' : '')
                        + '" data-owner="' + escHtml(o) + '" role="menuitem">👤 ' + escHtml(o)
@@ -662,7 +662,7 @@ function _refreshFilterMenus(notes) {
             b.addEventListener('click', function () {
                 _dbTree.owner = b.dataset.owner || '';
                 document.getElementById('db-f-owner-label').textContent =
-                    _dbTree.owner ? ('👤 ' + _dbTree.owner) : '👤 全部';
+                    _dbTree.owner ? ('👤 ' + _dbTree.owner) : t('db.ownerAllShort');
                 om.hidden = true;
                 refreshDocumentList();
             });
@@ -685,10 +685,10 @@ async function _fetchAllYears() {
         if (y.length === 4) years[y] = (years[y] || 0) + 1;
     });
     var items = ['<button class="db-filter-item' + (_dbTree.year === '' ? ' active' : '')
-                 + '" data-year="" role="menuitem">📅 全部年份</button>'];
+                 + '" data-year="" role="menuitem">' + t('db.allYears') + '</button>'];
     Object.keys(years).sort().reverse().forEach(function (y) {
         items.push('<button class="db-filter-item' + (_dbTree.year === y ? ' active' : '')
-                   + '" data-year="' + y + '" role="menuitem">📅 ' + y + ' 年'
+                   + '" data-year="' + y + '" role="menuitem">📅 ' + y + t('db.yearSuffix')
                    + ' <span style="color:var(--gray);font-size:.8rem;">(' + years[y] + ')</span></button>');
     });
     ym.innerHTML = items.join('');
@@ -697,7 +697,7 @@ async function _fetchAllYears() {
         b.addEventListener('click', function () {
             _dbTree.year = b.dataset.year || '';
             document.getElementById('db-f-year-label').textContent =
-                _dbTree.year ? ('📅 ' + _dbTree.year) : '📅 全部';
+                _dbTree.year ? ('📅 ' + _dbTree.year) : t('db.yearAllShort');
             ym.hidden = true;
             refreshDocumentList();
         });
@@ -708,39 +708,39 @@ async function dbEditEntry(id) {
     // 目录不带正文 → 编辑前先把这一条的正文取回来（列表缓存里已有就不重复取）
     var n = await _dbEnsureContent(id);
     if (!n) return;
-    if (typeof window.floatingEditor === 'undefined') { showToast('编辑器未就绪', 'error'); return; }
+    if (typeof window.floatingEditor === 'undefined') { showToast(t('db.editorNotReady'), 'error'); return; }
     window.floatingEditor.open({
-        title: '编辑数据库条目',
+        title: t('db.editEntryTitle'),
         showTitle: true,
         titleValue: n.title || '',
         value: n.content || '',
         onSave: function (newContent, newTitle) {
-            var t = (newTitle !== null && newTitle !== undefined && newTitle !== '') ? newTitle : '未命名条目';
+            var t = (newTitle !== null && newTitle !== undefined && newTitle !== '') ? newTitle : t('db.unnamed');
             fetch('/api/notes', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ note_id: id, title: t, content: newContent, branch_id: DB_BRANCH })
             }).then(function (r) { return r.json(); }).then(function (d) {
-                if (d.status === 'ok') { showToast('条目已更新', 'success'); refreshDocumentList(); }
-                else showToast('更新失败', 'error');
-            }).catch(function () { showToast('更新失败', 'error'); });
+                if (d.status === 'ok') { showToast(t('db.entryUpdated'), 'success'); refreshDocumentList(); }
+                else showToast(t('db.updateFailPlain'), 'error');
+            }).catch(function () { showToast(t('db.updateFailPlain'), 'error'); });
         }
     });
 }
 
 function dbAddEntry(folderId) {
     var me = (typeof window.getAuthUser === 'function') ? window.getAuthUser() : null;
-    if (!me || me.username === 'guest') { showToast('请先登录', 'info'); return; }
-    if (typeof window.floatingEditor === 'undefined') { showToast('编辑器未就绪', 'error'); return; }
+    if (!me || me.username === 'guest') { showToast(t('db.loginFirst'), 'info'); return; }
+    if (typeof window.floatingEditor === 'undefined') { showToast(t('db.editorNotReady'), 'error'); return; }
     var _gid = folderId || '';
     var _gn = _gid ? ((_dbTree.folders.find(function (x) { return x.id === _gid; }) || {}).name || '') : '';
     window.floatingEditor.open({
-        title: _gn ? ('在「' + _gn + '」新建条目') : '新建数据库条目',
+        title: _gn ? t('db.newEntryIn').replace('{name}', _gn) : t('db.newEntry'),
         showTitle: true,
         titleValue: '',
         value: '',
         onSave: function (newContent, newTitle) {
-            var t = (newTitle !== null && newTitle !== undefined && newTitle !== '') ? newTitle : '未命名条目';
+            var t = (newTitle !== null && newTitle !== undefined && newTitle !== '') ? newTitle : t('db.unnamed');
             fetch('/api/notes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -748,24 +748,24 @@ function dbAddEntry(folderId) {
                                       kind: 'note', folder_id: _gid })
             }).then(function (r) { return r.json(); }).then(function (d) {
                 if (d.status === 'ok') {
-                    showToast('✅ 条目已创建', 'success');
+                    showToast(t('db.entryCreated'), 'success');
                     if (_gid) _dbTree.openGroup[_gid] = true;
                     refreshDocumentList();
                 }
-                else showToast('创建失败', 'error');
-            }).catch(function () { showToast('创建失败', 'error'); });
+                else showToast(t('db.createFail'), 'error');
+            }).catch(function () { showToast(t('db.createFail'), 'error'); });
         }
     });
 }
 
 function dbDeleteEntry(id) {
-    if (!confirm('确定删除这条条目吗？（附件文件本身保留）')) return;
+    if (!confirm(t('db.delEntryConfirm'))) return;
     // 数据库条目只在云端 → 显式带来源标识，后端直连云端删除（不再本地扫描）
     fetch('/api/notes/' + encodeURIComponent(id) + '?source=cloud', { method: 'DELETE' })
         .then(function (r) { return r.json(); }).then(function (d) {
-            if (d.status === 'ok') { showToast('条目已删除', 'success'); refreshDocumentList(); }
-            else { showToast('删除失败：' + (d.error || d.message || d.detail || '未知原因'), 'error'); }
-        }).catch(function (e) { showToast('删除失败：' + (e && e.message ? e.message : '网络错误'), 'error');
+            if (d.status === 'ok') { showToast(t('db.entryDeleted'), 'success'); refreshDocumentList(); }
+            else { showToast(t('db.delFail') + (d.error || d.message || d.detail || t('db.unknown')), 'error'); }
+        }).catch(function (e) { showToast(t('db.delFail') + (e && e.message ? e.message : t('db.netError')), 'error');
     });
 }
 
@@ -809,7 +809,7 @@ async function _showMoveMenu(x, y, entryId) {
     try {
         folders = await _fetchGroups();
     } catch (e) {
-        showToast('读取分组失败：' + e.message, 'error');
+        showToast(t('db.readGroupsFail') + e.message, 'error');
         return;
     }
 
@@ -820,7 +820,7 @@ async function _showMoveMenu(x, y, entryId) {
 
     const title = document.createElement('div');
     title.className = 'db-move-menu-title';
-    title.textContent = '移动到文件夹';
+    title.textContent = t('db.moveToFolder');
     menu.appendChild(title);
 
     // ★ 可以移到**任意文件夹**（含另一个根夹下）—— 用户 2026-09-25 定：移动永不触发解析
@@ -829,14 +829,14 @@ async function _showMoveMenu(x, y, entryId) {
         empty.className = 'db-move-menu-item';
         empty.style.color = 'var(--gray, #999)';
         empty.style.cursor = 'default';
-        empty.textContent = '（还没有文件夹）';
+        empty.textContent = t('db.noFolders');
         menu.appendChild(empty);
     } else {
         folders.forEach(function (f) {
             const it = document.createElement('div');
             it.className = 'db-move-menu-item';
             it.style.paddingLeft = (12 + (f.depth || 0) * 14) + 'px';
-            it.textContent = '📁 ' + f.name + (f.system ? '（根）' : '');
+            it.textContent = '📁 ' + f.name + (f.system ? t('db.rootSuffix') : '');
             if (f.intro) it.title = f.intro;
             it.addEventListener('click', function () { _doMoveEntry(entryId, f.id); });
             menu.appendChild(it);
@@ -866,11 +866,11 @@ async function _doMoveEntry(entryId, groupId) {
             body: JSON.stringify({ note_id: entryId, branch_id: '__db__', folder_id: groupId })
         });
         const d = await resp.json();
-        if (!resp.ok || d.error) { showToast('移动失败：' + (d.error || resp.status), 'error'); return; }
-        showToast(groupId ? '✅ 已移动到分组' : '✅ 已移出分组', 'success');
+        if (!resp.ok || d.error) { showToast(t('db.moveFail') + (d.error || resp.status), 'error'); return; }
+        showToast(groupId ? t('db.movedTo') : t('db.movedOut'), 'success');
         refreshDocumentList();
     } catch (e) {
-        showToast('移动失败：' + e.message, 'error');
+        showToast(t('db.moveFail') + e.message, 'error');
     }
 }
 
@@ -906,44 +906,44 @@ async function refreshGroupsList() { await refreshDocumentList(); }
  * @param parentId 新建时的父分组
  */
 function _editGroup(editId, parentId, _unused, name, intro) {
-    if (typeof window.floatingEditor === 'undefined') { showToast('编辑器未就绪', 'error'); return; }
+    if (typeof window.floatingEditor === 'undefined') { showToast(t('db.editorNotReady'), 'error'); return; }
     const isNew = !editId;
     window.floatingEditor.open({
-        title: isNew ? (parentId ? '新建子分组' : '新建分组') : '编辑分组',
+        title: isNew ? (parentId ? t('db.newSubGroup') : t('db.newGroup')) : t('db.editGroup'),
         showTitle: true,
         titleValue: name || '',
         value: intro || '',
         onSave: async function (newIntro, newName) {
             const nm = (newName || '').trim();
-            if (!nm) { showToast('分组名不能为空', 'error'); return; }
+            if (!nm) { showToast(t('db.groupNameEmpty'), 'error'); return; }
             try {
                 if (isNew) {
                     await _groupOp({ action: 'create_group', name: nm,
                                      parent_id: parentId || '', intro: newIntro || '' });
-                    showToast('✅ 已创建分组「' + nm + '」', 'success');
+                    showToast(t('db.groupCreated').replace('{name}', nm), 'success');
                 } else {
                     await _groupOp({ action: 'update_group', group_id: editId,
                                      name: nm, intro: newIntro || '' });
-                    showToast('✅ 已保存', 'success');
+                    showToast(t('db.saved'), 'success');
                 }
                 await refreshGroupsList();
                 if (typeof refreshDocumentList === 'function') refreshDocumentList();
             } catch (e) {
-                showToast('保存失败：' + e.message, 'error');
+                showToast(t('db.saveFail') + e.message, 'error');
             }
         }
     });
 }
 
 function _deleteGroupConfirm(gid) {
-    if (!window.confirm('删除该分组？\n\n分组里的条目不会被删除，子分组与条目会上移到父级。')) return;
+    if (!window.confirm(t('db.delGroupConfirm'))) return;
     _groupOp({ action: 'delete_group', group_id: gid, mode: 'move_up' })
         .then(function () {
-            showToast('✅ 分组已删除（条目已上移，未丢失）', 'success');
+            showToast(t('db.groupDeleted'), 'success');
             return refreshGroupsList();
         })
         .then(function () { if (typeof refreshDocumentList === 'function') refreshDocumentList(); })
-        .catch(function (e) { showToast('删除失败：' + e.message, 'error'); });
+        .catch(function (e) { showToast(t('db.delFail') + e.message, 'error'); });
 }
 
 /** 右键分组 → 「移动到…」菜单（不可移到自己或自己的后代下） */
@@ -959,7 +959,7 @@ async function _showMoveGroupMenu(x, y, gid) {
     let folders = [];
     try {
         folders = (await _groupOp({ action: 'list_groups' })).folders || [];
-    } catch (e) { showToast('读取分组失败：' + e.message, 'error'); return; }
+    } catch (e) { showToast(t('db.readGroupsFail') + e.message, 'error'); return; }
 
     // 排除自己与自己的后代（后端也会校验，这里先不显示以免误点）
     const self = folders.find(function (f) { return f.id === gid; });
@@ -974,12 +974,12 @@ async function _showMoveGroupMenu(x, y, gid) {
     menu.style.top = y + 'px';
     const title = document.createElement('div');
     title.className = 'db-move-menu-title';
-    title.textContent = '移动「' + ((self && self.name) || '') + '」到';
+    title.textContent = t('db.moveGroupTitle').replace('{name}', (self && self.name) || '');
     menu.appendChild(title);
 
     const rootItem = document.createElement('div');
     rootItem.className = 'db-move-menu-item';
-    rootItem.textContent = '（移动到根级）';
+    rootItem.textContent = t('db.moveToRoot');
     rootItem.addEventListener('click', function () { _doMoveGroup(gid, ''); });
     menu.appendChild(rootItem);
 
@@ -1007,11 +1007,11 @@ async function _doMoveGroup(gid, newParentId) {
     _closeMoveGroupMenu();
     try {
         await _groupOp({ action: 'move_group', group_id: gid, parent_id: newParentId });
-        showToast('✅ 已移动', 'success');
+        showToast(t('db.moved'), 'success');
         await refreshGroupsList();
         if (typeof refreshDocumentList === 'function') refreshDocumentList();
     } catch (e) {
-        showToast('移动失败：' + e.message, 'error');
+        showToast(t('db.moveFail') + e.message, 'error');
     }
 }
 

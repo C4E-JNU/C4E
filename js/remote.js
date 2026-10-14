@@ -18,11 +18,11 @@
         btn.classList.toggle('on', !!info.running);
         urlInput.value = info.url || '—';
         if (info.running) {
-            statusEl.textContent = '隧道运行中 · 手机可直接打开';
+            statusEl.textContent = t('remote.running');
         } else if (info.enabled) {
-            statusEl.textContent = '隧道未开启';
+            statusEl.textContent = t('remote.off');
         } else {
-            statusEl.textContent = '未配置远程访问';
+            statusEl.textContent = t('remote.notConfigured');
         }
         statusEl.classList.toggle('on', !!info.running);
 
@@ -54,6 +54,9 @@
         if (!panel.hidden) load();
     });
 
+    const closeBtn = document.getElementById('remote-ctrl-close');
+    closeBtn.addEventListener('click', () => { panel.hidden = true; });
+
     document.addEventListener('click', (e) => {          // 点面板外面收起
         if (!panel.hidden && !panel.contains(e.target) && e.target !== btn) panel.hidden = true;
     });
@@ -61,13 +64,13 @@
     copyBtn.addEventListener('click', async () => {
         try {
             await navigator.clipboard.writeText(info.url);
-            copyBtn.textContent = '已复制';
+            copyBtn.textContent = t('remote.copied');
         } catch (e) {
             urlInput.select();
             document.execCommand('copy');
-            copyBtn.textContent = '已复制';
+            copyBtn.textContent = t('remote.copied');
         }
-        setTimeout(() => { copyBtn.textContent = '复制'; }, 1500);
+        setTimeout(() => { copyBtn.textContent = t('remote.copy'); }, 1500);
     });
 
     toggleBtn.addEventListener('click', async () => {

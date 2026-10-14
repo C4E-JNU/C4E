@@ -1,46 +1,19 @@
 {
   "skills": [
     {
-      "name": "self-modify",
-      "description": "自我修改指南 — 如何用 skill_write 创建/更新技能（含 references/templates/scripts 子文件），以及在完全访问模式下如何修改项目代码。加速定位与修改。",
-      "version": "1.0.0"
-    },
-    {
       "name": "mineru-agent-parse",
-      "description": "把 PDF 解析并归档成'全文+按图注编号的图表文件夹'，产出 00_full_cleaned.md 与 00_images_map.json 清单，供翻译/图文挖掘使用。需配 MinerU Token。",
+      "description": "把 PDF 解析并归档成'全文+按图注编号的图表文件夹'，产出 00_full_cleaned.md 与 00_images_map.json 清单，供图文互证与数据挖掘使用。需配 MinerU Token。",
       "version": "4.2.0"
     },
     {
-      "name": "literature-translate",
-      "description": "文献全文中译写入笔记，多子图按 layout_html 网格排版并配中文图注（图块由 render_figure_block.py 生成，勿手抄 HTML）。需先用 mineru-agent-parse 归档。",
-      "version": "1.3.0"
-    },
-    {
       "name": "literature-contradiction",
-      "description": "当要对单篇已归档文献做内部矛盾审计时用。图账先做像素读数（image_read，已打通）再与图注/正文三方交叉，图账表账用 delegate_task(role=contradiction) 并行，段落账主控做，输出 A–E 分级矛盾台账表。",
-      "version": "1.3.0"
+      "description": "当要对单篇已归档文献做内部矛盾审计时用。先把己方错误/口径差异/一致归入 Q1–Q4（互证成绩单），再对真矛盾判 A–E 严重度（E=其他·无法归类）；图账先做像素读数（image_read，已打通）再与图注/正文三方交叉，图账表账用 delegate_task(role=contradiction) 并行，段落账主控做。",
+      "version": "1.5.0"
     },
     {
-      "name": "literature-search",
-      "description": "当要查文献、补全题名/期刊/年份/DOI/引用数，或拿到 DOI 抓原文时用。含三接口分工、S2 限流的实战退路与「换词最多两次」的收敛策略。",
-      "version": "1.1"
-    },
-    {
-      "name": "code-search",
-      "description": "当要在代码/文件里定位、读、改一处，或要看 GitHub 开源项目实现时用。先确认三大本地检索工具是否启用（缺则走 cmd findstr 退路），远端用 gh_* 系列。",
-      "version": "1.1"
-    },
-    {
-      "name": "document-entry",
-      "description": "把文献/文档做成 C4EAI 条目 — 原件气泡 + 总结笔记，支持批量（子智能体分任务并行读）",
-      "version": "1.0.0",
-      "tags": [
-        "c4eai",
-        "literature",
-        "bubble",
-        "note",
-        "batch"
-      ]
+      "name": "fenton-multiagent-mining",
+      "description": "当用户发来任意文献或指定文献目录、要求运行非均相 Fenton 文献数据挖掘并提取图表数据时用。流水线（筛选 → 归档 → 工单 → 图像挖掘 → 图文互证 → 5B 补充裁决 → 节点对齐 → schema 填充 → 数值标准化与单位统一 → 成品终检 → 图谱入库）；语义判断派子智能体，确定性规则与 IO 走主控脚本。",
+      "version": "3.4.0"
     }
   ]
 }

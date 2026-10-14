@@ -14,7 +14,7 @@ class Neo4jConnector {
     }
     async disconnect() { if (this._driver) { try { await this._driver.close(); } catch(e) {} this._driver = null; } state.neo4j.connected = false; }
     async run(cypher, params = {}) {
-        if (!this._driver) throw new Error('Neo4j 未连接');
+        if (!this._driver) throw new Error(t('gr.neo4jNotConnected'));
         const session = this._driver.session();
         try { const r = await session.run(cypher, params); return r.records.map(r => { const o = {}; r.keys.forEach(k => { o[k] = _sN(r.get(k)); }); return o; }); }
         finally { await session.close(); }
@@ -74,7 +74,8 @@ async function reactAgentLoop(userQuestion, options /* {fileIds:[], note_refs:[]
     state._runBranchId = state.currentBranchId;   // 记住这次回答属于哪条对话（中途切走也不会标错）
     if (typeof markChatRunning === 'function') markChatRunning(state._runBranchId);
     state.userHasScrolledUp = false;   // 刚发出去 = 人在看底部，允许贴底
-    if (typeof sendBtn !== 'undefined' && sendBtn) { sendBtn.innerHTML = '⚡'; sendBtn.classList.add('stop'); sendBtn.title = '立即回答'; }
+    if (typeof sendBtn !== 'undefined' && sendBtn) { sendBtn.innerHTML = '⚡'; sendBtn.classList.add('stop'); sendBtn.title = t('gr.nudge'); }
+    var _stopBtn = document.getElementById('agent-stop-btn'); if (_stopBtn) _stopBtn.hidden = false;
     if (typeof updateSendButtonState === 'function') updateSendButtonState();
     const enabledTools = state.agentConfig?.enabledTools || ['graph_query', 'shared_search', 'search_history', 'conversation_notes', 'skill_view', 'web_search', 'web_extract', 'todo', 'delegate_task', 'mineru_parse', 'read_file', 'list_files', 'search_files', 'find_files', 'edit_file', 'crossref_lookup', 'arxiv_search', 'semantic_scholar_search', 'gh_search_code', 'gh_read_file'];
     const loadedSkills = state.agentConfig?.loadedSkills || ['self-modify'];
@@ -106,7 +107,7 @@ async function reactAgentLoop(userQuestion, options /* {fileIds:[], note_refs:[]
     reasoningContainer.className = 'reasoning-steps-container';
     var reasoningHint = document.createElement('div');
     reasoningHint.className = 'reasoning-collapsed-hint';
-    reasoningHint.textContent = '🧠 思考过程已收起 · 点开';
+    reasoningHint.textContent = t('gr.reasoningCollapsed');
     var reasoningBlock = document.createElement('div');
     reasoningBlock.className = 'agent-reasoning-block';
     reasoningHint.onclick = function () {
@@ -125,7 +126,7 @@ async function reactAgentLoop(userQuestion, options /* {fileIds:[], note_refs:[]
     var stepIndicator = document.createElement('div');
     stepIndicator.className = 'message step-indicator';
     stepIndicator.innerHTML = '<div class="agent-step-header q-live-header">' +
-        '<span class="q-spinner"></span><span class="q-live-text">智能体思考中...</span>' +
+        '<span class="q-spinner"></span><span class="q-live-text">' + t('gr.agentThinking') + '</span>' +
         '<span class="q-live-elapsed"></span></div>';
     liveContent.appendChild(stepIndicator);
     var liveTextEl = stepIndicator.querySelector('.q-live-text');
@@ -157,7 +158,7 @@ async function reactAgentLoop(userQuestion, options /* {fileIds:[], note_refs:[]
         if (!reasoningBox) {
             reasoningBox = document.createElement('div');
             reasoningBox.className = 'agent-reasoning-box';
-            reasoningBox.innerHTML = '<div class="reasoning-toggle">🧠 模型推理 ▾</div><div class="reasoning-content"></div>';
+            reasoningBox.innerHTML = '<div class="reasoning-toggle">' + t('gr.mrOpen') + '</div><div class="reasoning-content"></div>';
             // 实时这张卡以前没接点击（箭头是摆设）—— 与历史渲染的 toggleMrBox 表现一致：切显隐 + 换箭头
             (function () {
                 var tgl = reasoningBox.querySelector('.reasoning-toggle');
@@ -165,7 +166,7 @@ async function reactAgentLoop(userQuestion, options /* {fileIds:[], note_refs:[]
                 tgl.onclick = function () {
                     var hidden = box.style.display === 'none';
                     box.style.display = hidden ? 'block' : 'none';
-                    tgl.textContent = hidden ? '🧠 模型推理 ▾' : '🧠 模型推理 ▸';
+                    tgl.textContent = hidden ? t('gr.mrOpen') : t('gr.mrClosed');
                 };
             })();
             reasoningContainer.appendChild(reasoningBox);
@@ -191,7 +192,7 @@ async function reactAgentLoop(userQuestion, options /* {fileIds:[], note_refs:[]
     }
     function handleThinking(text) {
         reasoningSteps.push({ type: 'thinking', text: text });
-        appendStepNode('<div class="agent-step-header">🧠 思考</div><div class="obs-content">' + escHtml(text) + '</div>');
+        appendStepNode('<div class="agent-step-header">' + t('gr.stepThink') + '</div><div class="obs-content">' + escHtml(text) + '</div>');
         liveScroll();
     }
     function handleToolCall(name, input) {
@@ -200,54 +201,70 @@ async function reactAgentLoop(userQuestion, options /* {fileIds:[], note_refs:[]
         currentRoundText = '';
         finalizeReasoning();
         reasoningSteps.push({ type: 'tool_call', name: name, input: input || '' });
-        appendStepNode('<div class="agent-step-header">🔧 调用: ' + escHtml(name) + '</div>' + (input ? '<pre class="tool-code">' + escHtml(input) + '</pre>' : ''));
-        showLiveStatus('🔧 正在执行 ' + name + ' …');
+        appendStepNode('<div class="agent-step-header">' + t('gr.stepCall') + escHtml(name) + '</div>' + (input ? '<pre class="tool-code">' + escHtml(input) + '</pre>' : ''));
+        showLiveStatus(t('gr.executing') + name + ' …');
         currentRound++;
         liveScroll();
     }
     function handleToolResult(name, content) {
-        reasoningSteps.push({ type: 'tool_result', name: name, content: (content || '').substring(0, 500) });
-        appendStepNode('<div class="agent-step-header">👁️ 结果</div><div class="obs-content">' + escHtml((content || '').substring(0, 500)) + '</div>');
-        showLiveStatus('📥 ' + name + ' 已返回，继续推理…');
+        reasoningSteps.push({ type: 'tool_result', name: name, content: (content || '') });
+        appendStepNode('<div class="agent-step-header">' + t('gr.stepResult') + '</div><div class="obs-content">' + escHtml(content || '') + '</div>');
+        showLiveStatus('📥 ' + name + t('gr.toolReturned'));
         liveScroll();
     }
 
     // ── 超时保护提示（催促 / 警告 / 终止）──
     function handleTimeoutNotice(level, text, elapsed) {
         var icon = level === 'abort' ? '⏹️' : (level === 'warn' ? '⚠️' : (level === 'immediate' ? '⚡' : '⏳'));
-        var label = level === 'abort' ? '超时终止' : (level === 'warn' ? '超时警告' : (level === 'immediate' ? '立即回答' : '超时催促'));
+        var label = level === 'abort' ? t('gr.abort') : (level === 'immediate' ? t('gr.nudge') : level);
         var color = level === 'abort' ? '#e02020' : (level === 'warn' ? '#e6a23c' : (level === 'immediate' ? 'var(--primary)' : 'var(--gray)'));
         reasoningSteps.push({ type: 'timeout_notice', level: level, text: text || '', elapsed: elapsed || 0 });
         appendStepNode('<div class="agent-step-header" style="color:' + color + ';">' + icon + ' ' + label +
             (elapsed ? '（' + elapsed + 's）' : '') + '</div><div class="obs-content">' + escHtml(text || '') + '</div>');
         if (level !== 'abort') {
-            showLiveStatus(icon + ' ' + label + (elapsed ? '（' + elapsed + 's）' : '') + '，仍在处理…');
+            showLiveStatus(icon + ' ' + label + (elapsed ? '（' + elapsed + 's）' : '') + t('gr.stillProcessing'));
         }
         liveScroll();
     }
 
     // ── 子智能体：卡片（可点开查看它的思考与工具调用全过程）──
     var _subagentRuns = {};   // index -> 运行信息（供浮窗查看）
-    var _SA_ROLE_NAMES = { contradiction: '矛盾核查', extraction: '数据提取', verify: '数据核查' };
+    var _SA_ROLE_NAMES = { contradiction: t('gr.roleContradiction'), extraction: t('gr.roleExtraction'), verify: t('gr.roleVerify') };
+    // 档案显示字段（后端 _profile_info 事件字段）——前端卡片/浮窗据此显示专有子智能体名字
+    function _saProfileFields(ev) {
+        ev = ev || {};
+        return { profile: ev.profile || '', profile_title: ev.profile_title || '',
+                 profile_read_max: ev.profile_read_max || 0, profile_rounds: ev.profile_rounds || 0,
+                 profile_tools: ev.profile_tools || 0, profile_skills: ev.profile_skills || 0 };
+    }
     function _subagentCardHtml(idx, info) {
         var badge = info.running
-            ? '<span style="color:#e6a23c;"><span class="q-spinner q-spinner-sm"></span>运行中…</span>'
-            : (info.ok ? '<span style="color:#2e9e4f;">✅ 完成' + (info.seconds ? '（' + info.seconds + 's）' : '') + '</span>'
-                       : '<span style="color:#e02020;">⚠️ 失败</span>');
+            ? '<span style="color:#e6a23c;"><span class="q-spinner q-spinner-sm"></span>' + t('gr.running') + '</span>'
+            : (info.ok ? '<span style="color:#2e9e4f;">✅ ' + t('gr.done') + (info.seconds ? '（' + info.seconds + 's）' : '') + '</span>'
+                       : '<span style="color:#e02020;">⚠️ ' + t('gr.failed') + '</span>');
         var role = info.role ? '<span style="font-size:.75rem;color:#8a6d3b;background:rgba(230,162,60,.15);border-radius:4px;padding:1px 6px;margin-left:4px;">' + (_SA_ROLE_NAMES[info.role] || info.role) + '</span>' : '';
+        // 用户 2026-10-04：卡片必须显示「专有子智能体」的名字（档案名），不能只写「子智能体 N」
+        var pTitle = String(info.profile_title || info.profile || '').trim() || t('gr.genericSubagent');
+        var pMeta = [];
+        if (info.profile_read_max) pMeta.push(t('gr.metaRead') + info.profile_read_max + t('gr.metaChars'));
+        if (info.profile_rounds) pMeta.push(t('gr.metaRounds') + info.profile_rounds);
+        if (info.profile_tools) pMeta.push(t('gr.metaTools') + info.profile_tools);
+        if (info.profile_skills) pMeta.push(t('gr.metaSkills') + info.profile_skills);
+        var pMetaHtml = pMeta.length
+            ? '<span style="font-size:.72rem;color:var(--gray);font-weight:400;">（' + pMeta.join(' · ') + '）</span>' : '';
         var goal = escHtml((info.goal || '').slice(0, 120));
         var summary = info.summary ? escHtml(info.summary.slice(0, 200)) : '';
         var live = info.running
-            ? '<div class="sa-live" style="margin-top:.25rem;font-size:.78rem;color:var(--primary);min-height:1.1em;white-space:pre-wrap;">正在启动…</div>'
+            ? '<div class="sa-live" style="margin-top:.25rem;font-size:.78rem;color:var(--primary);min-height:1.1em;white-space:pre-wrap;">' + t('gr.starting') + '</div>'
             : '';
         return '<div class="subagent-node" data-sa="' + idx + '" style="border:1px solid var(--border-color,#ddd);' +
             'border-radius:8px;padding:.45rem .6rem;margin:.35rem 0;background:var(--light,#f6f8fa);cursor:pointer;" ' +
             'title="点击查看该子智能体的思考与工具调用全过程">' +
-            '<div style="font-weight:600;">🤖 子智能体 ' + (idx + 1) + role + ' &nbsp;' + badge + '</div>' +
-            '<div style="margin-top:.15rem;">目标：' + goal + '</div>' +
+            '<div style="font-weight:600;">🤖 ' + escHtml(pTitle) + ' <span style="color:var(--gray);font-weight:400;">· ' + t('gr.task') + ' ' + (idx + 1) + '</span>' + role + pMetaHtml + ' &nbsp;' + badge + '</div>' +
+            '<div style="margin-top:.15rem;">' + t('gr.goal') + goal + '</div>' +
             live +
-            (summary ? '<div style="margin-top:.25rem;color:var(--gray);">结论：' + summary + '…</div>' : '') +
-            '<div style="margin-top:.2rem;font-size:.75rem;color:var(--primary);">点击查看全过程 ▸</div>' +
+            (summary ? '<div style="margin-top:.25rem;color:var(--gray);">' + t('gr.conclusion') + summary + '…</div>' : '') +
+            '<div style="margin-top:.2rem;font-size:.75rem;color:var(--primary);">' + t('gr.viewFull') + '</div>' +
             '</div>';
     }
     function _bindSubagentCards() {
@@ -265,23 +282,23 @@ async function reactAgentLoop(userQuestion, options /* {fileIds:[], note_refs:[]
     }
     function handleSubagentStart(ev) {
         var idx = ev.index || 0;
-        _subagentRuns[idx] = { index: idx, goal: ev.goal || '', context: ev.context || '',
+        _subagentRuns[idx] = Object.assign({ index: idx, goal: ev.goal || '', context: ev.context || '',
                                role: ev.role || '',
-                               running: true, ok: false, steps: [] };
+                               running: true, ok: false, steps: [] }, _saProfileFields(ev));
         finalizeReasoning();
-        reasoningSteps.push({ type: 'subagent', index: idx, goal: ev.goal || '', context: ev.context || '',
+        reasoningSteps.push(Object.assign({ type: 'subagent', index: idx, goal: ev.goal || '', context: ev.context || '',
                              role: ev.role || '',
-                             ok: null, running: true, summary: '', steps: [], total: ev.total || 1 });
+                             ok: null, running: true, summary: '', steps: [], total: ev.total || 1 }, _saProfileFields(ev)));
         appendStepNode(_subagentCardHtml(idx, _subagentRuns[idx]));
         _bindSubagentCards();
         liveScroll();
     }
     function handleSubagentEnd(ev) {
         var idx = ev.index || 0;
-        _subagentRuns[idx] = { index: idx, goal: ev.goal || '', context: ev.context || '',
+        _subagentRuns[idx] = Object.assign({ index: idx, goal: ev.goal || '', context: ev.context || '',
                               running: false, ok: !!ev.ok,
                               summary: ev.summary || '', error: ev.error || '',
-                              steps: ev.steps || [], rounds: ev.rounds || 0, seconds: ev.seconds || 0 };
+                              steps: ev.steps || [], rounds: ev.rounds || 0, seconds: ev.seconds || 0 }, _saProfileFields(ev));
         // 更新已渲染的卡片
         var node = reasoningContainer.querySelector('.subagent-node[data-sa="' + idx + '"]');
         if (node) {
@@ -296,10 +313,11 @@ async function reactAgentLoop(userQuestion, options /* {fileIds:[], note_refs:[]
         for (var i = reasoningSteps.length - 1; i >= 0; i--) {
             if (reasoningSteps[i].type === 'subagent' && reasoningSteps[i].index === idx) { rec = reasoningSteps[i]; break; }
         }
-        var payload = { type: 'subagent', index: idx, goal: _subagentRuns[idx].goal,
+        var payload = Object.assign({ type: 'subagent', index: idx, goal: _subagentRuns[idx].goal,
                         context: _subagentRuns[idx].context || '', ok: !!ev.ok,
                         running: false, summary: ev.summary || '', error: ev.error || '',
-                        steps: ev.steps || [], rounds: ev.rounds || 0, seconds: ev.seconds || 0 };
+                        status: ev.status || '', missing: ev.missing || '', confidence: ev.confidence || '',
+                        steps: ev.steps || [], rounds: ev.rounds || 0, seconds: ev.seconds || 0 }, _saProfileFields(ev));
         if (rec) { Object.assign(rec, payload); } else { reasoningSteps.push(payload); }
         liveScroll();
     }
@@ -323,14 +341,14 @@ async function reactAgentLoop(userQuestion, options /* {fileIds:[], note_refs:[]
             var live = node.querySelector('.sa-live');
             if (live) {
                 var txt = '';
-                if (st.type === 'round') txt = '🧭 第 ' + (st.round || '?') + ' 轮：思考中…';
+                if (st.type === 'round') txt = '🧭 ' + t('gr.round') + ' ' + (st.round || '?') + t('gr.thinkingSuffix');
                 else if (st.type === 'thinking') txt = '✍️ ' + (st.text || '').replace(/\s+/g, ' ').slice(0, 80);
-                else if (st.type === 'tool_call') txt = '🔧 调用 ' + (st.name || '') + '…';
-                else if (st.type === 'tool_result') txt = '📥 ' + (st.name || '') + ' 返回';
+                else if (st.type === 'tool_call') txt = t('gr.stepCall') + (st.name || '') + '…';
+                else if (st.type === 'tool_result') txt = '📥 ' + (st.name || '') + t('gr.returned');
                 else if (st.type === 'notice') txt = '⚠️ ' + (st.text || '').slice(0, 80);
                 if (txt) {
                     live.textContent = txt;
-                    showLiveStatus('🤖 子智能体 ' + (idx + 1) + '　' + txt);
+                    showLiveStatus('🤖 ' + t('gr.subagent') + ' ' + (idx + 1) + '　' + txt);
                 }
             }
         }
@@ -390,9 +408,8 @@ async function reactAgentLoop(userQuestion, options /* {fileIds:[], note_refs:[]
             file_ids: refIds,
             note_refs: noteRefs,
             timeouts: {
-                nudge: state.settings?.timeoutNudge ?? 120,
-                warn: state.settings?.timeoutWarn ?? 240,
-                abort: state.settings?.timeoutAbort ?? 420,
+                // 2026-10-13 起只剩一级强制中断（催促/警告两级已删，断点续跑使中断可继续）
+                abort: state.settings?.timeoutAbort ?? 86400,
             },
             subagent: {
                 enabled: state.settings?.subagentEnabled !== false,
@@ -402,7 +419,10 @@ async function reactAgentLoop(userQuestion, options /* {fileIds:[], note_refs:[]
                 nudge: state.settings?.subagentNudge ?? 60,
                 warn: state.settings?.subagentWarn ?? 150,
                 abort: state.settings?.subagentAbort ?? 300,
+                feed_steps: !!state.settings?.subagentFeedSteps,   // 默认 false：只回喂摘要，防主控上下文爆炸
             },
+            // 后端接管消息树（2026-10-03）：client_id 供多端广播滤掉「自己发的回声」
+            client_id: (typeof window.getClientId === 'function') ? window.getClientId() : '',
         };
 
         console.log('[Agent] Full request:', JSON.stringify({
@@ -424,12 +444,12 @@ async function reactAgentLoop(userQuestion, options /* {fileIds:[], note_refs:[]
         });
 
         if (!resp.ok) {
-            var errMsg = '后端请求失败 (' + resp.status + ')';
+            var errMsg = t('gr.backendFailed') + ' (' + resp.status + ')';
             try { var d = await resp.json(); if (d.detail) errMsg = d.detail; } catch(e) {}
             throw new Error(errMsg);
         }
 
-        if (!resp.body) { throw new Error('浏览器不支持流式响应'); }
+        if (!resp.body) { throw new Error(t('gr.noStream')); }
 
         // 移除等待提示
         if (stepIndicator.parentNode) stepIndicator.parentNode.removeChild(stepIndicator);
@@ -453,7 +473,7 @@ async function reactAgentLoop(userQuestion, options /* {fileIds:[], note_refs:[]
                 try { ev = JSON.parse(dataStr); } catch(e) { continue; }
                 var t = ev.type;
                 if (t === 'reasoning') { handleReasoning(ev.text || ''); }
-                else if (t === 'token') { if (ev.text) { streamedText += ev.text; currentRoundText += ev.text; answerDiv.textContent += ev.text; showLiveStatus('✍️ 正在生成回答…'); } }
+                else if (t === 'token') { if (ev.text) { streamedText += ev.text; currentRoundText += ev.text; answerDiv.textContent += ev.text; showLiveStatus(t('gr.generating')); } }
                 else if (t === 'tool_call') { handleToolCall(ev.name || '', ev.input || ''); }
                 else if (t === 'tool_result') { handleToolResult(ev.name || '', ev.content || ''); }
                 else if (t === 'subagent_start') { handleSubagentStart(ev); }
@@ -461,7 +481,7 @@ async function reactAgentLoop(userQuestion, options /* {fileIds:[], note_refs:[]
                 else if (t === 'subagent_end') { handleSubagentEnd(ev); }
                 else if (t === 'timeout_notice') { handleTimeoutNotice(ev.level || 'nudge', ev.text || '', ev.elapsed || 0); }
                 else if (t === 'final') { finalAnswer = ev.text || ''; currentRoundText = ''; answerDiv.textContent = finalAnswer; }
-                else if (t === 'stopped') { finalAnswer = '已停止生成'; currentRoundText = ''; answerDiv.textContent = (streamedText || '') + '\n\n⏹️ 已停止'; }
+                else if (t === 'stopped') { finalAnswer = t('gr.stoppedGen'); currentRoundText = ''; answerDiv.textContent = (streamedText || '') + '\n\n⏹️ ' + t('gr.stopped'); }
                 else if (t === 'error') { throw new Error(ev.message || '后端错误'); }
             }
         }
@@ -472,14 +492,14 @@ async function reactAgentLoop(userQuestion, options /* {fileIds:[], note_refs:[]
     } catch (error) {
         hideLiveStatus();  // 停止/异常：立即收掉转圈，别让它一直转
         if (error.name === 'AbortError') {
-            finalAnswer = '已取消生成';
+            finalAnswer = t('gr.cancelledGen');
         } else {
-            finalAnswer = '⚠️ 智能体执行失败: ' + error.message;
+            finalAnswer = t('gr.runFailed') + error.message;
         }
     }
 
     // 保存最终回答（reasoningSteps 已含 model_reasoning/tool_call/tool_result，持久化）
-    var answer = finalAnswer || '未能获取回答';
+    var answer = finalAnswer || t('gr.noAnswer');
     if (mergeInto) {
         // 续写：合并进目标消息（同框显示），不新建持久化消息
         var tMsg = (currentBranch.messages || []).find(function(m){ return m.id === mergeInto; });
@@ -523,7 +543,10 @@ async function reactAgentLoop(userQuestion, options /* {fileIds:[], note_refs:[]
     if (typeof markChatDone === 'function') markChatDone(state._runBranchId);
     state._runBranchId = null;
     state.isGenerating = false;
-    if (typeof sendBtn !== 'undefined' && sendBtn) { sendBtn.innerHTML = '➤'; sendBtn.classList.remove('stop'); sendBtn.title = '发送'; }
+    // 生成期间被推迟的同步通知，现在补做（见 js/user_chats.js 的 flushPendingSync）
+    if (typeof window.flushPendingSync === 'function') { try { window.flushPendingSync(); } catch (e) {} }
+    if (typeof sendBtn !== 'undefined' && sendBtn) { sendBtn.innerHTML = '➤'; sendBtn.classList.remove('stop'); sendBtn.title = t('gr.send'); }
+    var _stopBtn2 = document.getElementById('agent-stop-btn'); if (_stopBtn2) _stopBtn2.hidden = true;
     if (typeof updateSendButtonState === 'function') updateSendButtonState();
     return answer;
 }
@@ -573,10 +596,10 @@ document.addEventListener('click', function(e) {
 function updateNeo4jStatusUI(connected) {
     if (typeof neo4jStatusDot !== 'undefined' && neo4jStatusDot) {
         neo4jStatusDot.className = 'neo4j-status-dot ' + (connected ? 'connected' : 'disconnected');
-        neo4jStatusDot.title = connected ? 'Neo4j 已连接' : 'Neo4j 未连接';
+        neo4jStatusDot.title = connected ? t('gr.neo4jOn') : t('gr.neo4jNotConnected');
     }
     if (typeof neo4jSettingsStatus !== 'undefined' && neo4jSettingsStatus) {
-        neo4jSettingsStatus.textContent = connected ? '✅ 已连接' : '❌ 未连接';
+        neo4jSettingsStatus.textContent = connected ? '✅ ' + t('gr.connected') : '❌ ' + t('gr.disconnected');
     }
 }
 
@@ -584,3 +607,18 @@ window.reactAgentLoop = reactAgentLoop;
 window.neo4jConnector = neo4jConnector;
 window.ensureNeo4jConnected = ensureNeo4jConnected;
 window.updateNeo4jStatusUI = updateNeo4jStatusUI;
+
+// ── 「立即终止」键（2026-10-13）：硬中断本轮生成；账本已落的轮次保留，可继续追问 ──
+(function () {
+    var btn = document.getElementById('agent-stop-btn');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+        if (!state.isGenerating) return;
+        fetch('/api/agent/stop', { method: 'POST' }).then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            if (typeof showToast === 'function') showToast(t('gr.abortedToast'), 'success');
+        }).catch(function (e) {
+            if (typeof showToast === 'function') showToast('❌ ' + t('gr.abortFailed') + (e && e.message ? e.message : t('gr.networkError')), 'error');
+        });
+    });
+})();

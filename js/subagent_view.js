@@ -21,8 +21,8 @@
         d.style.top = '110px';
         d.innerHTML =
             '<div class="fe-header" id="sv-header">' +
-                '<span class="fe-title" id="sv-title">🤖 子智能体</span>' +
-                '<button class="fe-close" id="sv-close" title="关闭">×</button>' +
+                '<span class="fe-title" id="sv-title">🤖 ' + t('sub.title') + '</span>' +
+                '<button class="fe-close" id="sv-close" title="' + t('sub.close') + '">×</button>' +
             '</div>' +
             '<div id="sv-body" style="flex:1;overflow:auto;padding:0.8rem 1rem;font-size:0.86rem;line-height:1.6;"></div>';
         document.body.appendChild(d);
@@ -91,17 +91,17 @@
     function _stepHtml(st) {
         var t = st.type || '';
         if (t === 'thinking') {
-            return '<div style="margin:.4rem 0;"><div style="font-weight:600;color:var(--primary);">🧠 子智能体思考</div>' +
+            return '<div style="margin:.4rem 0;"><div style="font-weight:600;color:var(--primary);">🧠 ' + t('sub.thinking') + '</div>' +
                    '<div style="white-space:pre-wrap;background:var(--light,#f6f8fa);border-radius:6px;padding:.4rem .6rem;margin-top:.2rem;">' +
                    _esc(st.text || '') + '</div></div>';
         }
         if (t === 'tool_call') {
-            return '<div style="margin:.4rem 0;"><div style="font-weight:600;">🔧 调用 ' + _esc(st.name || '') + '</div>' +
+            return '<div style="margin:.4rem 0;"><div style="font-weight:600;">🔧 ' + t('sub.call') + _esc(st.name || '') + '</div>' +
                    '<pre style="white-space:pre-wrap;background:var(--light,#f6f8fa);border-radius:6px;padding:.4rem .6rem;margin:.2rem 0 0;">' +
                    _esc(st.input || '') + '</pre></div>';
         }
         if (t === 'tool_result') {
-            return '<div style="margin:.4rem 0;"><div style="font-weight:600;">👁️ ' + _esc(st.name || '') + ' 结果</div>' +
+            return '<div style="margin:.4rem 0;"><div style="font-weight:600;">👁️ ' + _esc(st.name || '') + t('sub.resultSuffix') + '</div>' +
                    '<pre style="white-space:pre-wrap;max-height:220px;overflow:auto;background:var(--light,#f6f8fa);border-radius:6px;padding:.4rem .6rem;margin:.2rem 0 0;">' +
                    _esc(st.content || '') + '</pre></div>';
         }
@@ -115,42 +115,59 @@
         // info: {index, goal, context, ok, summary, error, steps[], rounds, seconds, running(bool)}
         var d = _ensure();
         d.querySelector('#sv-title').textContent =
-            '🤖 子智能体 ' + ((info.index || 0) + 1) + (info.running ? ' · 运行中…' : (info.ok ? ' · ✅ 完成' : ' · ⚠️ 失败'));
+            '🤖 ' + (String(info.profile_title || info.profile || '').trim() || t('sub.generic')) +
+            ' · ' + t('sub.task') + ' ' + ((info.index || 0) + 1) + (info.running ? ' · ' + t('sub.running') : (info.ok ? ' · ✅ ' + t('sub.done') : ' · ⚠️ ' + t('sub.failed')));
         var badge = info.running
-            ? '<span style="color:#e6a23c;">● 运行中…</span>'
-            : (info.ok ? '<span style="color:#2e9e4f;">✅ 完成</span>' : '<span style="color:#e02020;">⚠️ 失败</span>');
+            ? '<span style="color:#e6a23c;">● ' + t('sub.runningDot') + '</span>'
+            : (info.ok ? '<span style="color:#2e9e4f;">✅ ' + t('sub.done') + '</span>' : '<span style="color:#e02020;">⚠️ ' + t('sub.failed') + '</span>');
         var steps = info.steps || [];
         var nThink = steps.filter(function (s) { return s.type === 'thinking'; }).length;
         var nTool = steps.filter(function (s) { return s.type === 'tool_call'; }).length;
-        var html = '<div style="margin-bottom:.5rem;">' + badge +
-            (info.seconds ? ' <span style="color:var(--gray);">· 用时 ' + info.seconds + 's</span>' : '') +
-            (info.rounds ? ' <span style="color:var(--gray);">· ' + info.rounds + ' 轮</span>' : '') +
-            (nTool ? ' <span style="color:var(--gray);">· 工具 ' + nTool + ' 次</span>' : '') + '</div>';
+        var pTitle = String(info.profile_title || info.profile || '').trim() || t('sub.generic');
+        var pBits = [];
+        if (info.profile_read_max) pBits.push(t('sub.maxRead') + info.profile_read_max + t('sub.chars'));
+        if (info.profile_rounds) pBits.push(t('sub.maxRounds') + info.profile_rounds);
+        if (info.profile_tools) pBits.push(t('sub.availTools') + info.profile_tools + t('sub.countUnit'));
+        if (info.profile_skills) pBits.push(t('sub.readSkills') + info.profile_skills + t('sub.countUnit'));
+        var html = '<div style="margin-bottom:.3rem;font-weight:600;">🧬 ' + t('sub.profile') + _esc(pTitle) +
+            (info.profile ? ' <span style="color:var(--gray);font-weight:400;">(' + _esc(info.profile) + ')</span>' : '') + '</div>' +
+            (pBits.length ? '<div style="margin-bottom:.35rem;color:var(--gray);font-size:.82rem;">' + _esc(pBits.join(' · ')) + '</div>' : '') +
+            '<div style="margin-bottom:.5rem;">' + badge +
+            (info.seconds ? ' <span style="color:var(--gray);">· ' + t('sub.took') + ' ' + info.seconds + 's</span>' : '') +
+            (info.rounds ? ' <span style="color:var(--gray);">· ' + info.rounds + t('sub.roundsUnit') + '</span>' : '') +
+            (nTool ? ' <span style="color:var(--gray);">· ' + t('sub.toolsTimes') + ' ' + nTool + t('sub.timesUnit') + '</span>' : '') + '</div>';
 
         // 1) 输入：主智能体交给它的任务 + 背景上下文（这就是"和子智能体的对话输入"）
         html += '<div style="margin:.6rem 0;padding:.5rem .7rem;border:1px solid var(--border-color,#ddd);border-radius:8px;">' +
-                '<div style="font-weight:600;margin-bottom:.25rem;">📥 输入（主智能体派给它的任务）</div>' +
-                '<div style="margin-bottom:.3rem;"><b>目标：</b>' + _esc(info.goal || '') + '</div>' +
+                '<div style="font-weight:600;margin-bottom:.25rem;">📥 ' + t('sub.input') + '</div>' +
+                '<div style="margin-bottom:.3rem;"><b>' + t('sub.goal') + '</b>' + _esc(info.goal || '') + '</div>' +
                 '<div style="color:var(--gray);white-space:pre-wrap;">' +
-                (info.context ? ('<b style="color:var(--text-color,#333);">上下文：</b>' + _esc(info.context)) : '（无额外上下文）') +
+                (info.context ? ('<b style="color:var(--text-color,#333);">' + t('sub.context') + '</b>' + _esc(info.context)) : t('sub.noContext')) +
                 '</div></div>';
         if (info.error) {
-            html += '<div style="color:#e02020;margin-bottom:.5rem;">错误：' + _esc(info.error) + '</div>';
+            html += '<div style="color:#e02020;margin-bottom:.5rem;">' + t('sub.error') + _esc(info.error) + '</div>';
+        }
+        // 重派协议：子智能体回传的结构化状态（主智能体据此决定是否重派）
+        if (info.status) {
+            var _sc = info.status === 'ok' ? '#2e9e4f' : (info.status === 'partial' ? '#e6a23c' : '#e02020');
+            html += '<div style="margin-bottom:.5rem;font-size:.85rem;">📋 ' + t('sub.statusBack') + '<b style="color:' + _sc + ';">' + _esc(info.status) + '</b>' +
+                (info.missing ? ' · <span style="color:#e6a23c;">' + t('sub.gap') + _esc(info.missing) + '</span>' : '') +
+                (info.confidence ? ' · ' + t('sub.confidence') + _esc(info.confidence) : '') + '</div>';
         }
         // 2)+3) 过程：思考 / 工具调用 / 工具结果
         if (steps.length) {
-            html += '<div style="margin-top:.6rem;font-weight:600;">🧠 思考过程与工具调用（' + steps.length + ' 步，思考 ' + nThink + ' 段）</div>' +
+            html += '<div style="margin-top:.6rem;font-weight:600;">🧠 ' + t('sub.process') + '（' + steps.length + t('sub.steps') + nThink + t('sub.thinkSegments') + '</div>' +
                     '<div style="border:1px solid var(--border-color,#ddd);border-radius:8px;padding:.4rem .6rem;margin-top:.3rem;">' +
                     steps.map(_stepHtml).join('') + '</div>';
         } else if (info.running) {
-            html += '<div style="color:var(--gray);margin-top:.5rem;">子智能体正在独立上下文里工作（它自己调工具、自己思考）；' +
-                    '完成后这里会显示它的完整思考与工具调用过程。</div>';
+            html += '<div style="color:var(--gray);margin-top:.5rem;">' + t('sub.working1') +
+                    t('sub.working2') + '</div>';
         }
         // 4) 结论：它回给主智能体的摘要
         if (info.summary) {
             var rendered = (typeof formatMessage === 'function') ? formatMessage(info.summary) : _esc(info.summary);
             html += '<div style="margin:.7rem 0;padding:.6rem .8rem;border-left:3px solid var(--primary);' +
-                    'background:var(--light,#f6f8fa);border-radius:0 6px 6px 0;"><div style="font-weight:600;margin-bottom:.3rem;">✅ 结论摘要（回给主智能体）</div>' +
+                    'background:var(--light,#f6f8fa);border-radius:0 6px 6px 0;"><div style="font-weight:600;margin-bottom:.3rem;">✅ ' + t('sub.conclusion') + '</div>' +
                     '<div class="message-content">' + rendered + '</div></div>';
         }
         d.querySelector('#sv-body').innerHTML = html;

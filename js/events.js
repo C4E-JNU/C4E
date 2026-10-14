@@ -28,6 +28,9 @@ function _evHandleBlock(block) {
         if (!p || !p.type) return;
         if (p.type === 'chats') {
             if (typeof window.syncChatsFromServer === 'function') window.syncChatsFromServer();
+        } else if (p.type === 'chats_delta') {
+            // 另一台设备正在生成 → 把它的流式事件拼成实时预览（多端同看）
+            if (typeof window.applyChatsDelta === 'function') window.applyChatsDelta(p);
         } else if (p.type === 'notes') {
             _evOnNotes();
         }

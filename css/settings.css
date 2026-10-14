@@ -12,7 +12,7 @@
 .settings-overlay {
     position: fixed;
     inset: 0;
-    z-index: 3200;
+    z-index: var(--z-settings);
     display: none;
     background: rgba(17, 20, 32, 0.36);
 }
@@ -25,13 +25,13 @@
     left: 50%;
     top: 50%;
     transform: translate(-50%, -50%);
-    z-index: 3300;
+    z-index: calc(var(--z-settings) + 1);
     width: min(920px, 92vw);
     height: min(76vh, 700px);
     background: var(--card-bg, #fff);
     border: 1px solid var(--border-color, #e0e0e0);
     border-radius: 12px;
-    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--shadow-modal);
     flex-direction: column;
     overflow: hidden;
 }
@@ -53,6 +53,13 @@
     font-weight: 600;
     color: var(--dark, #212529);
     letter-spacing: 0.01em;
+}
+
+/* 分类页顶部一行灰色说明（如「模型配置」页） */
+#settings-panel .settings-pane-desc {
+    font-size: 0.75rem;
+    color: var(--gray);
+    margin: -2px 0 12px;
 }
 
 #settings-panel .settings-body {
@@ -481,4 +488,12 @@
     #settings-panel .settings-nav-item { width: 36px; justify-content: center; padding: 0; }
     #settings-panel .settings-nav-item .nav-label { display: none; }
     #settings-panel .settings-nav-item .ico { width: 16px; height: 16px; }
+}
+
+/* 头部「保存」按钮：顶级条内的小按钮，不用 .key-btn 的全局大按钮体格 */
+#settings-panel .settings-head .key-btn {
+    padding: 5px 14px;
+    font-size: 0.78rem;
+    border-radius: 7px;
+    font-weight: 500;
 }

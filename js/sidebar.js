@@ -328,7 +328,7 @@
             var scopeBtn = document.getElementById('notes-scope-btn');
             if (scopeBtn) scopeBtn.addEventListener('click', function () {
                 _notesScope = (_notesScope === 'all') ? 'branch' : 'all';
-                scopeBtn.textContent = (_notesScope === 'all') ? '📄 本对话' : '📚 全部';
+                scopeBtn.textContent = (_notesScope === 'all') ? t('sb.scopeThis') : t('sb.scopeAll');
                 renderNotesPanel();
             });
             if (btn) btn.addEventListener('click', toggleNotesPanel);
@@ -466,14 +466,14 @@
             _initNotesFloatWindow();
             _applyNotesRect(_resolveNotesRect());
             np.classList.add('active');
-            if (btn) { btn.classList.add('active'); btn.textContent = '笔记'; }
+            if (btn) { btn.classList.add('active'); btn.textContent = t('sb.notes'); }
             renderNotesPanel();
         }
 
         function _closeNotesFloat() {
             var np = _notesEl(), btn = _notesBtn();
             if (np) np.classList.remove('active');
-            if (btn) { btn.classList.remove('active'); btn.textContent = '笔记'; }
+            if (btn) { btn.classList.remove('active'); btn.textContent = t('sb.notes'); }
         }
 
         function toggleNotesPanel() {
@@ -502,7 +502,7 @@
                     _currentNotes = notes;  // 缓存，供编辑时查找
                     var branch = state.branches[state.currentBranchId];
                     var titleEl = np.querySelector('.notes-panel-title');
-                    if (titleEl) titleEl.textContent = _notesScope === 'all' ? '📚 全部笔记' : (branch ? '📝 ' + branch.name : '📝 对话笔记');
+                    if (titleEl) titleEl.textContent = _notesScope === 'all' ? t('sb.allNotes') : (branch ? '📝 ' + branch.name : t('sb.chatNotes'));
 
                     if (notes.length === 0) {
                         notesListEl.innerHTML = '';
@@ -520,7 +520,7 @@
                 })
                 .catch(function(err) {
                     console.error('加载笔记失败:', err);
-                    notesListEl.innerHTML = '<div style="padding:1rem;color:var(--error);">加载笔记失败</div>';
+                    notesListEl.innerHTML = '<div style="padding:1rem;color:var(--error);">' + t('sb.loadNotesFail') + '</div>';
                 });
         }
 
@@ -532,8 +532,8 @@
         function renderNoteCard(note) {
             var contentHtml = note.content
                 ? formatMessage(note.content, true, 'note')
-                : '<span style="color:var(--gray);font-style:italic;">空笔记</span>';
-            var escapedTitle = escHtml(note.title || '未命名笔记');
+                : '<span style="color:var(--gray);font-style:italic;">' + t('sb.emptyNote') + '</span>';
+            var escapedTitle = escHtml(note.title || t('edit.noteUntitled'));
             // 默认闭合，用 _noteCollapsedMap 记录手动展开/收起状态
             var isCollapsed = _noteCollapsedMap[note.id] !== undefined ? _noteCollapsedMap[note.id] : true;
             // 归属：非本人且非 admin → 只读（无编辑/删除/排序按钮）
@@ -545,20 +545,20 @@
             var owner = note.owner || 'admin';
             var canEdit = (owner === myName) || isAdmin;
             var ownerTag = (owner !== myName)
-                ? '<span title="归属用户" style="font-size:.72rem;color:var(--gray);margin-left:.4rem;">👤 ' + escHtml(owner) + '</span>'
+                ? '<span title="' + t('sb.ownerTag') + '" style="font-size:.72rem;color:var(--gray);margin-left:.4rem;">👤 ' + escHtml(owner) + '</span>'
                 : '';
             var actions = canEdit
-                ? ('<button class="note-card-move-btn" onclick="moveNote(\'' + note.id + '\', -1)" title="上移">▲</button>'
-                + '<button class="note-card-move-btn" onclick="moveNote(\'' + note.id + '\', 1)" title="下移">▼</button>'
+                ? ('<button class="note-card-move-btn" onclick="moveNote(\'' + note.id + '\', -1)" title="' + t('sb.moveUp') + '">▲</button>'
+                + '<button class="note-card-move-btn" onclick="moveNote(\'' + note.id + '\', 1)" title="' + t('sb.moveDown') + '">▼</button>'
                 + (typeof window.getAuthUser === 'function' && window.getAuthUser() && window.getAuthUser().username !== 'guest'
-                    ? '<button class="note-card-publish-btn" onclick="publishNoteToDb(\'' + note.id + '\')" title="把这条笔记（含附件/图片）原样复制到共享数据库" '
+                    ? '<button class="note-card-publish-btn" onclick="publishNoteToDb(\'' + note.id + '\')" title="' + t('sb.publishTitle') + '" '
                       + 'style="background:none;border:none;cursor:pointer;font-size:.82rem;padding:.1rem .3rem;">'
-                      + (note.cloud_entry_id ? '⬆️ 更新数据库' : '⬆️ 上传数据库') + '</button>'
+                      + (note.cloud_entry_id ? t('sb.updateDb') : t('sb.uploadDb')) + '</button>'
                     : '')
-                + '<button class="note-card-ref-btn" onclick="refLocalNote(\'' + note.id + '\')" title="引用给智能体（发送时带上该笔记全文，可让它增删改查）" '
+                + '<button class="note-card-ref-btn" onclick="refLocalNote(\'' + note.id + '\')" title="' + t('sb.refTitle') + '" '
                   + 'style="background:none;border:none;cursor:pointer;font-size:.82rem;padding:.1rem .3rem;">📌</button>'
-                + '<button class="note-card-edit-btn" onclick="editNoteCard(\'' + note.id + '\')" title="编辑笔记">✏️</button>'
-                + '<button class="note-card-delete" onclick="deleteNoteCard(\'' + note.id + '\')" title="删除笔记">×</button>')
+                + '<button class="note-card-edit-btn" onclick="editNoteCard(\'' + note.id + '\')" title="' + t('sb.editNoteTitle') + '">✏️</button>'
+                + '<button class="note-card-delete" onclick="deleteNoteCard(\'' + note.id + '\')" title="' + t('sb.deleteNoteTitle') + '">×</button>')
                 : '';
             return '<div class="note-card" data-note-id="' + note.id + '">'
                 + '<div class="note-card-header" onclick="toggleNoteCollapse(\'' + note.id + '\')" style="cursor:pointer;">'
@@ -578,39 +578,41 @@
             fetch(BACKEND_API_URL + '/api/notes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: title || '新笔记', content: content || '', branch_id: branchId || '' })
+                body: JSON.stringify({ title: title || t('sb.newNote'), content: content || '', branch_id: branchId || '' })
             })
             .then(r => r.json())
             .then(function(data) {
                 if (data.status === 'ok') {
                     var np = document.getElementById('notes-panel');
                     if (np && np.classList.contains('active')) renderNotesPanel();
-                    showToast('笔记已添加', 'success');
+                    updateHistoryList();
+                    showToast(t('sb.noteAdded'), 'success');
                 } else {
-                    showToast('添加笔记失败', 'error');
+                    showToast(t('sb.addNoteFail'), 'error');
                 }
             })
             .catch(function(err) {
                 console.error('添加笔记失败:', err);
-                showToast('添加笔记失败', 'error');
+                showToast(t('sb.addNoteFail'), 'error');
             });
         }
 
         function deleteNoteCard(noteId) {
-            if (!confirm('确定删除这条笔记吗？')) return;
+            if (!confirm(t('sb.confirmDelNote'))) return;
             fetch(BACKEND_API_URL + '/api/notes/' + noteId, { method: 'DELETE' })
             .then(r => r.json())
             .then(function(data) {
                 if (data.status === 'ok') {
                     renderNotesPanel();
-                    showToast('笔记已删除', 'success');
+                    updateHistoryList();
+                    showToast(t('sb.noteDeleted'), 'success');
                 } else {
-                    showToast('删除笔记失败', 'error');
+                    showToast(t('sb.delNoteFail'), 'error');
                 }
             })
             .catch(function(err) {
                 console.error('删除笔记失败:', err);
-                showToast('删除笔记失败', 'error');
+                showToast(t('sb.delNoteFail'), 'error');
             });
         }
 
@@ -624,14 +626,15 @@
             .then(function(data) {
                 if (data.status === 'ok') {
                     renderNotesPanel();
+                    updateHistoryList();
                     if (data.message) showToast(data.message, 'info');
                 } else {
-                    showToast('移动笔记失败', 'error');
+                    showToast(t('sb.moveNoteFail'), 'error');
                 }
             })
             .catch(function(err) {
                 console.error('移动笔记失败:', err);
-                showToast('移动笔记失败', 'error');
+                showToast(t('sb.moveNoteFail'), 'error');
             });
         }
 
@@ -640,7 +643,7 @@
             if (!branch || !branch.notes) return;
             var note = branch.notes.find(function(n) { return n.id === noteId; });
             if (note) {
-                note.title = newTitle || '未命名笔记';
+                note.title = newTitle || t('edit.noteUntitled');
                 note.updatedAt = new Date().toISOString();
                 saveBranches();
             }
@@ -661,7 +664,7 @@
             if (!note) return;
             var originalContent = note.content || '';
             floatingEditor.open({
-                title: '编辑笔记',
+                title: t('sb.editNoteDlg'),
                 showTitle: true,
                 titleValue: note.title || '',
                 value: note.content || '',
@@ -676,7 +679,7 @@
                     if (bodyEl) { bodyEl.innerHTML = formatMessage(originalContent, true, 'note'); }
                 },
                 onSave: function (newContent, newTitle) {
-                    var t = (newTitle !== null && newTitle !== undefined && newTitle !== '') ? newTitle : '未命名笔记';
+                    var t = (newTitle !== null && newTitle !== undefined && newTitle !== '') ? newTitle : t('edit.noteUntitled');
                     var c = newContent;
                     fetch(BACKEND_API_URL + '/api/notes', {
                         method: 'PUT',
@@ -691,14 +694,14 @@
                             note.updatedAt = new Date().toISOString();
                             saveBranches();
                             renderNotesPanel();
-                            showToast('笔记已更新', 'success');
+                            showToast(t('sb.noteUpdated'), 'success');
                         } else {
-                            showToast('更新笔记失败', 'error');
+                            showToast(t('sb.updateNoteFail'), 'error');
                         }
                     })
                     .catch(function(err) {
                         console.error('更新笔记失败:', err);
-                        showToast('更新笔记失败', 'error');
+                        showToast(t('sb.updateNoteFail'), 'error');
                     });
                 }
             });
@@ -713,9 +716,9 @@
             var note = _currentNotes.find(function (n) { return n.id === noteId; });
             var isUpdate = !!(note && note.cloud_entry_id);
             if (!confirm(isUpdate
-                ? '用这条笔记的最新内容更新云端数据库里对应的那条条目？（附件/图片会一并复制）'
-                : '把这条笔记（文本 + 附件 + 图片）原样复制一份到共享数据库？本地笔记保持不动。')) return;
-            showPassiveToast(isUpdate ? '正在更新云端条目…' : '正在上传到共享数据库…');
+                ? t('sb.pubConfirmUpdate')
+                : t('sb.pubConfirmUpload'))) return;
+            showPassiveToast(isUpdate ? t('sb.pubUpdating') : t('sb.pubUploading'));
             fetch(BACKEND_API_URL + '/api/notes/publish', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -725,18 +728,18 @@
             .then(function (res) {
                 var d = res.d || {};
                 if (d.status === 'ok') {
-                    var tip = (d.updated ? '云端条目已更新' : '已上传到数据库') +
-                              '（复制文件 ' + (d.files_copied || 0) + ' 个）';
+                    var tip = (d.updated ? t('sb.pubUpdated') : t('sb.pubUploaded')) +
+                              t('sb.pubFilesCopied').replace('{n}', d.files_copied || 0);
                     if (d.files_failed && d.files_failed.length) {
-                        tip += '；' + d.files_failed.length + ' 个附件失败：' + d.files_failed.join(', ');
+                        tip += t('sb.pubFilesFailed').replace('{n}', d.files_failed.length) + d.files_failed.join(', ');
                     }
                     showToast('✅ ' + tip, d.files_failed && d.files_failed.length ? 'info' : 'success');
                     renderNotesPanel();
                 } else {
-                    showToast('❌ 上传数据库失败：' + (d.error || d.message || res.status), 'error');
+                    showToast(t('sb.pubFail') + (d.error || d.message || res.status), 'error');
                 }
             })
-            .catch(function (e) { showToast('❌ 上传数据库失败：' + (e && e.message ? e.message : '网络错误'), 'error'); });
+            .catch(function (e) { showToast(t('sb.pubFail') + (e && e.message ? e.message : t('sb.netError')), 'error'); });
         }
 
         // ==================== 对话条目状态标记（2026-09-28）====================
@@ -777,7 +780,7 @@
                 historyList.innerHTML = '';
                 const empty = document.createElement('div');
                 empty.className = 'empty-state';
-                empty.innerHTML = '<div class="empty-state-icon">💭</div><div class="empty-state-text">暂无对话历史</div>';
+                empty.innerHTML = '<div class="empty-state-icon">💭</div><div class="empty-state-text">' + t('sb.emptyHistory') + '</div>';
                 historyList.appendChild(empty);
                 return;
             }
@@ -812,7 +815,7 @@
                 emptyMsg.style.textAlign = 'center';
                 emptyMsg.style.padding = '2rem';
                 emptyMsg.style.color = 'var(--gray)';
-                emptyMsg.textContent = state.sidebar.searchQuery ? '未找到匹配的消息' : '暂无对话历史';
+                emptyMsg.textContent = state.sidebar.searchQuery ? t('sb.noMatchMsg') : t('sb.emptyHistory');
                 historyList.appendChild(emptyMsg);
                 return;
             }
@@ -854,7 +857,7 @@
                 if (!groupedByBranch[msg.branchId]) {
                     groupedByBranch[msg.branchId] = {
                         branchId: msg.branchId,
-                        branchName: state.branches[msg.branchId]?.name || '未知对话',
+                        branchName: state.branches[msg.branchId]?.name || t('sb.unknownBranch'),
                         messages: []
                     };
                 }
@@ -912,9 +915,9 @@
                 emptyState.className = 'empty-state';
                 emptyState.innerHTML = `
                     <div class="empty-state-icon">💭</div>
-                    <div class="empty-state-text">${state.sidebar.searchQuery ? '未找到匹配的对话' : '暂无对话历史'}</div>
+                    <div class="empty-state-text">${state.sidebar.searchQuery ? t('sb.noMatchChat') : t('sb.emptyHistory')}</div>
                     <button class="new-chat-btn" id="new-chat-btn-empty">
-                        + 开始新的对话
+                        + ${t('sb.newChat')}
                     </button>
                 `;
                 historyList.appendChild(emptyState);
@@ -954,7 +957,7 @@
             }
 
             // ── 工作区域分组（用户 2026-10-03）：对话按 project_id 归组，组间插分隔头；默认工作区域在最后 ──
-            const _waList = (state.workAreas && state.workAreas.length) ? state.workAreas : [{ id: 'default', name: '默认工作区域' }];
+            const _waList = (state.workAreas && state.workAreas.length) ? state.workAreas : [{ id: 'default', name: t('sb.defaultWa') }];
             const _waName = {};
             _waList.forEach(function (a) { _waName[a.id] = a.name; });
             const _projOrder = _waList.filter(function (a) { return a.id !== 'default'; }).map(function (a) { return a.id; });
@@ -968,16 +971,26 @@
             const _orderedKeys = [];
             _projOrder.forEach(function (p) { (_buckets[p] || []).forEach(function (k) { _orderedKeys.push(k); }); });
 
+            var _waCollapsedMap = {};
+            try { _waCollapsedMap = JSON.parse(localStorage.getItem(window.identityKey('wa-collapsed')) || '{}'); } catch (err) {}
             let _lastProj = null;
+            let _waSectionBody = null;
             for (const branchId of _orderedKeys) {
                 const _pid = ((state.branches[branchId] || {}).project_id) || 'default';
                 if (_pid !== _lastProj) {
                     _lastProj = _pid;
-                    const pd = document.createElement('div');
-                    pd.className = 'project-divider';
-                    pd.innerHTML = '<span class="pd-icon">📁</span><span class="pd-name"></span>';
-                    pd.querySelector('.pd-name').textContent = _waName[_pid] || '工作区域';
-                    historyList.appendChild(pd);
+                    const _waSection = document.createElement('div');
+                    _waSection.className = 'wa-section';
+                    _waSection.innerHTML = '<div class="project-divider"><span class="pd-chev">▾</span><span class="pd-name"></span><span class="pd-count">' + (_buckets[_pid] || []).length + '</span></div><div class="wa-body"></div>';
+                    _waSection.querySelector('.pd-name').textContent = _waName[_pid] || t('sb.workspace');
+                    const _waId = _pid;
+                    _waSection.querySelector('.project-divider').addEventListener('click', function () {
+                        _waSection.classList.toggle('closed');
+                        _saveWaCollapsed(_waId, _waSection.classList.contains('closed'));
+                    });
+                    if (_waCollapsedMap[_pid]) _waSection.classList.add('closed');
+                    historyList.appendChild(_waSection);
+                    _waSectionBody = _waSection.querySelector('.wa-body');
                 }
                 const group = groupedByBranch[branchId];
 
@@ -993,52 +1006,56 @@
                     state.sidebar.currentFilter !== 'all' ||
                     state.sidebar.expandedGroups.has(branchId);
 
+                const _mtime = group.messages.length ? new Date(group.messages[0].timestamp) : null;
                 groupEl.innerHTML = `
                     <div class="group-header" onclick="handleBranchClick('${branchId}')">
                         ${chatMarkHtml(branchId)}
-                        <div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 10px;">
+                        <div class="group-name">
                             ${group.branchName}
-                            
                         </div>
                         <div class="group-actions-wrapper" onclick="event.stopPropagation()">
                             <div class="group-message-count">${group.messages.length}</div>
                             <div class="group-actions">
-                                <button class="group-action-btn" title="导出对话" onclick="event.stopPropagation(); exportConversation('${branchId}')">
+                                <button class="group-action-btn" title="${t('sb.exportChat')}" onclick="event.stopPropagation(); exportConversation('${branchId}')">
                                     📤
                                 </button>
-                                <button class="group-action-btn" title="重命名对话" onclick="event.stopPropagation(); openRenameBranchModal(event, '${branchId}')">
+                                <button class="group-action-btn" title="${t('sb.renameChat')}" onclick="event.stopPropagation(); openRenameBranchModal(event, '${branchId}')">
                                     ✎
                                 </button>
-                                <button class="group-action-btn delete" title="删除对话" onclick="event.stopPropagation(); deleteBranchWithConfirm('${branchId}')">
+                                <button class="group-action-btn delete" title="${t('sb.deleteChat')}" onclick="event.stopPropagation(); deleteBranchWithConfirm('${branchId}')">
                                     ×
                                 </button>
-                                <button class="group-action-btn" title="添加便携文件" onclick="event.stopPropagation(); openBubbleAddPanel(event, '${branchId}')">
+                                <button class="group-action-btn" title="${t('sb.addBubble')}" onclick="event.stopPropagation(); openBubbleAddPanel(event, '${branchId}')">
                                     ＋
                                 </button>
                             </div>
                         </div>
                     </div>
+                    <div class="group-meta-row" onclick="event.stopPropagation()">
+                        <div class="group-bubbles" data-branch-id="${branchId}" id="group-bubbles-${branchId}">
+                            ${(state.branches[branchId]._bubbles || []).map((b, bi) => `
+                                <span class="history-bubble${b.filePath || b.fileDataKey || b.hasFile ? ' has-file' : ''}" draggable="true"
+                                      data-bubble-id="${b.id}"
+                                      data-bubble-text="${b.text}"
+                                      data-file-path="${b.filePath || ''}"
+                                      data-file-id="${b.fileId || ''}"
+                                      data-branch-id="${branchId}"
+                                      title="${b.text}">
+                                    <span class="bubble-text">${b.text}</span>
+                                </span>
+                            `).join('')}
+                        </div>
+                        <span class="group-spacer"></span>
+                        <span class="group-time">${_mtime ? _fmtDay(_mtime) : ''}</span>
+                        <span class="group-notes-slot" data-branch-id="${branchId}"></span>
+                    </div>
                     <div class="group-content ${isExpanded ? 'expanded' : ''}" id="group-content-${branchId}">
                         <div class="group-messages" id="group-${branchId}">
                         </div>
                     </div>
-                    ${(state.branches[branchId]._bubbles || []).length > 0 ? `
-                    <div class="group-bubbles" data-branch-id="${branchId}" id="group-bubbles-${branchId}">
-                        ${(state.branches[branchId]._bubbles || []).map((b, bi) => `
-                            <span class="history-bubble${b.filePath || b.fileDataKey || b.hasFile ? ' has-file' : ''}" draggable="true"
-                                  data-bubble-id="${b.id}"
-                                  data-bubble-text="${b.text}"
-                                  data-file-path="${b.filePath || ''}"
-                                  data-file-id="${b.fileId || ''}"
-                                  data-branch-id="${branchId}"
-                                  title="${b.text}">
-                                <span class="bubble-text">${b.text}</span>
-                            </span>
-                        `).join('')}
-                    </div>` : ''}
                 `;
 
-                historyList.appendChild(groupEl);
+                _waSectionBody.appendChild(groupEl);
 
                 // 拖拽事件绑定
                 groupEl.addEventListener('dragstart', (e) => {
@@ -1132,11 +1149,67 @@
                 }
 
                 const groupMessagesEl = document.getElementById(`group-${branchId}`);
-                group.messages.forEach(msg => {
+                // 数组是最新在前；详情按阅读顺序（旧→新）渲染：提问在上、回答在下
+                group.messages.slice().reverse().forEach(msg => {
                     const historyItem = createHistoryItem(msg, true);
                     groupMessagesEl.appendChild(historyItem);
                 });
             }
+
+            // 笔记计数：一次拉全部笔记按 branch_id 汇总，填到每条对话第二行（0 条不显示按钮）
+            fetch(BACKEND_API_URL + '/api/notes')
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    const _counts = {};
+                    (data.notes || []).forEach(function (n) {
+                        if (n.branch_id) _counts[n.branch_id] = (_counts[n.branch_id] || 0) + 1;
+                    });
+                    historyList.querySelectorAll('.group-notes-slot').forEach(function (slot) {
+                        const _c = _counts[slot.dataset.branchId] || 0;
+                        slot.textContent = '';   // 在途 fetch 可能重复回调，先清空再插，保证每槽最多一个按钮
+                        if (!_c) return;
+                        const _btn = document.createElement('button');
+                        _btn.className = 'group-notes-btn';
+                        _btn.textContent = '📝' + _c;
+                        _btn.title = t('sb.viewNotes');
+                        _btn.addEventListener('click', function (e) {
+                            e.stopPropagation();
+                            openBranchNotes(slot.dataset.branchId);
+                        });
+                        slot.appendChild(_btn);
+                    });
+                })
+                .catch(function (err) { console.error('加载笔记计数失败:', err); });
+        }
+
+        // ==================== 工作区域收起状态（按工作区 id 持久化） ====================
+        function _saveWaCollapsed(waId, collapsed) {
+            var m = {};
+            try { m = JSON.parse(localStorage.getItem(window.identityKey('wa-collapsed')) || '{}'); } catch (err) {}
+            if (collapsed) { m[waId] = 1; } else { delete m[waId]; }
+            try { localStorage.setItem(window.identityKey('wa-collapsed'), JSON.stringify(m)); } catch (err) {}
+        }
+
+        // 侧栏第二行时间：今天 / 昨天 / M月d日
+        function _fmtDay(d) {
+            const _now = new Date();
+            const _today0 = new Date(_now.getFullYear(), _now.getMonth(), _now.getDate()).getTime();
+            const _day0 = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+            const _diff = Math.round((_today0 - _day0) / 86400000);
+            if (_diff <= 0) return t('sb.today');
+            if (_diff === 1) return t('sb.yesterday');
+            return t('sb.dateMD').replace('{m}', d.getMonth() + 1).replace('{d}', d.getDate());
+        }
+
+        // 侧栏 📝 按钮：切到该对话并弹出笔记浮窗（复用现有笔记面板机制）
+        function openBranchNotes(branchId) {
+            _notesScope = 'branch';
+            var scopeBtn = document.getElementById('notes-scope-btn');
+            if (scopeBtn) scopeBtn.textContent = t('sb.scopeAll');
+            if (branchId && branchId !== state.currentBranchId && typeof switchToBranch === 'function') {
+                switchToBranch(branchId);
+            }
+            _openNotesFloat();
         }
 
         // ==================== 分组展开/收起函数 ====================
@@ -1176,6 +1249,9 @@
         function createHistoryItem(message, showBranchInfo = false) {
             const item = document.createElement('div');
             item.className = 'history-item';
+            if (message.role === 'user' || message.role === 'assistant') {
+                item.classList.add(message.role);
+            }
 
             if (message.type === 'document') {
                 item.classList.add('document');
@@ -1192,35 +1268,8 @@
                 preview = preview.substring(0, 57) + '...';
             }
 
-            const time = new Date(message.timestamp).toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-
-            let roleLabel = message.role === 'user' ? '用户' : 'AI';
-            if (message.type === 'document') {
-                roleLabel = '文档';
-            } else if (message.type === 'database') {
-                roleLabel = '知识库';
-            } else if (message.thinkingChain) {
-                roleLabel = '思考';
-            }
-
-            const dateTime = new Date(message.timestamp);
-            const dateStr = `${dateTime.getMonth() + 1}月${dateTime.getDate()}日`;
-            const timeStr = dateTime.toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-
             item.innerHTML = `
                 <div class="history-preview">${preview}</div>
-                <div class="history-meta">
-                    <span class="history-role ${message.role} ${message.type === 'document' ? 'document' : ''} ${message.type === 'database' ? 'database' : ''}">
-                        ${roleLabel}
-                    </span>
-                    <span>${dateStr} ${timeStr}</span>
-                </div>
             `;
 
             item.addEventListener('click', () => {

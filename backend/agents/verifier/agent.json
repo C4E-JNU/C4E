@@ -1,0 +1,19 @@
+{
+  "title": "数据核查员",
+  "description": "拿主控给的数据清单逐条回原文核验。自带私有技能目录（skills/，主智能体的技能它读不到），读入上限 3 万字符，偏保守时限。",
+  "skills_dir": "skills",
+  "skills": ["data-audit"],
+  "tools": ["read_file", "list_files", "find_files", "search_files", "skill_list", "skill_view"],
+  "params": {
+    "max_rounds": 6,
+    "timeout": 900,
+    "nudge": 300,
+    "warn": 600,
+    "abort": 900,
+    "read_file_max_chars": 30000,
+    "tool_result_max_chars": 40000,
+    "tool_result_preview_chars": 2000,
+    "user_context_max_chars": 12000,
+    "max_images": 3
+  }
+}

@@ -8,8 +8,8 @@ from pathlib import Path
 _WORKSPACE = Path(__file__).parent.parent.parent / "workspace"
 # 知识库索引唯一在共享池 pool/（仅云端共享库使用；本地实例无数据库）
 _KNOWLEDGE_INDEX_FILE = _WORKSPACE / "pool" / "_vector_knowledge.json"
-# 聊天历史索引/元数据按身份分文件：_vector_history_<key>.json / _vector_meta_<key>.json（key 空=旧版全局）
-_META_FILE_LEGACY = _WORKSPACE / "_vector_meta.json"
+# 聊天历史索引/元数据按身份归入 users/<key>/（key 空=旧版全局，留在 workspace 根）
+_META_FILE_LEGACY = _WORKSPACE / "_vector_meta.json"   # 等价于 _meta_file("")，保留以明示旧路径
 
 
 def _user_key_vs(username: str) -> str:
@@ -20,16 +20,20 @@ def _user_key_vs(username: str) -> str:
     return k or "_guest"
 
 
-def _history_index_file(user: str = ""):
+def _user_data_dir(user: str = "") -> Path:
+    """身份 → 用户数据目录 users/<key>/：对话、附件、召回日志、索引同处一个文件夹。
+    key 空 = 旧版全局，留在 workspace 根（兼容老数据）。"""
     if not user:
-        return _WORKSPACE / "_vector_history.json"   # 旧版全局
-    return _WORKSPACE / f"_vector_history_{_user_key_vs(user)}.json"
+        return _WORKSPACE
+    return _WORKSPACE / "users" / _user_key_vs(user)
+
+
+def _history_index_file(user: str = ""):
+    return _user_data_dir(user) / "_vector_history.json"
 
 
 def _meta_file(user: str = ""):
-    if not user:
-        return _META_FILE_LEGACY
-    return _WORKSPACE / f"_vector_meta_{_user_key_vs(user)}.json"
+    return _user_data_dir(user) / "_vector_meta.json"
 
 # ── 全局单例 ───────────────────────────────────────
 _model = None
@@ -116,13 +120,13 @@ def _load_index(file_path: Path) -> list[dict]:
 
 def _save_index(file_path: Path, index: list[dict]):
     """保存向量索引"""
-    _WORKSPACE.mkdir(parents=True, exist_ok=True)
+    file_path.parent.mkdir(parents=True, exist_ok=True)
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(index, f, ensure_ascii=False, indent=2)
 
 
 def _load_meta(user: str = "") -> dict:
-    """加载索引元数据（last_indexed_id 等），按身份分文件"""
+    """加载索引元数据（last_indexed_id 等），按身份归入 users/<key>/"""
     mf = _meta_file(user)
     if not mf.exists():
         return {"last_indexed_id": None, "history_chunks": 0, "knowledge_chunks": 0}
@@ -134,8 +138,9 @@ def _load_meta(user: str = "") -> dict:
 
 
 def _save_meta(meta: dict, user: str = ""):
-    _WORKSPACE.mkdir(parents=True, exist_ok=True)
-    with open(_meta_file(user), "w", encoding="utf-8") as f:
+    mf = _meta_file(user)
+    mf.parent.mkdir(parents=True, exist_ok=True)
+    with open(mf, "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)
 
 
@@ -212,6 +217,22 @@ def _index_vectors(index: list[dict]) -> np.ndarray | None:
         return None
 
 
+def _index_vectors_backfill(index: list[dict], file_path) -> np.ndarray:
+    """取索引里现成的向量；缺失（老索引没存 vector）则重算并回填落盘 —— 一次性治好存量索引，
+    之后查询只需嵌入 query（429 块全量重算 ≈80s → ≈1s）。"""
+    m = _index_vectors(index)
+    if m is not None:
+        return m
+    m = embed_texts([c["text"] for c in index])
+    try:
+        for i, c in enumerate(index):
+            c["vector"] = m[i].tolist()
+        _save_index(file_path, index)
+    except Exception:
+        pass
+    return m
+
+
 async def search_history(query: str, top_k: int = 3, scope: str = None, user: str = "") -> str:
     """搜索历史对话（按身份分索引），返回 JSON 字符串"""
     index = _load_index(_history_index_file(user))
@@ -220,10 +241,8 @@ async def search_history(query: str, top_k: int = 3, scope: str = None, user: st
 
     try:
         q_vec = embed_texts([query])[0]
-        # 优先用索引里现成的向量；缺失（老索引/异常）才重算，保证结果不变
-        doc_vecs = _index_vectors(index)
-        if doc_vecs is None:
-            doc_vecs = embed_texts([c["text"] for c in index])
+        # 优先用索引里现成的向量；缺失则重算并回填（不再每次全量重算）
+        doc_vecs = _index_vectors_backfill(index, _history_index_file(user))
         scores = cosine_similarity(q_vec, doc_vecs)
         top_idx = np.argsort(scores)[-top_k:][::-1]
 
@@ -251,10 +270,8 @@ async def search_knowledge(query: str, top_k: int = 3, scope: str = None) -> str
 
     try:
         q_vec = embed_texts([query])[0]
-        # 优先用索引里现成的向量（不再每次重算全库 embedding）
-        doc_vecs = _index_vectors(index)
-        if doc_vecs is None:
-            doc_vecs = embed_texts([c["text"] for c in index])
+        # 优先用索引里现成的向量；缺失则重算并回填
+        doc_vecs = _index_vectors_backfill(index, _KNOWLEDGE_INDEX_FILE)
         scores = cosine_similarity(q_vec, doc_vecs)
         top_idx = np.argsort(scores)[-top_k:][::-1]
 
@@ -280,14 +297,14 @@ def index_new_history(history_file: str, last_id: str | None, user: str = "") ->
     """读取历史文件，找到 last_id 之后的新增内容，切块向量化（按身份分索引）
 
     Args:
-        history_file: workspace 下历史文件名（如 _history_guest.jsonl / _history.jsonl）
+        history_file: 该用户目录下的历史日志名（users/<key>/history.jsonl；旧版全局为 _history.jsonl）
         last_id: 上次索引到的消息 id
-        user: 身份（空=旧版全局索引）
+        user: 身份（空=旧版全局索引，留在 workspace 根）
 
     Returns:
         新的 last_indexed_id
     """
-    hist_path = _WORKSPACE / history_file
+    hist_path = _user_data_dir(user) / history_file
     if not hist_path.exists():
         return last_id
 
@@ -328,6 +345,11 @@ def index_new_history(history_file: str, last_id: str | None, user: str = "") ->
             new_last_id = msg_id
 
     if new_chunks:
+        # 入库即向量化并写进 chunk["vector"]：检索时可直接用（_index_vectors），
+        # 避免每次查询都重算全库 embedding（429 块≈80s → 查询仅需嵌入 query，≈1s）
+        vecs = embed_texts([c["text"] for c in new_chunks])
+        for i, c in enumerate(new_chunks):
+            c["vector"] = vecs[i].tolist()
         add_to_history_index(new_chunks, user)
         meta["last_indexed_id"] = new_last_id
         _save_meta(meta, user)

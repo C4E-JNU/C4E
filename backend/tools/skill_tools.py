@@ -7,21 +7,49 @@ import os
 
 
 def _get_skills_dir():
-    """获取 skills 目录的绝对路径"""
+    """获取**当前生效**的 skills 目录绝对路径。
+
+    主智能体：项目根/skills/（旧行为）。
+    子智能体：若它所属档案自带技能目录（backend/agents/<name>/skills/），
+    则只看那一个目录 —— 主智能体的技能对它完全不可见（用户 2026-10-04 定）。
+    判定由 agent.profiles 的 contextvar 提供，并发子智能体之间互不污染。
+    """
+    try:
+        from agent import profiles as _pf
+        d = _pf.current_skills_dir()
+        if d:
+            return d
+    except Exception:
+        pass
     # backend/tools/skill_tools.py → 项目根目录/skills/
     return os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..", "..", "skills")
     )
 
 
+def _current_allow():
+    """当前档案的技能白名单：None=不限制；[]=全部禁用；[names]=白名单。"""
+    try:
+        from agent import profiles as _pf
+        return _pf.current_skill_allowlist()
+    except Exception:
+        return None
+
+
 async def skill_list():
-    """列出所有可用技能"""
+    """列出所有可用技能（子智能体档案设了白名单时，只列白名单内的）"""
     skills_dir = _get_skills_dir()
     index_path = os.path.join(skills_dir, "index.json")
 
     try:
         with open(index_path, "r", encoding="utf-8") as f:
             data = json.load(f)
+        allow = _current_allow()
+        if allow is not None and isinstance(data, dict):
+            data = dict(data)
+            data["skills"] = [s for s in (data.get("skills") or [])
+                              if isinstance(s, dict) and s.get("name") in allow]
+            data["filtered_by_profile"] = True
         return json.dumps(data, ensure_ascii=False, indent=2)
     except FileNotFoundError:
         return json.dumps({"skills": [], "note": "技能索引文件不存在"})
@@ -38,6 +66,13 @@ async def skill_view(name: str, file_path: str = "SKILL.md"):
 
     if not name:
         return json.dumps({"error": "技能名称不能为空"})
+
+    allow = _current_allow()
+    if allow is not None and name not in allow:
+        return json.dumps({
+            "error": f"技能 \"{name}\" 不在当前子智能体档案的可读技能白名单内",
+            "allowed": list(allow),
+        }, ensure_ascii=False)
 
     skills_dir = _get_skills_dir()
 

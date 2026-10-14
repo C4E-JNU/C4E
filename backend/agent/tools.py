@@ -59,9 +59,13 @@ class ReadFileParams(BaseModel):
     as_base64: bool = Field(default=False, description="按 file_id 读取时是否强制返回 base64（图片默认即 base64）")
     offset: int = Field(default=1, description="起始行号（1 起）。path 与 file_id 两种读法含义相同，都可用于续读")
     limit: int = Field(default=500, description=(
-        "最多返回多少行。注意返回内容还【按字符数封顶约 20000 字符】，行数没到上限也可能被截。"
+        "最多返回多少行。注意返回内容还【按字符数封顶】（主智能体默认约 20000 字符；"
+        "子智能体档案可自设更大上限），行数没到上限也可能被截。"
         "响应里的 has_more=true 表示没读完，用返回的 next_offset 作为 offset 再次调用即可续读；"
         "读到 has_more=false 才算读完全文。"))
+    max_chars: int = Field(default=0, description=(
+        "可选：本次单次返回的字符上限（0 = 用当前生效上限）。要一次读入大段正文可显式放大，"
+        "例如 50000；放大只影响本次调用，不会改变系统默认。"))
 
 class WriteFileParams(BaseModel):
     path: str = Field(description="文件路径；安全模式仅限 workspace/，询问模式可写 workspace/ 与 skills/，完全访问模式可写任意绝对路径")
@@ -221,7 +225,11 @@ tools_registry["graph_query"] = _make_async_tool(
         "search 结果带相似度，score>0.6 才引用。\n"
         "\n"
         "回答格式：📊 来自图谱 / 💡 来自自身知识 / 📊+💡 混合来源；数据优先用表格（催化剂 | 效率 | 时间 | pH），保留专业术语英文原名。\n"
-        "图谱未连接时本工具返回 error，据实说明即可，别反复重试。"
+        "【连接须知】图谱跑在远端 Neo4j Aura 上，空闲会被回收连接，"
+        "因此本工具**首次或第二次查询可能失败**（defunct connection / 未连接），"
+        "此时它自己会重连并重试一次——若你只看到一次失败，直接再调一次即可恢复，"
+        "不代表图谱损坏、更不要断言「图谱没数据」。"
+        "仅当连续失败且返回明确 error 时才据实说明，别反复重试。"
     ),
     args_schema=GraphQueryParams,
     func=_exec_graph_query,
@@ -610,11 +618,15 @@ async def _exec_notes(action: str, note_id: str = None, title: str = None, conte
 
 class DelegateTaskParams(BaseModel):
     tasks: list[dict] = Field(
-        description="要派发的子任务列表（1-4 个）。每个元素形如 "
+        description="要派发的子任务列表（1-4 个）。**同一个档案可以一次派多个实例**"
+                    "（例如同时派 3 个 reader 各读一篇），各实例独立上下文、独立技能目录、"
+                    "独立工具集、独立参数/模型，并行互不干扰。每个元素形如 "
                     "{\"goal\": \"这个子任务要达成的目标（必填，具体可执行）\", "
                     "\"context\": \"必要的背景信息（可选，把主对话里相关的关键事实写进来，子智能体看不到主对话）\", "
+                    "\"profile\": \"可选：子智能体档案名（backend/agents/<name>/agent.json），"
+                    "自带技能目录/工具目录/上下文参数/模型参数。不填=通用子智能体。可用档案见 /api/agents/profiles\", "
                     "\"tools\": [\"可选：限定该子智能体可用的工具名\"], "
-                    "\"role\": \"可选：专有角色预设 contradiction=文献矛盾核查 / extraction=数据提取 / verify=数据核查，注入领域系统提示，同类任务建议使用\"}"
+                    "\"role\": \"可选（旧写法，兼容）：contradiction=文献矛盾核查 / extraction=数据提取 / verify=数据核查\"}"
     )
 
 
@@ -638,6 +650,17 @@ def delegate_prepare(tasks) -> tuple:
     valid = [t for t in tasks if isinstance(t, dict) and (t.get("goal") or "").strip()][:limit]
     if not valid:
         return [], json.dumps({"error": "每个子任务都必须提供非空 goal"}, ensure_ascii=False)
+    # 档案校验：给了 profile/role 就必须存在（早报错，主控才好立刻改正或换档案重派）
+    try:
+        from agent import profiles as _pf
+        _known = set(_pf.load_profiles().keys())
+        for t in valid:
+            pn = str(t.get("profile") or t.get("role") or "").strip()
+            if pn and pn not in _known:
+                return [], json.dumps({"error": f"未知子智能体档案「{pn}」",
+                                       "available": sorted(_known)}, ensure_ascii=False)
+    except Exception:
+        pass
     return valid, None
 
 
@@ -684,6 +707,10 @@ def slim_subagent_results(results: list) -> list:
         }
         if r.get("error"):
             item["error"] = r["error"]
+        # 结构化状态：供主控评估「要不要重派 / 换一个档案重派」
+        for _k in ("profile", "status", "missing", "confidence"):
+            if r.get(_k) not in (None, ""):
+                item[_k] = r[_k]
         out.append(item)
     return out
 
@@ -728,11 +755,25 @@ tools_registry["delegate_task"] = _make_async_tool(
         "或者需要并行搜集多方资料以节省时间时。"
         "【什么时候不要用】① 一个问题就能答完（自己调工具更快）；② 子任务之间存在前后依赖（必须先拿到前一个结果才能定下一个）——"
         "这种情况应你自己按顺序做；③ 只是想写笔记/改数据库（用 conversation_notes）；④ 不要为了「显得正式」而派子智能体。"
+        "【档案（profile）—— 子智能体有自己的技能/工具/参数/模型】"
+        "每个子任务可指定 profile：子智能体档案（backend/agents/<name>/agent.json），它自带技能目录、"
+        "工具目录、运行上下文参数（如一次能读多少字符）与模型参数，**不与主智能体共用**。"
+        "**同一个档案可以一次派多个实例**（例如同时派 3 个 reader 各读一篇），各实例独立上下文并行跑、互不干扰。"
+        "不填 profile = 通用子智能体（只读工具 + 主控模型）；可用档案名单见 /api/agents/profiles。"
         "【硬限制】子智能体不能再派子智能体（深度=1）；单次可派的子任务数与并发数、每个子智能体的轮次与三级超时，"
-        "都以用户在设置里的「子智能体」配置为准（默认 4 个任务 / 并发 2 / 轮次 4 / 超时 300s）；"
-        "子智能体只能使用只读/检索类工具，不能写文件、不能执行终端命令。"
+        "以用户在设置里的「子智能体」配置为准（默认 4 个任务 / 并发 2 / 轮次 4 / 超时 300s），"
+        "但档案里显式写了的轮次/时限/读入上限以档案为准。"
+        "子智能体只能使用只读/检索类工具（含它自己 agents/<name>/tools/ 下的私有工具），"
+        "不能写文件、不能执行终端命令。"
         "【怎么用】每个子任务的 goal 要写明「做什么+要产出什么」，context 里带上它需要的背景"
-        "（子智能体看不到我们的对话历史，不写它就只能自己瞎猜）；拿到 results 后，你**必须**把它们综合成给用户的最终答案，"
+        "（子智能体看不到我们的对话历史，不写它就只能自己瞎猜）。"
+        "【评估与重派】results 里每个子智能体带回 status(ok/partial/failed)、missing(缺口说明)、confidence —— "
+        "先评估是否满足要求；**不合格就重派**，且重派必须把上轮失败信息写进 context"
+        "（例：「上一次提取 XXX 失败了：<把 missing 原文抄进来>。已经试过 <路径>，请换一条路径完成 YYY」），"
+        "否则新实例是一张白纸，会把同样的动作原样再做一遍。允许换档案重派"
+        "（如 reader 没读到 → 派 verifier 回原文复核）。同一子任务**最多重派 2 次**，"
+        "仍失败就如实向用户说明缺口，不要无限重试。"
+        "拿到 results 后，你**必须**把它们综合成给用户的最终答案，"
         "不要只是把子智能体的原文拼贴返回。"
     ),
     args_schema=DelegateTaskParams,

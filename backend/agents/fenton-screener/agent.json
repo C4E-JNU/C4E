@@ -1,0 +1,29 @@
+{
+  "title": "芬顿文献筛选员",
+  "description": "多智能体协作芬顿数据挖掘的第一步：读一篇文献（markdown 或 PDF 文本层，单次可读 10 万字符）→ 判定体系是否符合非均相 Fenton → 判数据可得性 → 三路查重（图谱标识 / 图谱语义检索 / 组内共享库）→ 给 pass/skip/manual 与原文证据。规则全部内联在 system.md（不挂技能），私有工具 read_pdf 读 PDF 文本层，模型走本地千问。只读不写，结论由主控落盘到 datamining/00_screening.json。",
+  "skills": [],
+  "tools": [
+    "read_file",
+    "list_files",
+    "find_files",
+    "search_files",
+    "graph_query",
+    "shared_search"
+  ],
+  "model": {
+    "model": "qwen3",
+    "base_url": "http://<HUB-IP>:8080/v1"
+  },
+  "params": {
+    "max_rounds": 8,
+    "timeout": 900,
+    "nudge": 240,
+    "warn": 540,
+    "abort": 900,
+    "read_file_max_chars": 100000,
+    "tool_result_max_chars": 120000,
+    "tool_result_preview_chars": 3000,
+    "user_context_max_chars": 8000,
+    "max_images": 0
+  }
+}

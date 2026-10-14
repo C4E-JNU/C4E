@@ -54,16 +54,16 @@ var imageTools = (function () {
         p.style.cssText = 'position:fixed;z-index:90000;background:#fff;border:1px solid var(--border-color);border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,0.3);display:none;flex-direction:column;overflow:hidden;min-width:320px;min-height:360px;max-width:80vw;max-height:85vh;width:520px;height:440px;';
         p.innerHTML =
             '<div class="fe-header">' +
-                '<span id="img-ep-title" style="font-weight:600;">🖼️ 图片编辑</span>' +
+                '<span id="img-ep-title" style="font-weight:600;">🖼️ ' + t('misc.img.title') + '</span>' +
                 '<div style="display:flex;gap:4px;">' +
-                    '<button id="img-ep-mode" class="config-secondary-btn" style="padding:2px 10px;font-size:12px;">✂️ 裁剪</button>' +
-                    '<button id="img-ep-done" class="config-secondary-btn" style="padding:2px 10px;font-size:12px;background:var(--primary);color:#fff;">✅ 应用</button>' +
-                    '<button class="fe-close" id="img-ep-cancel" title="关闭">&times;</button>' +
+                    '<button id="img-ep-mode" class="config-secondary-btn" style="padding:2px 10px;font-size:12px;">' + t('misc.img.crop') + '</button>' +
+                    '<button id="img-ep-done" class="config-secondary-btn" style="padding:2px 10px;font-size:12px;background:var(--primary);color:#fff;">' + t('misc.img.apply') + '</button>' +
+                    '<button class="fe-close" id="img-ep-cancel" title="' + t('misc.img.close') + '">&times;</button>' +
                 '</div>' +
             '</div>' +
             '<div id="img-ep-size" style="padding:4px 12px;font-size:12px;color:#888;background:#fafafa;border-bottom:1px solid #f0f0f0;"></div>' +
             '<div id="img-ep-stage" style="position:relative;overflow:hidden;background:#f2f2f2;margin:8px;border-radius:6px;flex:1;min-height:120px;display:flex;align-items:center;justify-content:center;"></div>' +
-            '<div id="img-ep-hint" style="padding:6px 12px;font-size:12px;color:#888;border-top:1px solid #eee;">拖曳图片四角可放大/缩小（保持比例）</div>' +
+            '<div id="img-ep-hint" style="padding:6px 12px;font-size:12px;color:#888;border-top:1px solid #eee;">' + t('misc.img.hintZoom') + '</div>' +
         '</div>';
         document.body.appendChild(p);
         ui.panel = p;
@@ -132,13 +132,13 @@ var imageTools = (function () {
         var btn = document.getElementById('img-ep-mode');
         var hint = document.getElementById('img-ep-hint');
         if (state.mode === 'crop') {
-            btn.textContent = '✂️ 裁剪';
-            if (hint) hint.textContent = '拖动裁剪框可移动，右下角缩放手柄可调裁剪范围';
+            btn.textContent = t('misc.img.cropBtn');
+            if (hint) hint.textContent = t('misc.img.hintCrop');
             hideZoomHandles();
             showCropFrame();
         } else {
-            btn.textContent = '↔️ 缩放';
-            if (hint) hint.textContent = '拖曳图片四角手柄可放大/缩小（保持比例）';
+            btn.textContent = t('misc.img.zoomBtn');
+            if (hint) hint.textContent = t('misc.img.hintZoom2');
             hideCropFrame();
             showZoomHandles();
         }
@@ -161,7 +161,7 @@ var imageTools = (function () {
     function updateSizeInfo() {
         var el = document.getElementById('img-ep-size');
         if (el && state.img) {
-            el.textContent = '原始 ' + state.naturalW + '×' + state.naturalH + 'px';
+            el.textContent = t('misc.img.original') + ' ' + state.naturalW + '×' + state.naturalH + 'px';
         }
     }
 

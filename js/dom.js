@@ -10,7 +10,7 @@
         sendBtn.removeAttribute('disabled');
         function setSendBtnDisabled(val) { sendBtn.classList.toggle('btn-disabled', val); }
         // 发送按钮的**唯一状态真源**（用户 2026-09-27）：
-        //   · 生成中 = 「⚡立即回答」，**必须可点**。旧代码发送后把按钮置 btn-disabled，
+        //   · 生成中 = 「⚡催促回答」（2026-10-13 由「立即回答」改名），**必须可点**。旧代码发送后把按钮置 btn-disabled，
         //     而点击处理第一行就是 `if (btn-disabled) return` → 停止/立即回答永远点不到（踩过）。
         //   · 空闲 = 有文字 + 模型已配置 才可点。
         function updateSendButtonState() {
@@ -132,3 +132,61 @@
         const defaultSystemPrompt = '';
 
         // ==================== 模型配置 ====================
+
+// ── 自定义右键菜单：复制 / 全选（2026-10-14）──
+// 背景：WebView2 原生上下文菜单在该环境里不弹出（设置已开、探针管道却能弹，原因未明），
+// 改为页面层 contextmenu 事件自绘小菜单，浏览器/桌面端行为一致。
+(function () {
+    var menu = null;
+    function hide() { if (menu) { menu.remove(); menu = null; } }
+    function copySel() {
+        var txt = String(window.getSelection() || '');
+        if (!txt) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(txt).catch(function () { legacyCopy(txt); });
+        } else { legacyCopy(txt); }
+    }
+    function legacyCopy(txt) {
+        var ta = document.createElement('textarea');
+        ta.value = txt; ta.style.cssText = 'position:fixed;opacity:0;';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); } catch (e) {}
+        ta.remove();
+    }
+    document.addEventListener('contextmenu', function (ev) {
+        // 输入框/textarea 走系统自带菜单（WebView2 对编辑控件有内置菜单）；且别拦数据库面板的移动菜单
+        var t = ev.target;
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+        if (t && t.closest && t.closest('.db-move-menu')) return;
+        ev.preventDefault();
+        hide();
+        var sel = String(window.getSelection() || '');
+        menu = document.createElement('div');
+        menu.className = 'ctx-copy-menu';
+        var itemCopy = document.createElement('div');
+        itemCopy.className = 'ctx-item' + (sel ? '' : ' disabled');
+        itemCopy.textContent = t('btn.copy');
+        itemCopy.addEventListener('click', function () { copySel(); hide(); });
+        var itemAll = document.createElement('div');
+        itemAll.className = 'ctx-item';
+        itemAll.textContent = t('misc.selectAll');
+        itemAll.addEventListener('click', function () {
+            var mc = document.getElementById('messages-container');
+            if (mc) {
+                var r = document.createRange(); r.selectNodeContents(mc);
+                var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+            } else { document.execCommand('selectAll'); }
+            hide();
+        });
+        menu.appendChild(itemCopy); menu.appendChild(itemAll);
+        document.body.appendChild(menu);
+        var x = ev.clientX, y = ev.clientY;
+        var r = menu.getBoundingClientRect();
+        if (x + r.width > innerWidth - 8) x = innerWidth - r.width - 8;
+        if (y + r.height > innerHeight - 8) y = y - r.height;
+        menu.style.left = x + 'px'; menu.style.top = y + 'px';
+        setTimeout(function () {
+            document.addEventListener('click', hide, { once: true });
+        }, 0);
+    });
+})();

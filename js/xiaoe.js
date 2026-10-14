@@ -205,15 +205,15 @@
     // ---------- 随机天气惊喜（与互动挂钩） ----------
     // 天气清单（供随机惊喜与右键手动切换共用）
     var WEATHERS = [
-        { k: 'sunny', tone: 'tone-sunny', tip: '出太阳了 ☀️' },
-        { k: 'rain',  tone: 'tone-rain',  tip: '下雨了 🌧️' },
-        { k: 'wind',  tone: 'tone-wind',  tip: '刮风了 🍃' },
-        { k: 'storm', tone: 'tone-storm', tip: '雷阵雨 ⛈️' },
-        { k: 'hot',   tone: 'tone-hot',   tip: '太热了，红温 🔥' },
-        { k: 'cold',  tone: 'tone-cold',  tip: '好冷，下雪感 ❄️' },
-        { k: 'pink',  tone: 'tone-pink',  tip: '变成粉色了 💗' },
-        { k: 'green', tone: 'tone-green', tip: '变成绿色了 🌿' },
-        { k: 'purple',tone: 'tone-purple',tip: '变成紫色了 💜' }
+        { k: 'sunny', tone: 'tone-sunny', tip: t('xe.weather.sunny') },
+        { k: 'rain',  tone: 'tone-rain',  tip: t('xe.weather.rain') },
+        { k: 'wind',  tone: 'tone-wind',  tip: t('xe.weather.wind') },
+        { k: 'storm', tone: 'tone-storm', tip: t('xe.weather.storm') },
+        { k: 'hot',   tone: 'tone-hot',   tip: t('xe.weather.hot') },
+        { k: 'cold',  tone: 'tone-cold',  tip: t('xe.weather.cold') },
+        { k: 'pink',  tone: 'tone-pink',  tip: t('xe.weather.pink') },
+        { k: 'green', tone: 'tone-green', tip: t('xe.weather.green') },
+        { k: 'purple',tone: 'tone-purple',tip: t('xe.weather.purple') }
     ];
 
     // 每次互动（戳/敲打/连击/拖拽落地）都有 2.5% 概率额外触发一次随机天气，
@@ -231,7 +231,7 @@
         var w = WEATHERS[Math.floor(Math.random() * WEATHERS.length)];
         var dur = 3000 + Math.floor(Math.random() * 2000);
         _setWeather(w.k, dur);
-        if (typeof showToast === 'function') showToast('小e: ' + w.tip, 'info');
+        if (typeof showToast === 'function') showToast(t('xe.prefix') + w.tip, 'info');
         // 小e 顺便冒个反应，让"惊喜"更明显
         _pulseEmote(['✨']);
     }
@@ -245,7 +245,7 @@
         _openChat();
         if (!_bubble) {
             // 极端情况下（旧浏览器）退化为只冒一句话
-            if (typeof showToast === 'function') showToast('我是小e ✨ 问我 C4EAI 的功能用法～', 'info');
+            if (typeof showToast === 'function') showToast(t('xe.helloToast'), 'info');
         }
         setTimeout(function () { _mood = 'idle'; }, 1200);
         _maybeRandomWeather();
@@ -253,7 +253,7 @@
 
     function _onHit() {
         _anim('hit', 860);
-        _say(['别敲啦！', '疼疼疼 QAQ', '再敲我就下雨了！', '哼，不理你了'][Math.floor(Math.random() * 4)]);
+        _say([t('xe.hit1'), t('xe.hit2'), t('xe.hit3'), t('xe.hit4')][Math.floor(Math.random() * 4)]);
         _setWeather('rain', 2600);
         _mood = 'angry';
         _pulseEmote(['💢']);
@@ -267,7 +267,7 @@
         _setWeather('storm', 4200);
         _mood = 'storm';
         _pulseEmote(['💢', '⚡']);
-        _say('我红温了！！！你完蛋啦 🔥⚡');
+        _say(t('xe.rage'));
         setTimeout(function () {
             _bodyEl.classList.remove('anim-shiver');
             _setTone('tone-hot');
@@ -296,7 +296,7 @@
         _wIdx = (_wIdx + 1) % WEATHERS.length;
         var w = WEATHERS[_wIdx];
         _setWeather(w.k, 3000);
-        if (typeof showToast === 'function') showToast('小e: ' + w.tip, 'info');
+        if (typeof showToast === 'function') showToast(t('xe.prefix') + w.tip, 'info');
     }
 
     function _setTone(tone) {
@@ -470,12 +470,12 @@
         b.className = 'xiaoe-bubble';
         b.innerHTML = ''
             + '<div class="xiaoe-tip-arrow"></div>'
-            + '<div class="xiaoe-say">嗨！我是小e 👋<br>问我 C4EAI 有什么功能，或者"怎么用共享库"～</div>'
+            + '<div class="xiaoe-say">' + t('xe.welcome') + '</div>'
             + '<div class="xiaoe-input-row">'
-            + '  <input type="text" placeholder="问问小e…" maxlength="300">'
-            + '  <button>发送</button>'
+            + '  <input type="text" placeholder="' + t('xe.askPh') + '" maxlength="300">'
+            + '  <button>' + t('xe.send') + '</button>'
             + '</div>'
-            + '<div class="xiaoe-tip">小e 不保存任何记录，关掉就忘 💭</div>';
+            + '<div class="xiaoe-tip">' + t('xe.noSave') + '</div>';
         document.body.appendChild(b);
         _bubble = b;
         _placeBubble();
@@ -507,7 +507,7 @@
         inp.value = '';
         _busy = true;
         btn.disabled = true;
-        _say('让我想想… 🤔');
+        _say(t('xe.thinking'));
         _anim('float');
         _chatLog.push({ role: 'user', content: q });
 
@@ -518,7 +518,7 @@
             var br = window.state && window.state.branches && window.state.branches[window.state.currentBranchId];
             var msgs = (br && br.messages) || [];
             ctx = msgs.slice(-8).map(function (m) {
-                return (m.role === 'user' ? '用户：' : '助手：') + String(m.content || '').slice(0, 400);
+                return (m.role === 'user' ? t('xe.roleUser') : t('xe.roleAssistant')) + String(m.content || '').slice(0, 400);
             }).join('\n');
         } catch (e) {}
         try {
@@ -540,7 +540,7 @@
         }).then(function (r) { return r.json(); }).then(function (d) {
             _busy = false;
             btn.disabled = false;
-            var ans = (d && d.answer) || (d && d.error) || '（小e 走神了…）';
+            var ans = (d && d.answer) || (d && d.error) || t('xe.distracted');
             _say(ans);
             _chatLog.push({ role: 'assistant', content: ans });
             _anim(ans.indexOf('⚠️') === 0 ? 'hit' : 'poke', 700);
@@ -548,7 +548,7 @@
         }).catch(function (e) {
             _busy = false;
             if (btn) btn.disabled = false;
-            _say('⚠️ 连不上后端：' + (e.message || e));
+            _say(t('xe.backendErr') + (e.message || e));
             _anim('hit', 800);
         });
     }
@@ -587,8 +587,8 @@
         // 首次出现：弹一下打招呼
         setTimeout(function () {
             _anim('poke', 700);
-            _say('我是小e ✨ 点我聊天～');
-            setTimeout(function () { if (_bubble) _say('我是小e ✨ 点我聊天，右键换天气～'); }, 1500);
+            _say(t('xe.greet1'));
+            setTimeout(function () { if (_bubble) _say(t('xe.greet2')); }, 1500);
         }, 900);
     }
 
@@ -611,11 +611,11 @@
             if (cb) {
                 cb.checked = isEnabled();
                 var lbl = document.getElementById('xiaoe-enabled-value');
-                if (lbl) lbl.textContent = cb.checked ? '已开启' : '已关闭';
+                if (lbl) lbl.textContent = cb.checked ? t('xe.on') : t('xe.off');
                 cb.addEventListener('change', function () {
                     setEnabled(cb.checked);
                     var l = document.getElementById('xiaoe-enabled-value');
-                    if (l) l.textContent = cb.checked ? '已开启' : '已关闭';
+                    if (l) l.textContent = cb.checked ? t('xe.on') : t('xe.off');
                 });
             }
         } catch (e) { console.warn('小e 启动失败:', e); }

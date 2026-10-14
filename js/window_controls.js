@@ -42,7 +42,7 @@
         if (!b) return;
         var m = isMaximized();
         b.dataset.state = m ? 'max' : 'restore';
-        b.title = m ? '还原' : '最大化';
+        b.title = m ? t('win.restore') : t('win.maximize');
         b.innerHTML = m ? ICON_RESTORE : ICON_MAX;
     }
 

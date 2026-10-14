@@ -1,0 +1,23 @@
+{
+  "title": "Fenton 工单生成员",
+  "description": "多智能体 Fenton 挖掘步骤三：读全文识别有数据提取价值的子图，逐子图判定 needs_xy_extraction（写在各 subfigure 内，图级无此字段），打包成 01_work_order.json。分类表与工单格式全部内联在 system.md、不挂技能。只读不写，结论由主控落盘。",
+  "skills": [],
+  "tools": [
+    "read_file",
+    "list_files",
+    "find_files",
+    "search_files"
+  ],
+  "params": {
+    "max_rounds": 12,
+    "timeout": 1800,
+    "nudge": 300,
+    "warn": 900,
+    "abort": 1800,
+    "read_file_max_chars": 50000,
+    "tool_result_max_chars": 30000,
+    "tool_result_preview_chars": 2000,
+    "user_context_max_chars": 8000,
+    "max_images": 0
+  }
+}

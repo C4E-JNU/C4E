@@ -1,4 +1,110 @@
 # 更新日志（CHANGELOG）
+
+## [2026-10-03] fix(subagent): 子智能体不再把「读到的正文」回喂主控（防上下文爆炸）
+
+### 原来的毛病
+
+`run_subagent` 返回的 `steps[]` 里装着子智能体**每一步工具返回的正文**（`tool_result` 每条最多 2000 字）
+与 `thinking` 全文；`_exec_delegate` 把含 `steps` 的完整 `results` 直接 `json.dumps` 回主控 →
+**子智能体读过的几万字正文被灌进主控上下文**。实测一次派 2 篇文献即吃掉约 2 万字符
+（正好撞上 `context_engine.py` 里 `delegate_task: 20000` 的上限），10 步流水线必炸。
+
+### 改了什么
+
+**前端与主控分离**：事件槽 `set_delegate_results()` 照旧放**完整原件**，供 `subagent_end` 流给前端展示过程；
+只有「回喂给模型」的那一份走裁剪。
+
+- `backend/agent/tools.py`：新增 `slim_subagent_results()`——删掉 `steps` 正文，保留可核验元信息
+  （`ok`/`goal`/`summary`/`error`/`rounds`/`seconds`/`tools_used`/`steps_omitted`）；`_exec_delegate` 改用它。
+- `backend/agent/agent.py`：自定义引擎流式路径（第 1061 行附近）回喂同样裁剪（前端事件仍发原件）；
+  `_subagent_options` 增 `feed_steps`（默认 `False`），`set_subagent_options` 解析该键。
+- 前端新增开关：`index.html`「回喂子智能体完整步骤」（默认关）+ `js/state.js`、`js/agent_config.js`、`js/graph_rag.js`。
+
+### 效果（实测）
+
+| 场景 | 回喂主控字符数 |
+|---|---|
+| 改前 | 10 400 |
+| 改后 | 215（**2.0%**，只剩结论 + 调用过的工具名） |
+
+### 回滚
+
+设置面板勾选「回喂子智能体完整步骤」（等价 `subagent.feed_steps=True`），即恢复旧行为。
+改动需**重启后端**生效。
+
+---
+
+## [2026-10-01] tweak: 输出上限默认 8K→64K、上限对齐官方硬顶 393216、说明修正
+
+### 原来的毛病
+
+1. **默认输出上限 8192 太低**：这是抄了 DeepSeek「非思考模式」的默认值；思考模式下思维链也占这份额度 →
+   正文常被压得很短，长报告/长代码一次给不完。实测官方合法范围 1~393216（384K），不传时默认「非思考 8K / 思考 64K」。
+2. **面板说明有一处不准确**：原写「填 30 万这类大值…会被服务端直接报 400 拒收」——
+   30 万 < 393216 是**合法值**，不该这么讲（真风险是「输入+输出」合计挤爆模型窗口）。
+3. **上限写死在 1000000**，与官方硬顶不符，且 `max` 只是 HTML 校验、拦不住手输。
+
+### 改了什么
+
+- `index.html`：「最大输出 Token 数」默认值 8192 → **65536**，`max` 1000000 → **393216**；
+  说明重写（影响什么 / 官方范围 / 思考模式占额度 / 超了会怎样）；「上下文窗口」补一句「本值不与模型自动绑定，按实际调用的模型填」。
+  外链脚本版本号 state 17→18、branching 18→19、graph_rag 18→19（破缓存）。
+- `js/state.js`：`maxTokens: 8192` → **65536**。
+- `js/graph_rag.js`、`js/branching.js`：请求 payload 与面板回显的兜底值同步为 65536（3 处）。
+- 后端兜底（面板缺字段时）：`agent.py` 2 处、`app.py` 1 处、`subagent.py` 1 处 `or 8192` → **`or 32768`**。
+
+### 副作用（已确认可接受）
+
+输出上限同时是清理触发线的减数 `(窗口 − min(输出上限, 窗口/4)) × 75%`：
+64K 输出 + 262144 窗口 → 触发线 **147456**（原 8K 时为 190464），即**略早一点开始清旧工具结果**。
+清理只动工具结果，正文与技能正文永不清；想钉死时机可用「清理触发线」手动填。
+
+### 验证
+
+- `python -m py_compile` 4 个 py 通过；`node --check` 3 个 js 通过。
+- `ContextBudget` 实测：64K→147456；误填 300000→147456（保底生效，不再返回负数）；1M 窗口+64K→737280。
+- `index.html` 已无 8192 / 1000000 残留（仅 65536 与 393216）。
+
+### 明确未动
+
+`run_translate.py` 内硬编码的 `max_tokens: 8192`（独立脚本，不归设置面板管）、`keep_recent=6` 裁剪策略、工具白名单、token 估算系数。
+
+
+## [2026-09-30] feat: 上下文窗口 / 清理触发线 / 输出上限 进设置面板（前端可调 + 触发线保底）
+
+### 原来的毛病
+
+1. **模型上下文窗口写死在前端**：`js/state.js` 硬编码 `contextWindow: 262144`，设置面板里看不到也改不了；
+   若模型真实窗口更大（如 1M），等于主动只报 1/4。
+2. **清理触发线不可见且会算成负数**：触发线 = (窗口 − max_tokens) × 0.75，全靠猜；
+   「最大Token数」输入框的 `max="8000"` 只是 HTML 校验、手输拦不住 —— 填 300000 后触发线 = (262144−300000)×0.75 < 0，
+   **每轮都判「该清」**，旧工具结果被反复换成占位符。
+3. **三个数的含义界面上一个字都没写**：各影响什么、超了 token 会怎样，用户无从判断。
+
+### 改了什么
+
+- `index.html`：新增「模型上下文窗口 context window」「清理触发线 context budget」两个输入框，重写「最大输出 Token 数」说明；
+  每项都写清**影响什么 + 超了 token 会怎样**；外链脚本版本号 state/dom/api/branching/graph_rag 各 +1（破缓存）。
+- `js/state.js`：settings 增加 `contextBudget: 0`（0=自动）与 `maxTokens: 8192` 默认值。
+- `js/dom.js` `js/api.js` `js/branching.js`：元素常量、回显、输入联动与保存校验（窗口 ≥1024、输出 ≥100、budget ≥0）。
+- `js/graph_rag.js`：请求 model 增加 `context_budget`。
+- `backend/agent/context_engine.py`：`ContextBudget` 新增 `trigger_override`；触发线改为
+  `max(1024, (窗口 − min(输出上限, 窗口/4)) × 75%)` —— **保底 ≥1024、绝不返回 0 或负数**；清理提示语标明触发线来源（用户设定 / 自动）。
+- `backend/agent/agent.py`：构造 `ContextBudget` 时读取前端 `context_budget`。
+
+### 明确不做（用户定）
+
+- **本机不依据 context_window 报错或截断**：窗口值只用于算「何时开始清理」这条软线；
+  真的超出模型能力，只由模型服务端报错 —— 源头报错才算真报错。
+- 未动：`keep_recent=6` 裁剪策略、工具白名单、token 估算系数、正文压缩（后续单独做）。
+
+### 验证
+
+- `python -m py_compile agent.py context_engine.py` 通过；`ContextBudget` 六组取值实测（原会算出负数的 300K 场景 → 现 147456）。
+- `node --check` 五个 JS 通过；`index.html` id 无重复、div/script 配平、版本号已升。
+- 前端刷新即生效；**后端须重启**（`start.bat` / `python backend/app.py`）才让 `context_budget` 全链路生效。
+
+
 ## [2026-09-27] fix/feat: 图谱工具合并 · 数据库浮窗层级 · 前端四项体验修复 · 热更新包取错源码
 
 ### 原来的毛病

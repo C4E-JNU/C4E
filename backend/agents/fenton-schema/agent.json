@@ -1,0 +1,23 @@
+{
+  "title": "Fenton Schema 填充员",
+  "description": "多智能体 Fenton 挖掘步骤七：按 45+41 字段清单逐字段填充 schema 树，取值优先级 errata→verified→正文→留空，数值字段一律写成「数值+单位」字符串（12.5 mg/L），曲线只给绑定表 {ref, curve_label} 不贴点。字段清单、单位铁律与输出模板全部内联在 system.md、不挂技能。只读不写，结论由主控落盘。",
+  "skills": [],
+  "tools": [
+    "read_file",
+    "list_files",
+    "find_files",
+    "search_files"
+  ],
+  "params": {
+    "max_rounds": 15,
+    "timeout": 2400,
+    "nudge": 360,
+    "warn": 1200,
+    "abort": 2400,
+    "read_file_max_chars": 100000,
+    "tool_result_max_chars": 120000,
+    "tool_result_preview_chars": 3000,
+    "user_context_max_chars": 10000,
+    "max_images": 0
+  }
+}

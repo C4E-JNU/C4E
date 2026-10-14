@@ -8,6 +8,12 @@ from neo4j import GraphDatabase
 class Neo4jClient:
     """Neo4j 连接管理器（单例模式）"""
     _driver = None
+    # 【2026-10-05】保存凭证，供 run() 在断连时自愈重连。
+    # 背景：Neo4j Aura 空闲会回收连接，表现为「首次/第二次查询 defunct connection
+    # 或未连接，第三次就好」——不是图谱坏了，而是驱动持有死连接（实测复现）。
+    _uri = None
+    _user = None
+    _password = None
 
     @classmethod
     def get_driver(cls, uri=None, user=None, password=None):
@@ -21,6 +27,7 @@ class Neo4jClient:
             max_connection_pool_size=2,
             connection_timeout=10,  # 秒（driver 单位是秒，此前误写 10000 相当于 2.8 小时）
         )
+        cls._uri, cls._user, cls._password = uri, user, password   # 供 run() 自愈重连
         cls._driver.verify_connectivity()
         return cls._driver
 
@@ -48,10 +55,35 @@ class Neo4jClient:
 
     @classmethod
     def run(cls, cypher, params=None):
-        """执行 Cypher 查询，返回结果列表"""
+        """执行 Cypher 查询，返回结果列表。
+
+        【2026-10-05 自愈】Aura 空闲断连 → 用保存的凭证重连一次再试，
+        不再让上层（以及 LLM）看到「图谱连不上」的假象。
+        """
         if not cls._driver:
-            raise Exception("Neo4j 未连接")
+            if cls._uri:
+                cls.get_driver(cls._uri, cls._user, cls._password)
+            if not cls._driver:
+                raise Exception("Neo4j 未连接")
         params = params or {}
+        try:
+            return cls._execute(cypher, params)
+        except Exception:
+            if not cls._uri:                      # 未保存凭证（老路径）→ 原样抛
+                raise
+            try:
+                cls._driver.close()
+            except Exception:
+                pass
+            cls._driver = None
+            cls.get_driver(cls._uri, cls._user, cls._password)
+            if not cls._driver:
+                raise
+            return cls._execute(cypher, params)   # 重连后重试一次
+
+    @classmethod
+    def _execute(cls, cypher, params):
+        """实际执行（抽出来供 run 重试复用）"""
         with cls._driver.session() as session:
             result = session.run(cypher, params)
             records = []

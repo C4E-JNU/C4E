@@ -43,9 +43,9 @@
                         const dataTransfer = new DataTransfer();
                         // 无法直接通过路径创建 File 对象，提示用户
                         if (filePath) {
-                            showPassiveToast(`已识别文件: ${fileName}\n请手动选择该文件上传（浏览器安全限制，无法直接读取磁盘文件）`);
+                            showPassiveToast(t('bub.recognizedFile').replace('{name}', fileName));
                         } else {
-                            showPassiveToast(`已识别文件: ${fileName}\n请手动选择该文件上传`);
+                            showPassiveToast(t('bub.recognizedFileShort').replace('{name}', fileName));
                         }
                         // 触发上传面板展开
                         if (typeof showUploadPanel === 'function') {

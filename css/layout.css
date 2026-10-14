@@ -17,6 +17,13 @@
             transform: translateY(-100%);
         }
 
+        /* 顶栏永远拉满窗口宽（2026-10-13）：.container 全局 max-width:1400px 让宽窗口下
+           顶栏内容整体居中、两端按钮悬空（4K 半屏也中招）。只放开顶栏，正文 1400 上限保留。 */
+        header .nav-container {
+            max-width: none;
+            padding: 0 12px;
+        }
+
         .nav-container {
             display: flex;
             justify-content: flex-start;
@@ -548,7 +555,7 @@
         .notes-panel {
             display: none;
             position: fixed;
-            z-index: 9997;
+            z-index: var(--z-float);
             top: 120px;
             left: 60px;
             width: 480px;
@@ -560,8 +567,8 @@
             flex-direction: column;
             background: var(--card-bg);
             border: 1px solid var(--border-color);
-            border-radius: 14px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            border-radius: var(--radius-float);
+            box-shadow: var(--shadow-float);
             overflow: hidden;
         }
         .notes-panel.active {
@@ -625,15 +632,15 @@
         /* 右键「移动到分组」菜单（用户 2026-09-25 定：方案 B）*/
         .db-move-menu {
             position: fixed;
-            z-index: 9999;
+            z-index: var(--z-popup);
             min-width: 150px;
             max-width: 280px;
             max-height: 60vh;
             overflow-y: auto;
             background: var(--panel-bg, #fff);
             border: 1px solid var(--border, #e5e7eb);
-            border-radius: 8px;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+            border-radius: var(--radius-popup);
+            box-shadow: var(--shadow-float);
             padding: 4px;
             font-size: 0.88rem;
         }
@@ -741,7 +748,7 @@
     background: transparent; color: inherit; cursor: pointer;
     display: inline-flex; align-items: center; justify-content: center; }
 .theme-btn:hover { background: rgba(127, 127, 127, .12); }
-.theme-popover { position: absolute; top: calc(100% + 6px); left: 0; z-index: 2600; display: none;
+.theme-popover { position: absolute; top: calc(100% + 6px); left: 0; z-index: var(--z-float); display: none;
     background: var(--card-bg, #fff); border: 1px solid var(--border-color); border-radius: 12px;
     padding: 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, .12); box-sizing: border-box; }
 .theme-slot.open .theme-popover { display: block; }

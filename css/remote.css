@@ -5,7 +5,7 @@
     position: fixed;
     right: 22px;
     bottom: 22px;
-    z-index: 3400;
+    z-index: var(--z-float);
     display: inline-flex;
     align-items: center;
     gap: .45rem;
@@ -40,13 +40,13 @@
     position: fixed;
     right: 22px;
     bottom: 72px;
-    z-index: 3401;
+    z-index: var(--z-float);
     width: 268px;
     padding: 14px 16px 16px;
     border: 1px solid var(--border-color);
-    border-radius: 14px;
+    border-radius: var(--radius-float);
     background: var(--card-bg);
-    box-shadow: 0 12px 32px var(--primary-glow);
+    box-shadow: var(--shadow-float);
     text-align: left;
 }
 
@@ -118,4 +118,30 @@
     .remote-ctrl-panel {
         display: none;
     }
+}
+
+.remote-ctrl-head {
+    display: flex;
+    align-items: center;
+    margin-bottom: .4rem;
+}
+.remote-ctrl-title {
+    font-size: var(--font-size, 0.95rem);
+    font-weight: 600;
+    color: var(--dark);
+}
+.remote-ctrl-close {
+    margin-left: auto;
+    border: none;
+    background: none;
+    font-size: 1rem;
+    line-height: 1;
+    color: var(--gray);
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 5px;
+}
+.remote-ctrl-close:hover {
+    color: var(--error);
+    background: var(--hover-bg, #f0f2f5);
 }

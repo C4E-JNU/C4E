@@ -510,7 +510,9 @@ def _enable_webview_input(*_args) -> None:
                 core = inst.browser.webview.CoreWebView2
                 core.Settings.AreDefaultContextMenusEnabled = True
                 core.Settings.AreBrowserAcceleratorKeysEnabled = True
-                log("已打开 WebView2 的右键菜单与 Ctrl+C/V 快捷键")
+                log("已打开 WebView2 的右键菜单与 Ctrl+C/V 快捷键（读回: menus=%s accel=%s）" % (
+                    core.Settings.AreDefaultContextMenusEnabled,
+                    core.Settings.AreBrowserAcceleratorKeysEnabled))
             except Exception:
                 log("打开复制粘贴失败：\n" + traceback.format_exc())
 
@@ -681,8 +683,10 @@ def main() -> None:
     # ★ hidden=True：窗口先不显示 —— 边框/图标/颜色这些 chrome 是窗口出现之后才改的，
     #   先亮出来的话首帧带着那条"标题栏高度的粗条"，要等用户操作触发重绘才消失。
     #   现在流程改成：建隐藏窗 → 上 chrome → 强制重算边框 → show()。
+    # ★ text_select=True（2026-10-13）：pywebview 默认 False，会注入 body{user-select:none}
+    #   把整页文字选择全关掉（浏览器没这个 → 「浏览器能选、exe 不能选」的真正根因）。
     win = webview.create_window("C4EAI", URL, width=_w, height=_h, min_size=(420, 340),
-                                frameless=True, hidden=True, js_api=_WinAPI())
+                                frameless=True, hidden=True, text_select=True, js_api=_WinAPI())
     _win_holder["w"] = win
     # ★ 复制/粘贴：pywebview 默认把右键菜单与 Ctrl+C/V 都关了（见 _enable_webview_input 的说明）
     try:

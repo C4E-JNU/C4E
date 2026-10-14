@@ -1,0 +1,27 @@
+{
+  "title": "Fenton 单位复核员",
+  "description": "多智能体 Fenton 挖掘步骤八（2026-10-09 改版，纯 LLM 无脚本）：换主体只读复核 06_schema.json 的全部【数】字段三元组——单位白名单、换算正确性、缺失单位补充；只回修订清单（before/after/reason），raw 永不改写。主控落盘 06c_unit_review.json 并安排修订闭环回填充员。规范单位表与白名单内联在 system.md。",
+  "skills": [],
+  "tools": [
+    "read_file",
+    "list_files",
+    "find_files",
+    "search_files"
+  ],
+  "model": {
+    "model": "qwen3",
+    "base_url": "http://<HUB-IP>:8080/v1"
+  },
+  "params": {
+    "max_rounds": 20,
+    "timeout": 2400,
+    "nudge": 400,
+    "warn": 1400,
+    "abort": 2400,
+    "read_file_max_chars": 100000,
+    "tool_result_max_chars": 120000,
+    "tool_result_preview_chars": 3000,
+    "user_context_max_chars": 10000,
+    "max_images": 0
+  }
+}

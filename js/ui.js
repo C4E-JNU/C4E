@@ -3,6 +3,21 @@
             if (window.__topbarSyncTitle) window.__topbarSyncTitle();
             const currentBranch = state.currentBranchId ? state.branches[state.currentBranchId] : null;
 
+            // ★ 滚动锚点：整树重渲染会把容器 scrollTop 归零（弹回第一条消息）。
+            //   记录当前最上方可见消息及其偏移，渲染后恢复；贴底时走 scrollToBottomIfFollowing。
+            var _anchorId = '', _anchorOff = 0;
+            (function () {
+                var top = messagesContainer.scrollTop;
+                var els = messagesContainer.querySelectorAll('[data-id]');
+                for (var i = 0; i < els.length; i++) {
+                    if (els[i].offsetTop + els[i].offsetHeight > top) {
+                        _anchorId = els[i].dataset.id;
+                        _anchorOff = els[i].offsetTop - top;
+                        break;
+                    }
+                }
+            })();
+
             messagesContainer.innerHTML = '';
 
             updateReasoningRail();   // 清空后先让浮动键隐藏，渲染完再按实际情况显示
@@ -19,8 +34,7 @@
                 welcomeMsg.dataset.id = 'welcome';
                 welcomeMsg.innerHTML = `
                     <div class="message-content">
-                        您好！我是 <b>Quine</b>（C4EAI Quine Agent）—— 实验室通用智能体，文献管理与共享 wiki 方向。<br>
-                        请开始新的对话。
+                        ${t('ui.emptyWelcome')}
                     </div>
                 `;
                 messagesContainer.appendChild(welcomeMsg);
@@ -38,8 +52,8 @@
                             ${formatMessage(message.content)}
                         </div>
                         <div class="message-actions">
-                            <button class="action-btn document-btn" onclick="copyMessage('${message.id}')">复制</button>
-                            <button class="action-btn" onclick="deleteMessage('${message.id}')">删除</button>
+                            <button class="action-btn document-btn" onclick="copyMessage('${message.id}')">${t('ui.copy')}</button>
+                            <button class="action-btn" onclick="deleteMessage('${message.id}')">${t('ui.delete')}</button>
                         </div>
                     `;
 
@@ -54,8 +68,8 @@
                             ${formatMessage(message.content)}
                         </div>
                         <div class="message-actions">
-                            <button class="action-btn database-btn" onclick="copyMessage('${message.id}')">复制</button>
-                            <button class="action-btn" onclick="deleteMessage('${message.id}')">删除</button>
+                            <button class="action-btn database-btn" onclick="copyMessage('${message.id}')">${t('ui.copy')}</button>
+                            <button class="action-btn" onclick="deleteMessage('${message.id}')">${t('ui.delete')}</button>
                         </div>
                     `;
 
@@ -77,7 +91,7 @@
                     const toolEl = document.createElement('div');
                     toolEl.className = 'message tool-call';
                     toolEl.dataset.id = message.id;
-                    const toolName = message.toolName || '未知工具';
+                    const toolName = message.toolName || t('ui.unknownTool');
                     const statusIcon = message.toolSuccess ? '✅' : '❌';
                     const resultPreview = message.toolResult
                         ? message.toolResult.substring(0, 300) + (message.toolResult.length > 300 ? '...' : '')
@@ -85,11 +99,11 @@
                     toolEl.innerHTML = `
                         <div class="agent-step-header">🔧 Step ${step}/${total} &middot; ${statusIcon} ${toolName}</div>
                         <div class="tool-input-block">
-                            <div class="tool-label">输入:</div>
+                            <div class="tool-label">" + t('ui.input') + "</div>
                             <pre class="tool-code">${escHtml(message.toolInput || '')}</pre>
                         </div>
                         <div class="tool-result-block">
-                            <div class="tool-label">结果:</div>
+                            <div class="tool-label">" + t('ui.result') + "</div>
                             <pre class="tool-result">${escHtml(resultPreview)}</pre>
                         </div>
                     `;
@@ -110,7 +124,7 @@
                         const parsed = JSON.parse(raw);
                         // 如果是 JSON，格式化显示
                         if (parsed.data && Array.isArray(parsed.data)) {
-                            resultPreview = `返回 ${parsed.count || parsed.data.length} 条数据`;
+                            resultPreview = t('ui.returnedN').replace('{n}', parsed.count || parsed.data.length);
                         } else if (parsed.content) {
                             resultPreview = parsed.content.substring(0, 150) + (parsed.content.length > 150 ? '...' : '');
                         } else if (parsed.error) {
@@ -167,6 +181,11 @@
             // 批量渲染图表
             setTimeout(renderMermaidDiagrams, 100);
 
+            // 用户翻着历史时被后端覆盖刷新 → 回到原来读的位置，而不是第一条
+            if (state.userHasScrolledUp && _anchorId) {
+                var _ae = messagesContainer.querySelector('[data-id="' + _anchorId + '"]');
+                if (_ae) messagesContainer.scrollTop = _ae.offsetTop - _anchorOff;
+            }
             scrollToBottomIfFollowing();
             updateHistoryList();
             updateReasoningRail();   // 渲染完按实际有无思考块决定显示/文案
@@ -339,7 +358,7 @@
                     e.preventDefault();
                     handleMultipleFiles(files);
                     showUploadPanel();
-                    showToast(`已从剪贴板添加 ${files.length} 个文件`, 'success');
+                    showToast(t('ui.clipboardAdded').replace('{n}', files.length), 'success');
                 }
             });
 

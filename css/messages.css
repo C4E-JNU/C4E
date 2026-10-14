@@ -54,6 +54,17 @@
             .reasoning-rail-btn .rrb-label { display: none; }
         }
 
+        /* 「立即终止」键（2026-10-13）：与「收起思考」同列，贴它正下方；红色系提示破坏性操作 */
+        #agent-stop-btn {
+            top: calc(50% + 32px);
+            transform: none;
+            color: var(--error, #d03050);
+        }
+        #agent-stop-btn:hover {
+            background: rgba(208, 48, 80, 0.06);
+            border-color: rgba(208, 48, 80, 0.35);
+        }
+
         .message {
             margin-bottom: 1.5rem;
             position: relative;
@@ -338,7 +349,7 @@
         /* ==================== 统一浮动 Markdown 编辑器 ==================== */
         .floating-editor {
             position: fixed;
-            z-index: 9999;
+            z-index: var(--z-float);
             left: 200px;
             top: 120px;
             width: 660px;
@@ -349,8 +360,8 @@
             max-height: calc(100vh - 24px);
             background: var(--card-bg);
             border: 1px solid var(--border-color);
-            border-radius: 12px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            border-radius: var(--radius-float);
+            box-shadow: var(--shadow-float);
             display: none;
             flex-direction: column;
             overflow: hidden;
@@ -444,10 +455,11 @@
             background: var(--light);
         }
         .fe-combo .fe-combo-apply {
-            padding: 3px 8px;
+            padding: 2px 8px;
+            line-height: 1.1;
         }
         .fe-combo .fe-combo-arrow {
-            padding: 3px 5px;
+            padding: 2px 5px;
             border-left: 1px solid var(--border-color);
             background: var(--light);
         }
@@ -457,7 +469,7 @@
         /* 着色按钮下方的当前色条 */
         .fe-color-bar {
             display: block;
-            height: 4px;
+            height: 3px;
             width: 100%;
             background: #e02020;
             border-radius: 2px;
@@ -530,3 +542,26 @@
             cursor: pointer;
         }
 
+
+/* 自定义右键菜单（2026-10-14）：复制/全选。形态 token 与其他浮层一致 */
+.ctx-copy-menu {
+    position: fixed;
+    z-index: var(--z-popup, 3200);
+    min-width: 96px;
+    padding: 4px;
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: var(--radius-popup, 10px);
+    box-shadow: var(--shadow-float, 0 8px 28px rgba(0,0,0,.14));
+    font-size: var(--font-size-popup, 13px);
+}
+.ctx-copy-menu .ctx-item {
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--foreground, #222);
+    user-select: none;
+}
+.ctx-copy-menu .ctx-item:hover { background: var(--light, rgba(67,97,238,.08)); }
+.ctx-copy-menu .ctx-item.disabled { opacity: .4; cursor: default; }
+.ctx-copy-menu .ctx-item.disabled:hover { background: transparent; }

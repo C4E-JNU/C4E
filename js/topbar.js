@@ -14,7 +14,7 @@
         // ⚠️ state 是 state.js 里的顶层 const 绑定（不在 window 上），只能用裸 state 判断
         var st = (typeof state !== 'undefined') ? state : null;
         var b = (st && st.branches) ? st.branches[st.currentBranchId] : null;
-        el.textContent = (b && b.name) ? b.name : '对话';
+        el.textContent = (b && b.name) ? b.name : t('top.fallbackTitle');
     }
     window.__topbarSyncTitle = syncTitle;
 
@@ -25,7 +25,7 @@
         if (!el.dataset.fullPh) el.dataset.fullPh = el.getAttribute('placeholder') || '';
         var narrow = document.body.classList.contains('narrow-space');
         // 文案只跟实测窄空间（sidebar.js 裁决）走，不用设备方向事件
-        el.setAttribute('placeholder', narrow ? '搜索对话…' : el.dataset.fullPh);
+        el.setAttribute('placeholder', narrow ? t('top.searchPh') : el.dataset.fullPh);
     }
 
     /** 顶栏溢出阶梯：唯一真相 = .nav-container 的实测宽度（任何外壳同一规则）。 */

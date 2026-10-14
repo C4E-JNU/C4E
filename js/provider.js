@@ -23,9 +23,9 @@
             setSendBtnDisabled(!hasKey);
 
             if (!hasKey) {
-                messageInput.placeholder = `请在上方为 [${modelConfig[modelId]?.name || modelId}] 配置API密钥并“亮起”模型`;
+                messageInput.placeholder = t('prov.needKey').replace('{name}', modelConfig[modelId]?.name || modelId);
             } else {
-                messageInput.placeholder = '发消息...';
+                messageInput.placeholder = t('prov.msgPh');
                 // messageInput.focus();
             }
         }
@@ -57,9 +57,9 @@
             // 2. 添加自定义按钮
             const addBtn = document.createElement('div');
             addBtn.className = 'provider-item';
-            addBtn.innerHTML = `<div class="provider-icon-placeholder" style="border:1px solid var(--gray);">+</div><span>添加服务商</span>`;
+            addBtn.innerHTML = `<div class="provider-icon-placeholder" style="border:1px solid var(--gray);">+</div><span>${t('prov.addProvider')}</span>`;
             addBtn.onclick = () => {
-                document.getElementById('add-provider-modal').style.display = 'flex';
+                document.getElementById('add-provider-modal').classList.add('active');
             };
             providerList.appendChild(addBtn);
 
@@ -102,7 +102,7 @@
                 if (!provider.models || provider.models.length === 0) {
                     const hint = document.createElement('div');
                     hint.style.cssText = 'font-size:.78rem;color:var(--gray);padding:8px 4px;';
-                    hint.textContent = '在上方配置好 URL 与 API 密钥并保存后，点击「+ 添加模型」添加该服务商支持的模型，点亮即可使用。';
+                    hint.textContent = t('prov.emptyModels');
                     listContainer.appendChild(hint);
                 }
                 if (provider.models) {
@@ -120,7 +120,7 @@
                             <div class="model-select-name">${model.name}</div>
                             <div class="model-select-id">${model.id}</div>
                             <div style="font-size: 0.8rem; color: var(--gray); margin-top:4px;">${model.desc || ''}</div>
-                            ${isBuiltInModel ? '' : '<button class="model-delete-btn" title="删除此模型">×</button>'}
+                            ${isBuiltInModel ? '' : '<button class="model-delete-btn" title="' + t('prov.deleteModel') + '">×</button>'}
                         `;
 
                         // 点击卡片切换“亮起”（激活）状态
@@ -145,9 +145,9 @@
                 // 添加模型按钮
                 const addModelBtn = document.createElement('button');
                 addModelBtn.className = 'model-select-item add-model-btn';
-                addModelBtn.innerHTML = `<span>+</span> 添加模型`;
+                addModelBtn.innerHTML = `<span>+</span> ${t('prov.addModel')}`;
                 addModelBtn.onclick = () => {
-                    document.getElementById('add-custom-modal').style.display = 'flex';
+                    document.getElementById('add-custom-modal').classList.add('active');
                 };
                 listContainer.appendChild(addModelBtn);
             }
@@ -193,7 +193,7 @@
         }
 
         function deleteModel(providerId, modelId) {
-            if (!confirm(`确定要删除模型 ${modelId} 吗？`)) return;
+            if (!confirm(t('prov.delModelConfirm').replace('{id}', modelId))) return;
 
             // 1. 获取覆盖记录
             const savedOverrides = localStorage.getItem('ragagent-provider-overrides');
@@ -256,14 +256,14 @@
 
                     // 提供按钮反馈
                     const originalText = saveBtn.innerText;
-                    saveBtn.innerText = '✅ 已保存';
+                    saveBtn.innerText = t('prov.saved');
                     saveBtn.classList.add('success-state');
                     setTimeout(() => {
                         saveBtn.innerText = originalText;
                         saveBtn.classList.remove('success-state');
                     }, 2000);
 
-                    showKeyStatus('配置已保存（已同步到你的账号）', 'success');
+                    showKeyStatus(t('prov.configSaved'), 'success');
 
                     // 如果当前选择的是这个服务商下的模型，更新状态
                     if (state.currentModel && providers[currentEditingProviderId].models.find(m => m.id === state.currentModel)) {
@@ -278,7 +278,7 @@
                 const url = normalizeOpenAIEndpoint(document.getElementById('new-provider-url').value);
                 const descEl = document.getElementById('new-provider-desc');
                 const desc = descEl ? descEl.value.trim() : '';
-                if (!name) return showPassiveToast('请输入服务商名称');
+                if (!name) return showPassiveToast(t('prov.enterName'));
 
                 const id = 'custom-' + Date.now();
                 providers[id] = {
@@ -301,11 +301,11 @@
 
                 currentEditingProviderId = id;
                 renderProviderUI();
-                document.getElementById('add-provider-modal').style.display = 'none';
+                document.getElementById('add-provider-modal').classList.remove('active');
             };
 
             document.getElementById('cancel-add-provider').onclick = () => {
-                document.getElementById('add-provider-modal').style.display = 'none';
+                document.getElementById('add-provider-modal').classList.remove('active');
             };
 
             // 添加模型 确认/取消
@@ -313,13 +313,13 @@
                 const name = document.getElementById('custom-model-name').value.trim();
                 const modelId = document.getElementById('custom-model-id').value.trim();
                 const desc = document.getElementById('custom-model-desc').value.trim();
-                if (!name || !modelId) return showPassiveToast('请填写完整信息');
+                if (!name || !modelId) return showPassiveToast(t('prov.fillAll'));
 
                 const newModel = {
                     id: modelId,
                     name: name,
                     modelParam: modelId,
-                    desc: desc || '自定义模型'
+                    desc: desc || t('prov.customModel')
                 };
 
                 // 1. 如果是自定义服务商，修改 customProviders 并保存
@@ -346,7 +346,7 @@
                 }
 
                 initProviderSystem(); // 重新加载数据和UI
-                document.getElementById('add-custom-modal').style.display = 'none';
+                document.getElementById('add-custom-modal').classList.remove('active');
 
                 // 清空输入框以便下次使用
                 document.getElementById('custom-model-name').value = '';
@@ -358,12 +358,12 @@
             };
 
             document.getElementById('cancel-add-model').onclick = () => {
-                document.getElementById('add-custom-modal').style.display = 'none';
+                document.getElementById('add-custom-modal').classList.remove('active');
             };
         }
 
         function deleteProvider(providerId) {
-            if (!confirm('确定要删除这个服务商吗？')) return;
+            if (!confirm(t('prov.delProviderConfirm'))) return;
 
             delete providers[providerId];
             delete providerSettings[providerId];

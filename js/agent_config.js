@@ -2,18 +2,18 @@
 
 // 工具分组（Hermes toolset 风格：按能力域分组勾选）
 const TOOL_GROUPS = [
-    { name: '图谱 (graph)', tools: ['graph_query'] },
-    { name: '数据库/共享库 (database)', tools: ['shared_search', 'shared_upload'] },
-    { name: '联网 (web)', tools: ['web_search', 'web_extract'] },
-    { name: '技能 (skills)', tools: ['skill_list', 'skill_view', 'skill_write'] },
-    { name: '文件 (file)', tools: ['read_file', 'write_file', 'list_files', 'list_outputs', 'search_files', 'find_files', 'edit_file'] },
-    { name: '代码/终端 (code)', tools: ['run_code', 'terminal'] },
-    { name: '文献检索 (literature)', tools: ['crossref_lookup', 'arxiv_search', 'semantic_scholar_search'] },
-    { name: '代码仓库 (github)', tools: ['gh_repo_info', 'gh_list_dir', 'gh_read_file', 'gh_search_repos', 'gh_search_code', 'gh_download_tarball'] },
-    { name: '记忆/历史 (memory)', tools: ['search_history', 'conversation_notes'] },
-    { name: '任务 (task)', tools: ['todo'] },
-    { name: '子智能体 (subagent)', tools: ['delegate_task'] },
-    { name: '文档解析 (documents)', tools: ['mineru_parse'] },
+    { name: t('agentcfg.gr.graph'), tools: ['graph_query'] },
+    { name: t('agentcfg.gr.database'), tools: ['shared_search', 'shared_upload'] },
+    { name: t('agentcfg.gr.web'), tools: ['web_search', 'web_extract'] },
+    { name: t('agentcfg.gr.skills'), tools: ['skill_list', 'skill_view', 'skill_write'] },
+    { name: t('agentcfg.gr.file'), tools: ['read_file', 'write_file', 'list_files', 'list_outputs', 'search_files', 'find_files', 'edit_file'] },
+    { name: t('agentcfg.gr.code'), tools: ['run_code', 'terminal'] },
+    { name: t('agentcfg.gr.literature'), tools: ['crossref_lookup', 'arxiv_search', 'semantic_scholar_search'] },
+    { name: t('agentcfg.gr.github'), tools: ['gh_repo_info', 'gh_list_dir', 'gh_read_file', 'gh_search_repos', 'gh_search_code', 'gh_download_tarball'] },
+    { name: t('agentcfg.gr.memory'), tools: ['search_history', 'conversation_notes'] },
+    { name: t('agentcfg.gr.task'), tools: ['todo'] },
+    { name: t('agentcfg.gr.subagent'), tools: ['delegate_task'] },
+    { name: t('agentcfg.gr.documents'), tools: ['mineru_parse'] },
 ];
 
 // ── 工具：从后端 /api/tools 动态加载 + 按分组渲染勾选 ──
@@ -47,7 +47,7 @@ async function renderToolsGroups() {
         </div>`;
     }).join('');
 
-    container.innerHTML = html || '<div style="color:var(--gray)">（后端未返回工具）</div>';
+    container.innerHTML = html || '<div style="color:var(--gray)">' + t('agentcfg.noTools') + '</div>';
 
 }
 
@@ -110,10 +110,7 @@ function initPermissionModeControls() {
             const mode = radio.value;
             // 选取非安全模式时弹出静态风险警告（跟大模型无关，纯前端提醒）
             if (mode !== 'safe') {
-                const ok = confirm(
-                    '⚠️ 非安全模式授予智能体对【系统文件】及【软件自身】的读写/修改权限，\n' +
-                    '可能导致不可逆的修改甚至崩溃。确定要继续吗？'
-                );
+                const ok = confirm(t('agentcfg.permWarn'));
                 if (!ok) {
                     const cur = state.agentConfig?.permissionMode || 'safe';
                     const curRadio = document.querySelector(`input[name="permission-mode"][value="${cur}"]`);
@@ -151,6 +148,7 @@ function loadSubagentConfigToPanel() {
     const _sn = document.getElementById('subagent-nudge');
     const _sw = document.getElementById('subagent-warn');
     const _sab = document.getElementById('subagent-abort');
+    const _sfs = document.getElementById('subagent-feed-steps');
     if (_se) _se.checked = (s.subagentEnabled !== false);
     if (_sr) _sr.value = (s.subagentMaxRounds ?? 4);
     if (_sp) _sp.value = (s.subagentMaxParallel ?? 2);
@@ -158,6 +156,7 @@ function loadSubagentConfigToPanel() {
     if (_sn) _sn.value = (s.subagentNudge ?? 60);
     if (_sw) _sw.value = (s.subagentWarn ?? 150);
     if (_sab) _sab.value = (s.subagentAbort ?? 300);
+    if (_sfs) _sfs.checked = (s.subagentFeedSteps === true);
 }
 
 function saveSubagentConfigFromPanel() {
@@ -168,7 +167,9 @@ function saveSubagentConfigFromPanel() {
     const _sn = document.getElementById('subagent-nudge');
     const _sw = document.getElementById('subagent-warn');
     const _sa = document.getElementById('subagent-abort');
+    const _sfs = document.getElementById('subagent-feed-steps');
     if (_se) state.settings.subagentEnabled = !!_se.checked;
+    if (_sfs) state.settings.subagentFeedSteps = !!_sfs.checked;
     // 0 = 无限（与主智能体「工具循环步数」同一约定）。旧实现 Math.min(20, …) 把上限锁死在 20，
 // 用户 2026-09-27 报「设置不了无限」——那正是多余的钳制，去掉。
 if (_sr) state.settings.subagentMaxRounds = Math.max(0, parseInt(_sr.value) || 0);
@@ -195,11 +196,11 @@ function initAgentConfigPanel() {
             .then(r => r.json())
             .then(function (d) {
                 if (panelMineruMsg) {
-                    panelMineruMsg.textContent = d.configured ? '✅ 已保存' : '⚠️ 已清空 Token';
+                    panelMineruMsg.textContent = d.configured ? t('agentcfg.saved') : t('agentcfg.tokenCleared');
                 }
             })
             .catch(function () {
-                if (panelMineruMsg) panelMineruMsg.textContent = '保存失败';
+                if (panelMineruMsg) panelMineruMsg.textContent = t('agentcfg.saveFail');
             });
         });
     }
@@ -218,10 +219,10 @@ function loadMineruConfigToPanel() {
         .then(r => r.json())
         .then(function (d) {
             if (panelMineruToken) panelMineruToken.value = d.token || '';
-            if (panelMineruMsg) panelMineruMsg.textContent = d.configured ? '✅ 已配置' : '';
+            if (panelMineruMsg) panelMineruMsg.textContent = d.configured ? t('agentcfg.configured') : '';
         })
         .catch(function () {
-            if (panelMineruMsg) panelMineruMsg.textContent = '读取失败';
+            if (panelMineruMsg) panelMineruMsg.textContent = t('agentcfg.readFail');
         });
 }
 
@@ -335,7 +336,7 @@ function syncNeo4jConfigToPanel() {
     if (panelNeo4jUser) panelNeo4jUser.value = state.neo4j.user || '';
     updateNeo4jStatusUI(state.neo4j.connected);
     if (panelNeo4jConnect) {
-        panelNeo4jConnect.textContent = state.neo4j.connected ? '✅ 已连接' : '🔌 连接';
+        panelNeo4jConnect.textContent = state.neo4j.connected ? t('agentcfg.connected') : t('agentcfg.connect');
     }
 }
 
@@ -347,7 +348,7 @@ if (panelNeo4jConnect) {
 
         if (!pass && !neo4jConnector.isConnected()) {
             if (panelNeo4jMsg) {
-                panelNeo4jMsg.textContent = '请输入密码';
+                panelNeo4jMsg.textContent = t('agentcfg.enterPass');
                 panelNeo4jMsg.style.color = 'var(--error, #ef4444)';
             }
             return;
@@ -355,7 +356,7 @@ if (panelNeo4jConnect) {
 
         if (neo4jConnector.isConnected() && !pass) {
             if (panelNeo4jMsg) {
-                panelNeo4jMsg.textContent = '✅ 已连接';
+                panelNeo4jMsg.textContent = t('agentcfg.connected');
                 panelNeo4jMsg.style.color = 'var(--success, #10b981)';
             }
             return;
@@ -364,7 +365,7 @@ if (panelNeo4jConnect) {
         const password = pass || state.neo4j.password;
 
         panelNeo4jConnect.disabled = true;
-        panelNeo4jConnect.textContent = '⏳ 连接中...';
+        panelNeo4jConnect.textContent = t('agentcfg.connecting');
         if (panelNeo4jMsg) {
             panelNeo4jMsg.textContent = '';
         }
@@ -373,9 +374,9 @@ if (panelNeo4jConnect) {
 
         panelNeo4jConnect.disabled = false;
         if (result.success) {
-            panelNeo4jConnect.textContent = '✅ 已连接';
+            panelNeo4jConnect.textContent = t('agentcfg.connected');
             if (panelNeo4jMsg) {
-                panelNeo4jMsg.textContent = '连接成功';
+                panelNeo4jMsg.textContent = t('agentcfg.connectOk');
                 panelNeo4jMsg.style.color = 'var(--success, #10b981)';
             }
             state.neo4j.uri = uri;
@@ -387,9 +388,9 @@ if (panelNeo4jConnect) {
             if (neo4jPassword) neo4jPassword.value = password;
             updateNeo4jStatusUI(true);
         } else {
-            panelNeo4jConnect.textContent = '🔌 连接';
+            panelNeo4jConnect.textContent = t('agentcfg.connect');
             if (panelNeo4jMsg) {
-                panelNeo4jMsg.textContent = result.error || '连接失败';
+                panelNeo4jMsg.textContent = result.error || t('agentcfg.connectFail');
                 panelNeo4jMsg.style.color = 'var(--error, #ef4444)';
             }
             updateNeo4jStatusUI(false);

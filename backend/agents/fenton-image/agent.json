@@ -1,0 +1,24 @@
+{
+  "title": "Fenton 图像提取员",
+  "description": "多智能体 Fenton 挖掘步骤四：从任务包图像提取数据。mode=xy 逐点读坐标（降解曲线类），mode=basic 提取表征要点（谱图/统计图）。规则全部内联在 system.md、不挂技能；私有工具 pack_scan 一次拿全 task.json + 包内文件 + 归档面板清单。只读不写，结果由主控落盘到任务包。",
+  "skills": [],
+  "tools": [
+    "read_file",
+    "list_files",
+    "find_files",
+    "search_files"
+  ],
+  "params": {
+    "max_rounds": 6,
+    "timeout": 600,
+    "nudge": 180,
+    "warn": 420,
+    "abort": 600,
+    "read_file_max_chars": 8000,
+    "tool_result_max_chars": 20000,
+    "tool_result_preview_chars": 2000,
+    "user_context_max_chars": 8000,
+    "max_images": 3
+  },
+  "tools_dir": "tools"
+}

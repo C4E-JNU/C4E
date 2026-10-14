@@ -1,0 +1,18 @@
+{
+ "entries": {
+  "P_methylene_blue_(mb)": {
+   "canonical_name": "methylene blue (MB)",
+   "aliases": [
+    "methylene blue (MB)"
+   ],
+   "pubchem_cid": null,
+   "formula": null,
+   "mw": null,
+   "papers": {
+    "10.1016/j.cej.2013.09.051": {
+     "name_in_paper": "methylene blue (MB)"
+    }
+   }
+  }
+ }
+}

@@ -39,9 +39,6 @@ from tools.file_tools import _user_dir
 
 CHAT_KEYS = ("branches", "deleted", "branchOrder")
 
-# 单份对话文件上限（防手滑传进来一个巨型对象把磁盘写爆）
-MAX_BYTES = 16 * 1024 * 1024
-
 # 墓碑保留上限：超过就按时间从旧到新丢，避免无限增长（每条几十字节，够用很久）
 MAX_TOMBSTONES = 500
 
@@ -88,6 +85,21 @@ def _ts(b) -> str:
     return str(b.get("updatedAt") or "")
 
 
+def _tomb_ts(v) -> str:
+    """取墓碑时间戳 —— **类型防护**（2026-09-30 修）。
+
+    墓碑的值约定是 ISO-8601 字符串，但 2026-09-29「xhq1 的 30 个对话迁移到 xhq2」
+    写进来的是迁移记录对象 {id, name, deletedAt, movedTo}。直接 str(对象) 得到的串
+    首字符是 '{'，其字符序大于任何 ISO 时间戳（'{' = 0x7B > '2' = 0x32），于是
+        _ts(b) <= 墓碑       恒为 true
+    → 该 id 的新对话永远被当成「更旧的副本」丢弃（前端同理，见 js/user_chats.js 的
+      _tombTs）。对象取 deletedAt；取不到返回空串 = 不作墓碑，绝不误删。
+    """
+    if isinstance(v, dict):
+        return str(v.get("deletedAt") or "")
+    return str(v or "")
+
+
 def save_user_chats(username: str, payload: dict) -> str:
     """**按对话 id 合并**写入（不是覆盖）。返回写入结果（含落盘核对）。
 
@@ -117,7 +129,7 @@ def save_user_chats(username: str, payload: dict) -> str:
             old = branches.get(bid)
             if old is None:
                 # 本地没有：但若已被墓碑删过、且这份副本不比墓碑新 → 丢弃（别复活）
-                tomb_ts = str(deleted.get(bid) or "")
+                tomb_ts = _tomb_ts(deleted.get(bid))
                 if tomb_ts and _ts(b) <= tomb_ts:
                     continue
                 branches[bid] = b
@@ -127,14 +139,14 @@ def save_user_chats(username: str, payload: dict) -> str:
     inc_del = body.get("deleted")
     if isinstance(inc_del, dict):
         for bid, ts in inc_del.items():
-            ts = str(ts or "")
+            ts = _tomb_ts(ts)               # ★ 传进来的也可能是迁移记录对象，同样要取值
             old = branches.get(bid)
             if old is not None:
                 if _ts(old) <= ts:          # 本地那份不比墓碑新 → 真删
                     branches.pop(bid, None)
                 else:
                     continue                # 本地那份更新（可能是删后又改）→ 不删
-            if ts > str(deleted.get(bid) or ""):
+            if ts > _tomb_ts(deleted.get(bid)):
                 deleted[bid] = ts
 
     inc_order = body.get("branchOrder")
@@ -149,7 +161,7 @@ def save_user_chats(username: str, payload: dict) -> str:
     #   （2026-09-27 二次误删 7 个对话正是这个机制）。
     for bid in list(deleted.keys()):
         b = branches.get(bid)
-        if b is not None and _ts(b) > str(deleted.get(bid) or ""):
+        if b is not None and _ts(b) > _tomb_ts(deleted.get(bid)):
             deleted.pop(bid, None)
 
     # 墓碑太多时按时间丢最旧的
@@ -159,10 +171,6 @@ def save_user_chats(username: str, payload: dict) -> str:
 
     out = {"branches": branches, "deleted": deleted, "branchOrder": order}
     dumped = json.dumps(out, ensure_ascii=False)
-    if len(dumped.encode("utf-8")) > MAX_BYTES:
-        return json.dumps({"status": "error",
-                           "error": f"对话数据过大（{len(dumped.encode('utf-8')) // 1024 // 1024}MB），"
-                                    f"上限 {MAX_BYTES // 1024 // 1024}MB"}, ensure_ascii=False)
     out["_updated"] = time.strftime("%Y-%m-%d %H:%M:%S")
 
     path = _chats_file(username)

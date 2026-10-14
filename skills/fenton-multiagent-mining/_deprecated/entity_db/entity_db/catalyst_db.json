@@ -1,0 +1,24 @@
+{
+ "entries": {
+  "X_none_powder": {
+   "canonical_name": "SiO2/CoFe2O4/SiO2/CuO",
+   "aliases": [
+    "SiO2/CoFe2O4/SiO2/CuO"
+   ],
+   "composition": {
+    "metals": [],
+    "support_or_matrix": "无",
+    "morphology_class": ""
+   },
+   "papers": {
+    "10.1016/j.cej.2013.09.051": {
+     "original_name": "SiO2/CoFe2O4/SiO2/CuO",
+     "properties": {
+      "morphology": "nanostructured multilayer particles; FESEM (REMMA 102-02, Fig.1) clearly shows CuO catalytic centers on the surface",
+      "synthesis_method": "three-stage synthesis: (1) deposition of iron and cobalt hydroxides from salt solutions onto preformed SiO2 particles; (2) porous SiO2 layer formed by sol-gel method; (3) deposition of copper hydroxide, followed by annealing of the composite"
+     }
+    }
+   }
+  }
+ }
+}

@@ -6,7 +6,16 @@
     --chat-min: 420px;            /* ★ 对话区最小可呼吸宽度：低于它侧栏让位（窄空间模式，宽度驱动与外壳无关） */
     --sb-w: 260px;                /* ★ 历史侧栏宽度唯一真源：JS 只在拖动松手时改写它；收起/展开/恢复永不写 inline */
             --c4e-header-h: 56px;
-        }
+        
+/* ── 浮层 z-index 阶梯（2026-10-04 单源化）────────────────────────────
+   各浮层一律 var() 引用，禁止再写裸数字（写裸数字必互相盖）。
+   语义：float 功能浮窗 < popup 小浮层 < settings 设置 < modal 模态。
+   根因案例：.modal 2000 < settings 3300 → 设置里点「添加模型」弹窗被盖在底下。 */
+--z-float: 2800;
+--z-popup: 3200;
+--z-settings: 3400;
+--z-modal: 3600;
+}
 
         /* 认证遮罩兜底：即使某处仍写了 inset:0，也不吃顶栏的点击 */
         [data-auth-mask] {
@@ -296,3 +305,13 @@
    全屏对话区会被顶出屏幕下方 → 输入区看不见。100dvh 跟随可视视口；老浏览器退回 100vh。 */
 :root { --viewport-h: 100vh; }
 @supports (height: 100dvh) { :root { --viewport-h: 100dvh; } }
+
+:root {
+    /* ── 浮层形态 token（2026-10-04 统一；z 阶梯见上）── */
+    --radius-float: 14px;    /* 功能浮窗：笔记/预览/远程/笔记编辑 */
+    --radius-popup: 10px;    /* 小浮层：popup-panel/工作区选择器/移动到分组菜单 */
+    --radius-modal: 12px;    /* 模态卡片内容 */
+    --shadow-float: 0 8px 28px rgba(0, 0, 0, 0.14);
+    --shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.20);
+    --overlay-bg: rgba(17, 20, 32, 0.40);
+}

@@ -31,14 +31,14 @@
         var refs = s.pendingNoteRefs;
         if (!refs.length) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
         bar.style.display = 'flex';
-        bar.innerHTML = '<span style="font-size:.75rem;color:var(--gray);">引用给智能体：</span>' +
+        bar.innerHTML = '<span style="font-size:.75rem;color:var(--gray);">' + t('msg.refBar') + '</span>' +
             refs.map(function (r, i) {
                 var icon = r.scope === 'database' ? '🗄️' : '📝';
                 return '<span class="note-ref-chip" data-idx="' + i + '" title="' + _esc(r.title) + '（' + r.id + '）" ' +
                     'style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border:1px solid var(--border,#d0d5dd);' +
                     'border-radius:12px;background:var(--card-bg,#f6f8fa);font-size:.78rem;max-width:260px;">' +
                     icon + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + _esc(r.title || r.id) + '</span>' +
-                    '<button class="note-ref-del" data-idx="' + i + '" title="移除引用" ' +
+                    '<button class="note-ref-del" data-idx="' + i + '" title="' + t('msg.refRemove') + '" ' +
                     'style="background:none;border:none;cursor:pointer;color:var(--gray);font-size:.85rem;padding:0 2px;">×</button>' +
                     '</span>';
             }).join('');
@@ -61,15 +61,15 @@
     function addNoteRef(ref) {
         var s = _state();
         if (!s) return;
-        if (!ref || !ref.id) { if (typeof showToast === 'function') showToast('该条目缺少 id，无法引用', 'error'); return; }
+        if (!ref || !ref.id) { if (typeof showToast === 'function') showToast(t('msg.refNoId'), 'error'); return; }
         var scope = ref.scope || 'notes';
         if (s.pendingNoteRefs.some(function (r) { return r.id === ref.id && r.scope === scope; })) {
-            if (typeof showToast === 'function') showToast('该条目已在引用列表中', 'info');
+            if (typeof showToast === 'function') showToast(t('msg.refDup'), 'info');
             return;
         }
         s.pendingNoteRefs.push({ id: ref.id, scope: scope, title: ref.title || ref.id, content: ref.content || '' });
         renderRefsBar();
-        if (typeof showPassiveToast === 'function') showPassiveToast('已引用：' + (ref.title || ref.id) + '（发送时智能体将读取其全文）');
+        if (typeof showPassiveToast === 'function') showPassiveToast(t('msg.refAdded').replace('{title}', ref.title || ref.id));
     }
 
     // 取走并清空（发送时调用）
@@ -94,16 +94,16 @@
     function refLocalNote(noteId) {
         var notes = (typeof _currentNotes !== 'undefined' && _currentNotes) ? _currentNotes : [];
         var n = notes.find(function (x) { return x.id === noteId; });
-        if (!n) { if (typeof showToast === 'function') showToast('找不到该笔记', 'error'); return; }
-        addNoteRef({ id: n.id, scope: 'notes', title: n.title || '未命名笔记', content: n.content || '' });
+        if (!n) { if (typeof showToast === 'function') showToast(t('msg.refNoteNotFound'), 'error'); return; }
+        addNoteRef({ id: n.id, scope: 'notes', title: n.title || t('edit.noteUntitled'), content: n.content || '' });
     }
 
     // 从数据库条目缓存里找一条（js/database.js 的 _dbEntries）
     function refDbEntry(entryId) {
         var arr = (typeof _dbEntries !== 'undefined' && _dbEntries) ? _dbEntries : [];
         var n = arr.find(function (x) { return x.id === entryId; });
-        if (!n) { if (typeof showToast === 'function') showToast('找不到该数据库条目', 'error'); return; }
-        addNoteRef({ id: n.id, scope: 'database', title: n.title || '未命名条目', content: n.content || '' });
+        if (!n) { if (typeof showToast === 'function') showToast(t('msg.refEntryNotFound'), 'error'); return; }
+        addNoteRef({ id: n.id, scope: 'database', title: n.title || t('msg.refUnnamedEntry'), content: n.content || '' });
     }
 
     window.addNoteRef = addNoteRef;

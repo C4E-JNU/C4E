@@ -28,7 +28,7 @@
             var open = c.style.display === 'block';
             c.style.display = open ? 'none' : 'block';
             window.__mrUser[rid] = !open;
-            if (el) el.innerHTML = open ? '🧠 模型推理 ▸' : '🧠 模型推理 ▾';
+            if (el) el.innerHTML = open ? t('msg.mrCollapsed') : t('msg.mrExpanded');
         };
         window.__mrMarkAuto = function (msgId) {    // 生成结束时调用：本条消息的推理块默认展开
             if (!msgId) return;
@@ -103,7 +103,7 @@
                    thinkingContent = `
                        <div class="reasoning-chain" onclick="toggleReasoningChain('${message.id}')">
                            <div class="reasoning-content">
-                               <strong>🧠 思考过程：</strong><br>
+                               <strong>${t('msg.thinkingChain')}</strong><br>
                                ${formatMessage(message.thinkingChain, true)}
                            </div>
                        </div>
@@ -116,7 +116,7 @@
                    rawToolCalls = `
                        <div class="reasoning-chain" onclick="toggleReasoningChain('${message.id}-tools')">
                            <div class="reasoning-content">
-                               <strong>🛠️ 工具调用：</strong><br>
+                               <strong>${t('msg.toolCalls')}</strong><br>
                                <pre style="background:rgba(0,0,0,0.05);padding:0.5rem;border-radius:0.5rem;margin-top:0.25rem;overflow-x:auto;font-size:0.8rem;">${JSON.stringify(message.toolCalls, null, 2)}</pre>
                            </div>
                        </div>
@@ -128,7 +128,7 @@
                    rawDataSection = `
                        <div class="reasoning-chain" onclick="toggleReasoningChain('${message.id}-raw')">
                            <div class="reasoning-content">
-                               <strong>📦 原始响应数据：</strong>
+                               <strong>${t('msg.rawData')}</strong>
                                <pre style="background:rgba(0,0,0,0.05);padding:0.5rem;border-radius:0.5rem;margin-top:0.25rem;overflow-x:auto;font-size:0.7rem;">${message.rawData}</pre>
                            </div>
                        </div>
@@ -142,49 +142,58 @@
                        switch(step.type) {
                            case 'agent_thought':
                            case 'thinking':
-                               return `<div class="agent-step-header">🧠 思考</div><div class="streaming-step-content">${escHtml(step.text||'')}</div>`;
+                               return `<div class="agent-step-header">${t('msg.stepThought')}</div><div class="streaming-step-content">${escHtml(step.text||'')}</div>`;
                            case 'model_reasoning': {
                                const rid = 'mr-' + message.id + '-' + (step.step||'0');
                                const _mrOpen = mrOpenState(rid);
-                               return `<div class="agent-reasoning-box"><div class="reasoning-toggle" onclick="toggleMrBox('${rid}',this)">🧠 模型推理 ${_mrOpen?'▾':'▸'}</div><div id="${rid}" class="reasoning-content" style="display:${_mrOpen?'block':'none'}">${escHtml(step.text||'')}</div></div>`;
+                               return `<div class="agent-reasoning-box"><div class="reasoning-toggle" onclick="toggleMrBox('${rid}',this)">${t('msg.mrTitle')} ${_mrOpen?'▾':'▸'}</div><div id="${rid}" class="reasoning-content" style="display:${_mrOpen?'block':'none'}">${escHtml(step.text||'')}</div></div>`;
                            }
                            case 'tool_call': {
                                const icon = step.name==='skill_view'?'📖':'🔧';
                                const inputStr = step.input||'';
                                const obsHtml = step.error ? `<div class="obs-content err">❌ ${escHtml(step.error)}</div>` :
-                                               step.result ? `<div class="agent-step-header">👁️ 结果</div><div class="obs-content">${escHtml(step.result.substring(0,200))}</div>` : '';
-                               return `<div class="agent-step-header">${icon} 调用: ${step.name}</div><pre class="tool-code">${escHtml(inputStr)}</pre>${obsHtml}`;
+                                               step.result ? `<div class="agent-step-header">${t('msg.stepResult')}</div><div class="obs-content">${escHtml(step.result)}</div>` : '';
+                               return `<div class="agent-step-header">${icon} ${t('msg.stepCall')} ${step.name}</div><pre class="tool-code">${escHtml(inputStr)}</pre>${obsHtml}`;
                            }
                            case 'observation':
                            case 'tool_result':
-                               return `<div class="agent-step-header">👁️ 结果</div><div class="obs-content">${escHtml(step.text||step.content||'')}</div>`;
+                               return `<div class="agent-step-header">${t('msg.stepResult')}</div><div class="obs-content">${escHtml(step.text||step.content||'')}</div>`;
                            case 'subagent': {
                                // 子智能体卡片：点击打开浮窗查看它的思考/工具调用全过程
                                const sbBadge = step.running
-                                   ? '<span style="color:#e6a23c;">● 运行中…</span>'
-                                   : (step.ok ? '<span style="color:#2e9e4f;">✅ 完成' + (step.seconds ? '（' + step.seconds + 's）' : '') + '</span>'
-                                              : '<span style="color:#e02020;">⚠️ 失败</span>');
+                                   ? '<span style="color:#e6a23c;">' + t('msg.saRunning') + '</span>'
+                                   : (step.ok ? '<span style="color:#2e9e4f;">' + t('msg.saDone') + (step.seconds ? t('msg.secElapsed').replace('{s}', step.seconds) : '') + '</span>'
+                                              : '<span style="color:#e02020;">' + t('msg.saFail') + '</span>');
                                const payloadId = 'sa-data-' + message.id + '-' + (step.index || 0);
+                               // 用户 2026-10-04：卡片显示「专有子智能体」名字（档案名）
+                               const saProfileTitle = String(step.profile_title || step.profile || '').trim() || t('msg.saDefault');
+                               const saMeta = [];
+                               if (step.profile_read_max) saMeta.push(t('msg.saRead').replace('{n}', step.profile_read_max));
+                               if (step.profile_rounds) saMeta.push(t('msg.saRounds').replace('{n}', step.profile_rounds));
+                               if (step.profile_tools) saMeta.push(t('msg.saTools').replace('{n}', step.profile_tools));
+                               if (step.profile_skills) saMeta.push(t('msg.saSkills').replace('{n}', step.profile_skills));
+                               const saMetaHtml = saMeta.length
+                                   ? `<span style="font-size:.72rem;color:var(--gray);font-weight:400;">（${saMeta.join(' · ')}）</span>` : '';
                                // 注册数据，供点击时打开浮窗
                                window.__saData = window.__saData || {};
                                window.__saData[payloadId] = step;
                                return `<div class="subagent-node subagent-open" data-payload="${payloadId}" style="cursor:pointer;border:1px solid var(--border-color,#ddd);border-radius:8px;padding:.45rem .6rem;margin:.35rem 0;background:var(--light,#f6f8fa);">
-                                   <div style="font-weight:600;">🤖 子智能体 ${(step.index || 0) + 1} &nbsp;${sbBadge}</div>
-                                   <div style="margin-top:.15rem;">目标：${escHtml((step.goal || '').slice(0, 140))}</div>
-                                   ${step.summary ? `<div style="margin-top:.25rem;color:var(--gray);">结论：${escHtml(step.summary.slice(0, 200))}…</div>` : ''}
-                                   <div style="margin-top:.2rem;font-size:.75rem;color:var(--primary);">点击查看全过程 ▸</div>
+                                   <div style="font-weight:600;">🤖 ${escHtml(saProfileTitle)} <span style="color:var(--gray);font-weight:400;">${t('msg.saTask')}${(step.index || 0) + 1}</span> ${saMetaHtml} &nbsp;${sbBadge}</div>
+                                   <div style="margin-top:.15rem;">${t('msg.saGoal')}${escHtml((step.goal || '').slice(0, 140))}</div>
+                                   ${step.summary ? `<div style="margin-top:.25rem;color:var(--gray);">${t('msg.saSummary')}${escHtml(step.summary.slice(0, 200))}…</div>` : ''}
+                                   <div style="margin-top:.2rem;font-size:.75rem;color:var(--primary);">${t('msg.saView')}</div>
                                </div>`;
                            }
                            case 'timeout_notice': {
                                const tColor = step.level === 'abort' ? '#e02020' : (step.level === 'warn' ? '#e6a23c' : (step.level === 'immediate' ? 'var(--primary)' : 'var(--gray)'));
                                const tIcon = step.level === 'abort' ? '⏹️' : (step.level === 'warn' ? '⚠️' : (step.level === 'immediate' ? '⚡' : '⏳'));
-                               const tLabel = step.level === 'abort' ? '超时终止' : (step.level === 'warn' ? '超时警告' : (step.level === 'immediate' ? '立即回答' : '超时催促'));
-                               return `<div class="agent-step-header" style="color:${tColor};">${tIcon} ${tLabel}${step.elapsed ? '（' + step.elapsed + 's）' : ''}</div><div class="obs-content">${escHtml(step.text || '')}</div>`;
+                               const tLabel = step.level === 'abort' ? t('msg.toAbort') : (step.level === 'immediate' ? t('msg.toImmediate') : step.level);
+                               return `<div class="agent-step-header" style="color:${tColor};">${tIcon} ${tLabel}${step.elapsed ? t('msg.secElapsed').replace('{s}', step.elapsed) : ''}</div><div class="obs-content">${escHtml(step.text || '')}</div>`;
                            }
                            default: return '';
                        }
                    }).join('\n');
-                   reasoningStepsHtml = `<div class="agent-reasoning-block"><div class="reasoning-steps-container">${stepsHtml}</div><div class="reasoning-collapsed-hint" onclick="this.parentElement.classList.remove('collapsed');updateReasoningRail()">🧠 思考过程已收起 · 点开</div></div>`;
+                   reasoningStepsHtml = `<div class="agent-reasoning-block"><div class="reasoning-steps-container">${stepsHtml}</div><div class="reasoning-collapsed-hint" onclick="this.parentElement.classList.remove('collapsed');updateReasoningRail()">${t('msg.collapsedHint')}</div></div>`;
                }
 
                // 附件显示 (仅用户消息)
@@ -197,9 +206,9 @@
                         '<span class="attachment-icon">' + (fileUrl ? '\uD83D\uDCC4' : att.icon) + '</span>' +
                         '<div class="attachment-info">' +
                             '<div class="attachment-name">' + att.name + '</div>' +
-                            '<div class="attachment-meta">' + (fileUrl ? '\u2705 已上传 \u2022 ' : '') + (att.type || '') + ' \u2022 ' + formatFileSize(att.size) + '</div>' +
+                            '<div class="attachment-meta">' + (fileUrl ? t('msg.attUploaded') : '') + (att.type || '') + ' \u2022 ' + formatFileSize(att.size) + '</div>' +
                         '</div>' +
-                        (att.file_id ? '<button class="attachment-remove" title="删除附件" onclick="event.stopPropagation();removeAttachmentFromMessage(\'' + message.id + '\',\'' + att.file_id + '\')">\u2715</button>' : '') +
+                        (att.file_id ? '<button class="attachment-remove" title="' + t('msg.delAttachment') + '" onclick="event.stopPropagation();removeAttachmentFromMessage(\'' + message.id + '\',\'' + att.file_id + '\')">\u2715</button>' : '') +
                     '</div>';
                 }).join('');
 
@@ -212,7 +221,7 @@
                 refsHTML = '<div class="message-refs" style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0;">' +
                     message.noteRefs.map(function (r) {
                         var icon = r.scope === 'database' ? '🗄️' : '📝';
-                        var label = (r.scope === 'database' ? '数据库' : '笔记');
+                        var label = (r.scope === 'database' ? t('msg.refDb') : t('msg.refNote'));
                         return '<span title="' + (r.title || '') + '（' + label + ' ' + r.id + '）" ' +
                             'style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border:1px solid var(--border,#d0d5dd);' +
                             'border-radius:12px;background:var(--card-bg,#f6f8fa);font-size:.76rem;max-width:260px;">' +
@@ -234,17 +243,17 @@
                  </div>
                 <div class="message-actions">
                     ${message.role === 'user' ?
-                    `<button class="action-btn" onclick="copyMessage('${message.id}')">复制</button>
-                         <button class="action-btn" onclick="editMessage('${message.id}')">编辑</button>
-                         <button class="action-btn branch-btn" onclick="branchFromMessage('${message.id}')">分支生成</button>
-                         <button class="action-btn" onclick="regenerateMessage('${message.id}')">重新生成</button>
-                         <button class="action-btn" onclick="deleteMessage('${message.id}')">删除</button>` :
-                    `<button class="action-btn" onclick="copyMessage('${message.id}')">复制</button>
-                         <button class="action-btn" onclick="editMessage('${message.id}')">编辑</button>
-                         <button class="action-btn branch-btn" onclick="branchFromMessage('${message.id}')">分支生成</button>
-                         <button class="action-btn continue-btn" onclick="continueGeneration('${message.id}')">继续生成</button>
-                         <button class="action-btn" onclick="regenerateMessage('${message.id}')">重新生成</button>
-                         <button class="action-btn" onclick="deleteMessage('${message.id}')">删除</button>`
+                    `<button class="action-btn" onclick="copyMessage('${message.id}')">${t('msg.btnCopy')}</button>
+                         <button class="action-btn" onclick="editMessage('${message.id}')">${t('msg.btnEdit')}</button>
+                         <button class="action-btn branch-btn" onclick="branchFromMessage('${message.id}')">${t('msg.btnBranch')}</button>
+                         <button class="action-btn" onclick="regenerateMessage('${message.id}')">${t('msg.btnRegen')}</button>
+                         <button class="action-btn" onclick="deleteMessage('${message.id}')">${t('msg.btnDelete')}</button>` :
+                    `<button class="action-btn" onclick="copyMessage('${message.id}')">${t('msg.btnCopy')}</button>
+                         <button class="action-btn" onclick="editMessage('${message.id}')">${t('msg.btnEdit')}</button>
+                         <button class="action-btn branch-btn" onclick="branchFromMessage('${message.id}')">${t('msg.btnBranch')}</button>
+                         <button class="action-btn continue-btn" onclick="continueGeneration('${message.id}')">${t('msg.btnContinue')}</button>
+                         <button class="action-btn" onclick="regenerateMessage('${message.id}')">${t('msg.btnRegen')}</button>
+                         <button class="action-btn" onclick="deleteMessage('${message.id}')">${t('msg.btnDelete')}</button>`
                 }
                 </div>
             `;
@@ -259,10 +268,10 @@
 
             if (thinkingContent.classList.contains('show')) {
                 thinkingContent.classList.remove('show');
-                toggleBtn.textContent = '展开思考过程';
+                toggleBtn.textContent = t('msg.expandThinking');
             } else {
                 thinkingContent.classList.add('show');
-                toggleBtn.textContent = '收起思考过程';
+                toggleBtn.textContent = t('msg.collapseThinking');
             }
         }
 
@@ -500,7 +509,7 @@
                 _liveUpdate = cfg.liveUpdate || null;    // 实时渲染到真实目标
                 _liveRestore = cfg.liveRestore || null;  // 取消时恢复真实目标
                 _originalValue = cfg.value || '';
-                if (_title()) _title().textContent = cfg.title || '编辑内容';
+                if (_title()) _title().textContent = cfg.title || t('edit.defaultTitle');
                 if (_textarea()) _textarea().value = _originalValue;
                 _resetHistory(_textarea() ? _textarea().value : '');
                 _updateHistoryButtons();
@@ -558,7 +567,7 @@
                     _render();
                     return;
                 }
-                const sel = val.slice(start, end) || '文本';
+                const sel = val.slice(start, end) || t('edit.selFallback');
                 ta.value = val.slice(0, start) + before + sel + after + val.slice(end);
                 ta.focus();
                 ta.selectionStart = start + before.length;
@@ -576,10 +585,10 @@
             }
             function link() {
                 const ta = _textarea(); if (!ta) return;
-                const url = prompt('请输入链接地址：', 'https://');
+                const url = prompt(t('edit.linkPrompt'), 'https://');
                 if (url === null) return;
                 const start = ta.selectionStart, end = ta.selectionEnd;
-                const sel = ta.value.slice(start, end) || '链接文字';
+                const sel = ta.value.slice(start, end) || t('edit.linkFallback');
                 const text = '[' + sel + '](' + url + ')';
                 ta.value = ta.value.slice(0, start) + text + ta.value.slice(end);
                 ta.focus();
@@ -597,7 +606,7 @@
                 const line = ta.value.slice(Math.max(0, ta.selectionStart - 1), ta.selectionStart);
                 const prefix = (line === '' || line === '\n') ? '' : '\n';
                 const suffix = '\n';
-                const md = prefix + '![图片](' + url + ')' + suffix;
+                const md = prefix + '![' + t('edit.imageAlt') + '](' + url + ')' + suffix;
                 ta.value = ta.value.slice(0, ta.selectionStart) + md + ta.value.slice(ta.selectionEnd);
                 ta.focus();
                 ta.selectionStart = ta.selectionEnd = ta.selectionStart + md.length - suffix.length;
@@ -610,7 +619,7 @@
             function editSelectedImage() {
                 const ta = _textarea(); if (!ta) return;
                 if (typeof window.imageTools === 'undefined' || !window.imageTools.openCropFromUrl) {
-                    showKeyStatus('图片编辑器不可用', 'error');
+                    showKeyStatus(t('edit.imgEditorUnavailable'), 'error');
                     return;
                 }
                 const val = ta.value;
@@ -637,7 +646,7 @@
                     }
                 }
                 if (!img) {
-                    showKeyStatus('请选中文本中的图片代码', 'error');
+                    showKeyStatus(t('edit.selectImageCode'), 'error');
                     return;
                 }
                 const oldUrl = img.url;
@@ -708,17 +717,17 @@
             // 图片 → ![name](url)；其它（pdf/docx/xlsx…）→ {{file:file_id:文件名}} 附件卡片
             function _uploadAndInsert(file) {
                 if (typeof window.imageTools === 'undefined') return;
-                if (typeof showPassiveToast === 'function') showPassiveToast('📎 正在上传 ' + (file.name || '') + ' …');
+                if (typeof showPassiveToast === 'function') showPassiveToast(t('edit.uploading') + (file.name || '') + ' …');
                 imageTools.uploadFileRaw(file, function (url) {
-                    if (!url) { if (typeof showPassiveToast === 'function') showPassiveToast('❌ 文件上传失败'); return; }
+                    if (!url) { if (typeof showPassiveToast === 'function') showPassiveToast(t('edit.uploadFail')); return; }
                     if (file.type && file.type.indexOf('image/') === 0) {
                         _insertImageMarkdown(url);
                     } else {
                         const m = String(url).match(/\/api\/file\/([0-9a-f]+)/i);
                         const fid = m ? m[1] : '';
                         if (!fid) return;
-                        _insertAtCursor('\n{{file:' + fid + ':' + (file.name || '附件') + '}}\n');
-                        if (typeof showPassiveToast === 'function') showPassiveToast('📎 已插入附件占位符');
+                        _insertAtCursor('\n{{file:' + fid + ':' + (file.name || t('edit.fileFallback')) + '}}\n');
+                        if (typeof showPassiveToast === 'function') showPassiveToast(t('edit.fileInserted'));
                     }
                 });
             }
@@ -743,7 +752,7 @@
 
             function insertTable() {
                 const skeleton = '\n<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:6px 0;">\n' +
-                    '<tr><th>列1</th><th>列2</th><th>列3</th></tr>\n' +
+                    '<tr><th>' + t('edit.col1') + '</th><th>' + t('edit.col2') + '</th><th>' + t('edit.col3') + '</th></tr>\n' +
                     '<tr><td></td><td></td><td></td></tr>\n' +
                     '<tr><td></td><td></td><td></td></tr>\n</table>\n';
                 _insertAtCursor(skeleton);
@@ -801,7 +810,7 @@
             exist.style.top = (r.bottom + 4) + 'px';
             // 填充选项
             if (type === 'font') {
-                const opts = [['0.8em','小'],['1em','正常'],['1.2em','大'],['1.5em','特大']];
+                const opts = [['0.8em',t('edit.sizeSmall')],['1em',t('edit.sizeNormal')],['1.2em',t('edit.sizeLarge')],['1.5em',t('edit.sizeXLarge')]];
                 exist.innerHTML = opts.map(o => {
                     const cur = (window.floatingEditor && window.document.getElementById('fe-fontsize')) ? document.getElementById('fe-fontsize').value : '';
                     const sel = (cur === o[0]) ? 'style="background:#e6f0ff"' : '';
@@ -824,8 +833,8 @@
             document.getElementById('fe-dropdown').style.display = 'none';
         };
         function __feFontLabel(v) {
-            var m = { '0.8em':'小', '1em':'正常', '1.2em':'大', '1.5em':'特大' };
-            return m[v] || (v ? v.replace('em','') : '正常');
+            var m = { '0.8em':t('edit.sizeSmall'), '1em':t('edit.sizeNormal'), '1.2em':t('edit.sizeLarge'), '1.5em':t('edit.sizeXLarge') };
+            return m[v] || (v ? v.replace('em','') : t('edit.sizeNormal'));
         }
         window.__fePickColor = function (c) {
             const inp = document.getElementById('fe-color');
@@ -898,7 +907,7 @@
             }
             // 重渲染消息列表（附件移除后刷新显示）
             if (typeof renderMessages === 'function') renderMessages();
-            showKeyStatus('附件已删除', 'success');
+            showKeyStatus(t('edit.attDeleted'), 'success');
         }
         function editMessage(messageId) {
             const currentBranch = state.branches[state.currentBranchId];
@@ -906,7 +915,7 @@
             if (!message) return;
             const originalContent = message.content;
             floatingEditor.open({
-                title: message.role === 'assistant' ? '编辑 AI 回复' : '编辑消息',
+                title: message.role === 'assistant' ? t('edit.titleAi') : t('edit.titleMsg'),
                 value: message.content,
                 // 实时预览：把编辑中的 markdown 实时渲染到真实消息框（不持久化）
                 liveUpdate: function (html) { updateMessageElContent(messageId, html); },
@@ -915,18 +924,22 @@
                 onSave: function (newContent) {
                     const text = newContent.trim();
                     if (!text) {
-                        showKeyStatus('消息内容不能为空', 'error');
+                        showKeyStatus(t('edit.empty'), 'error');
                         return false;
                     }
                     const idx = currentBranch.messages.findIndex(m => m.id === messageId);
                     if (idx !== -1) {
                         currentBranch.messages[idx].content = text;
                         saveBranches();
+                        // ★ 报给后端（账本 edit 补偿）→ 后端重新投影 → 别的设备也看到这次编辑
+                        if (typeof window.pushChatOps === 'function') {
+                            window.pushChatOps(state.currentBranchId, [{ type: 'edit', target: messageId, text: text }]);
+                        }
                         updateMessageElContent(messageId, formatMessage(text));
                         if (currentBranch.messages[idx].role === 'user') {
                             const nextMessage = currentBranch.messages[idx + 1];
                             if (nextMessage && nextMessage.role === 'assistant') {
-                                showKeyStatus('消息已更新。如需更新AI回复，请点击"重新生成"', 'success');
+                                showKeyStatus(t('edit.updated'), 'success');
                             }
                         }
                     }
@@ -944,8 +957,8 @@
 
             if (message) {
                 navigator.clipboard.writeText(message.content)
-                    .then(() => showKeyStatus('消息已复制到剪贴板', 'success'))
-                    .catch(err => showKeyStatus('复制失败: ' + err.message, 'error'));
+                    .then(() => showKeyStatus(t('msg.copied'), 'success'))
+                    .catch(err => showKeyStatus(t('msg.copyFail') + err.message, 'error'));
             }
         }
 
@@ -965,7 +978,7 @@
                  }
 
                  // 截断后续对话（删除当前消息之后的所有消息）
-                 deleteMessagesAfter(messageIndex);
+                 await deleteMessagesAfter(messageIndex);
 
                  // 重新生成 — 智能体自动决策，不走旧的知识库模式
                  await reactAgentLoop(userMessage);
@@ -980,7 +993,7 @@
                      }
 
                      // 截断对话（删除当前消息及后续所有消息）
-                     deleteMessagesAfter(messageIndex - 1);
+                     await deleteMessagesAfter(messageIndex - 1);
 
                      await reactAgentLoop(userMessage);
                  }
@@ -1043,6 +1056,7 @@
             }
 
             // 截断数组
+            const _cutFirst = currentBranch.messages[startIndex + 1];
             currentBranch.messages = currentBranch.messages.slice(0, startIndex + 1);
 
             // 更新 hasContent
@@ -1050,6 +1064,14 @@
             currentBranch.hasContent = hasUserMessages;
 
             saveBranches();
+            // ★ 报给后端（账本 truncate 补偿）→ 后端重新投影 → 别的设备也看到这次删除
+            //   返回 promise：重新生成要先等它落账再发新消息，避免新旧轮次竞争投影。
+            if (_cutFirst && typeof window.pushChatOps === 'function') {
+                return window.pushChatOps(state.currentBranchId, [{
+                    type: 'truncate', from: _cutFirst.id, from_ts: _cutFirst.timestamp || ''
+                }]);
+            }
+            return Promise.resolve();
             updateTokenDisplay();
 
             // 重新渲染整个消息列表以反映删除
@@ -1084,11 +1106,11 @@
             saveBranches();
             renderMessages();
             updateHistoryList();
-            addSystemMessageWithDelete(`已从原对话创建新分支，可以在此探索不同的对话方向。`);
+            addSystemMessageWithDelete(t('msg.branched'));
         }
 
         function deleteMessage(messageId) {
-            if (!confirm('确定删除这条消息吗？')) return;
+            if (!confirm(t('msg.confirmDelMsg'))) return;
             const currentBranch = state.branches[state.currentBranchId];
             const messageIndex = currentBranch.messages.findIndex(m => m.id === messageId);
             if (messageIndex === -1) return;
@@ -1126,6 +1148,12 @@
 
             currentBranch.messages.splice(messageIndex, 1);
 
+            // ★ 后端接管的对话：单条删除必须报给后端（账本 delete 补偿），
+            //   否则下次同步后端把消息推回来（删除刷新复活）。
+            if (typeof window.isBranchManaged === 'function' && window.isBranchManaged(state.currentBranchId)) {
+                window.pushChatOps(state.currentBranchId, [{ type: 'delete', target: messageId }]);
+            }
+
             // 检查对话是否还有内容
             const hasUserMessages = currentBranch.messages.some(msg => msg.role === 'user' && !msg.isSystem);
             currentBranch.hasContent = hasUserMessages;
@@ -1153,11 +1181,11 @@
             const hasAttachments = state.documentUpload.pendingAttachments.length > 0;
             if (!message && !hasAttachments && pendingRefs.length === 0) return;
             if (!state.currentModel) {
-                addSystemMessageWithDelete('请先选择模型');
+                addSystemMessageWithDelete(t('msg.selectModel'));
                 return;
             }
             if (!state.apiKeys[state.currentModel]) {
-                addSystemMessageWithDelete('模型未激活，请先配置API密钥');
+                addSystemMessageWithDelete(t('msg.noApiKey'));
                 return;
             }
 
@@ -1171,7 +1199,7 @@
                  let inlineNotes = '';   // 保底：后端已不需要前端补正文，通常为空
 
                  if (state.documentUpload.pendingAttachments.length > 0) {
-                     showToast('正在处理附件...', 'info');
+                     showToast(t('msg.processingAtt'), 'info');
 
                      for (const att of state.documentUpload.pendingAttachments) {
                          try {
@@ -1197,7 +1225,7 @@
 
                              if (!fileId) {
                                  // 历史重发但后端文件已被删除等情况：明确提示而不是静默丢弃
-                                 showToast(`文件 ${att.name} 未上传成功（可能已被删除），本次未随消息发送`, 'error');
+                                 showToast(t('msg.attLost').replace('{name}', att.name), 'error');
                                  continue;
                              }
 
@@ -1213,7 +1241,7 @@
 
                          } catch (error) {
                              console.error(`处理文件 ${att.name} 失败:`, error);
-                             showToast(`文件 ${att.name} 处理失败`, 'error');
+                             showToast(t('msg.attProcessFail').replace('{name}', att.name), 'error');
                          }
                      }
                  }
@@ -1221,15 +1249,15 @@
                  // 组合用户消息：正文只含用户文字；文件内容由模型按 file_ids 自取
                  const refsMeta = pendingRefs.map(function (r) { return { id: r.id, scope: r.scope, title: r.title }; });
                  if (!message && attachmentsMetadata.length === 0 && refsMeta.length === 0) {
-                     showToast('没有可发送的内容（附件均未成功处理）', 'error');
+                     showToast(t('msg.nothingToSend'), 'error');
                      return;
                  }
                  let displayContent = message;
                  if (!displayContent && attachmentsMetadata.length > 0) {
-                     displayContent = '（上传了附件：' + attachmentsMetadata.map(a => a.name).join('、') + '）';
+                     displayContent = t('msg.attOnly').replace('{list}', attachmentsMetadata.map(a => a.name).join(t('msg.listSep')));
                  }
                  if (!displayContent && refsMeta.length > 0) {
-                     displayContent = '（引用条目：' + refsMeta.map(r => r.title || r.id).join('、') + '）';
+                     displayContent = t('msg.refOnly').replace('{list}', refsMeta.map(r => r.title || r.id).join(t('msg.listSep')));
                  }
                  let fullMessage = displayContent;
                  if (inlineNotes) {

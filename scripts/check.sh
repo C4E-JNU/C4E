@@ -169,6 +169,25 @@ chk js/messages.js 'inp.multiple = true' 'messages.js 笔记附件支持多选'
 # 全仓不应再有只取 files[0] 的附件上传（image_tools 单图工具例外）
 _stray="$(grep -rn 'files\[0\]\|files?\.\[0\]' js/*.js 2>/dev/null | grep -v '^js/image_tools.js' || true)"
 if [ -z "$_stray" ]; then ok '无遗漏的单选 files[0]'; else bad "仍有单选: $_stray"; fi
+# 侧栏两行卡（2026-10-04）：详情条目不得复活角色标签/时间行（已删旧样式）
+! grep -rq "history-role\|history-meta" index.html js/ css/ || { echo "FAIL: 侧栏详情残留 history-role/history-meta"; exit 1; }
+grep -q "group-meta-row" css/sidebar.css || { echo "FAIL: sidebar.css 缺两行卡 meta 行"; exit 1; }
+grep -q "wa-section" js/sidebar.js || { echo "FAIL: sidebar.js 缺工作区收起 wa-section"; exit 1; }
+# z-index 阶梯（2026-10-04）：浮层禁止再写裸数字。剥注释后扫描 ≥2600 的裸值；
+# 白名单：侧栏抽屉布局层 2900/3000、xiaoe.css 插件自管。
+_zbad=$(env -u PYTHONPATH python -c "
+import re, glob
+bad = []
+for f in glob.glob('css/*.css'):
+    if f.endswith('xiaoe.css'):
+        continue
+    t = re.sub(r'/\*[\s\S]*?\*/', '', open(f, encoding='utf-8').read())
+    for m in re.finditer(r'z-index:\s*(\d+)', t):
+        if int(m.group(1)) >= 2600 and int(m.group(1)) not in (2900, 3000):
+            bad.append(f + ':' + m.group(1))
+print(';'.join(bad))
+")
+[ -z "$_zbad" ] || { echo "FAIL: css 浮层 z-index 裸数字（应引用 variables.css 阶梯）: $_zbad"; exit 1; }
 
 echo
 

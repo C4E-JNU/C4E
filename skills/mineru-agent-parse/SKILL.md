@@ -1,6 +1,6 @@
 ---
 name: mineru-agent-parse
-description: "把 PDF 解析并归档成'全文+按图注编号的图表文件夹'，产出 00_full_cleaned.md 与 00_images_map.json 清单，供翻译/图文挖掘使用。需配 MinerU Token。"
+description: "把 PDF 解析并归档成'全文+按图注编号的图表文件夹'，产出 00_full_cleaned.md 与 00_images_map.json 清单，供图文互证与数据挖掘使用。需配 MinerU Token。"
 version: 4.2.0
 tags: [mineru, pdf, parse, archive, literature]
 ---
@@ -130,4 +130,4 @@ workspace/mineru_output/<论文名>/
 
 ## 关联
 
-归档完成后：先跑 `skills/mineru-agent-parse/scripts/verify_note.py "<归档目录>"` 校验（破图/图注子图数/正文截断/编号跳号，退出码非 0 即有错）；要翻译并图文写笔记 → 用技能 **literature-translate**；要做图文互证/实体挖掘 → 用本清单与 `00_full_cleaned.md` 作为输入。
+归档完成后：先跑 `skills/mineru-agent-parse/scripts/verify_note.py "<归档目录>"` 校验（破图/图注子图数/正文截断/编号跳号，退出码非 0 即有错）；要做图文互证 / 实体挖掘 / Fenton 数据挖掘 → 用本清单与 `00_full_cleaned.md` 作为输入（Fenton 流程见技能 `fenton-multiagent-mining`）。

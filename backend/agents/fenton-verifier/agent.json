@@ -1,0 +1,27 @@
+{
+  "title": "Fenton 图文互证核查员",
+  "description": "多智能体 Fenton 挖掘步骤五（篇内）：图账数据 vs 正文/表格逐条比对，判互证发现项 Q1/Q2（我方读图/读文错，进修正）、Q3（口径差）、Q4（一致），并把排除后的候选矛盾交回（severity 留空，定级不在此步）。5% 量程规则、Q 类定义与三份 schema 内联在 system.md、不挂技能。私有工具 read_pdf 读 PDF 文本层；单次可读 10 万字符；模型走本地千问（多模态，可直接读图核对）。只读不写，结论由主控落盘。",
+  "skills": [],
+  "tools": [
+    "read_file",
+    "list_files",
+    "find_files",
+    "search_files"
+  ],
+  "model": {
+    "model": "qwen3",
+    "base_url": "http://<HUB-IP>:8080/v1"
+  },
+  "params": {
+    "max_rounds": 20,
+    "timeout": 2400,
+    "nudge": 360,
+    "warn": 1200,
+    "abort": 2400,
+    "read_file_max_chars": 100000,
+    "tool_result_max_chars": 120000,
+    "tool_result_preview_chars": 3000,
+    "user_context_max_chars": 10000,
+    "max_images": 6
+  }
+}

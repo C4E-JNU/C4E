@@ -12,14 +12,38 @@ from datetime import datetime
 from tools import work_areas as _work_areas
 
 # 单次读取/注入返回给模型的正文字符封顶：防止长行 JSON / 超大文档一次撑爆模型上下文
+# 这是**主智能体默认值**；子智能体档案可独立覆盖（backend/agents/<name>/agent.json 的
+# params.read_file_max_chars），由 contextvar 提供 —— 用户 2026-10-04 定：档案不与主智能体共用参数。
 READ_FILE_MAX_CHARS = 20000
+
+
+def read_file_max_chars() -> int:
+    """当前生效的单次读取字符上限（子智能体档案优先，缺省 READ_FILE_MAX_CHARS）。"""
+    try:
+        from agent import profiles as _pf
+        v = _pf.current_read_file_max_chars()
+        if v:
+            return int(v)
+    except Exception:
+        pass
+    return READ_FILE_MAX_CHARS
 # 历史拼装时，单条消息与总上下文的字符预算（1 token ≈ 2~3 汉字 / 4 英文，留足安全余量）
 HISTORY_MSG_MAX_CHARS = 8000
 HISTORY_TOTAL_MAX_CHARS = 300000
 
 # ── 图像内联（image_read 通道）────────────────────────────
-# 单张图片 dataURL 上限（≈150KB 原图）。超限不内联，提示先裁 panel / 降质量。
-IMAGE_INLINE_MAX_CHARS = 200000
+# 单张图片 dataURL 上限（字符）。超限不内联，只回 image_too_large。
+# 可用环境变量 C4EAI_IMAGE_INLINE_MAX_CHARS 覆盖。
+#
+# 为什么是 1600000（2026-10-05 实测，本地 llama-server / Qwen3.6-35B-A3B，n_ctx=262144）：
+#   · 视觉 token 只与**像素数**成正比（1 token ≈ 1024 px = 32×32 patch），与 JPEG 质量、
+#     与字节数**无关**：1451×1283 分别用 q95 JPEG（442 KB）与 PNG 无损（1271 KB）内联，
+#     实测都是 1820 prompt_tokens。→ 为省 token 而降质量/缩尺寸是白丢信息，保质量不花钱。
+#   · 模型侧像素上限约 4 M px（4000×3000 被内部缩到 ≈4030 token）；本流水线最大图
+#     ≈1.9 M px，全在其内 → 原图直通即可，重编码纯属损失。
+#   · 请求体：956 KB dataURL（0.93 MB body）实测 0.9 s 通过；1271 KB PNG 亦通过。
+# 旧值 200000（≈150 KB 原图）会把 188 KB / 314 KB 的整图挡在门外（子智能体看不到图）。
+IMAGE_INLINE_MAX_CHARS = int(os.environ.get("C4EAI_IMAGE_INLINE_MAX_CHARS") or 1600000)
 # 工具产出图片的形态（由 agent 每请求设置）：
 #   "blocks" → 内容块 [{"type":"text",...},{"type":"image_url",...}]
 #              · LangChain/LangGraph 原生就能吃：list[dict] 块经
@@ -168,7 +192,8 @@ def _resolve_safe_path(relative_path: str, write: bool = False) -> str:
     raise PermissionError("__NEED_FULL__ 该写操作超出工作区域与 skills 目录，需要切换到完全访问模式才能执行")
 
 
-def _page_lines(lines, offset: int, limit: int, subject: str = "内容", extra_note: str = ""):
+def _page_lines(lines, offset: int, limit: int, subject: str = "内容", extra_note: str = "",
+                max_chars: int = 0):
     """按行取一段 + 字符封顶，并生成【与实现一致】的续读提示。返回 dict。
 
     read_file 的 path 分支与 file_id 分支共用此函数，保证 `offset` 在两个分支里
@@ -179,13 +204,14 @@ def _page_lines(lines, offset: int, limit: int, subject: str = "内容", extra_n
        不给续读位置，模型误以为整个文件读完了（静默读到半截）。
     提示语统一在这里生成，避免三处各写一份、各说各话。
     """
+    _cap = int(max_chars or 0) or read_file_max_chars()
     total = len(lines)
     start = max(0, offset - 1)
     end = min(total, start + limit)
     chunk = lines[start:end]
     content = "".join(chunk)
     total_chars = len("".join(lines))
-    truncated = len(content) > READ_FILE_MAX_CHARS
+    truncated = len(content) > _cap
     next_offset = None
     warning = ""
     if truncated:
@@ -193,18 +219,18 @@ def _page_lines(lines, offset: int, limit: int, subject: str = "内容", extra_n
         acc = 0
         consumed = 0
         for ln in chunk:
-            if acc + len(ln) > READ_FILE_MAX_CHARS:
+            if acc + len(ln) > _cap:
                 break
             acc += len(ln)
             consumed += 1
-        content = content[:READ_FILE_MAX_CHARS]
+        content = content[:_cap]
         if consumed > 0:
             next_offset = start + consumed + 1
         else:
             # 第一行本身就把额度占满：按行号续读会拿回同一段，必须明说，
             # 否则模型按 next_offset 重试就是死循环（超长单行的 JSON 正是这种形状）。
             warning = (f"第 {start + 1} 行单行就有 {len(lines[start])} 字符，超过"
-                       f"{READ_FILE_MAX_CHARS} 上限，无法按行续读。"
+                       f"{_cap} 上限，无法按行续读。"
                        f"别反复调本工具，改用 run_code/terminal 对该行做字符切片读取，"
                        f"或改读已清洗的正文文件。")
     elif end < total:
@@ -215,7 +241,7 @@ def _page_lines(lines, offset: int, limit: int, subject: str = "内容", extra_n
     note = ""
     if truncated or warning:
         note = (f"{subject}共约 {total_chars} 字符 / {total} 行，"
-                f"本段取自第 {start + 1} 行起、封顶 {READ_FILE_MAX_CHARS} 字符。")
+                f"本段取自第 {start + 1} 行起、封顶 {_cap} 字符。")
     if warning:
         note += " " + warning
     elif has_more:
@@ -229,7 +255,8 @@ def _page_lines(lines, offset: int, limit: int, subject: str = "内容", extra_n
             "total_lines": total, "note": note}
 
 
-async def read_file(path: str = "", file_id: str = "", as_base64: bool = False, offset: int = 1, limit: int = 500):
+async def read_file(path: str = "", file_id: str = "", as_base64: bool = False, offset: int = 1,
+                    limit: int = 500, max_chars: int = 0):
     """读取文件内容。统一入口：
     - 提供 file_id（上传附件 id）时，按附件读取：文档返回解析全文；图片在图像通道开启时返回【图像内容块】
       （[{"type":"text"...},{"type":"image_url"...}]），可直接看到像素；通道关闭时只回提示，不回吐 base64 文本
@@ -240,7 +267,9 @@ async def read_file(path: str = "", file_id: str = "", as_base64: bool = False, 
         as_base64: 当按 file_id 且是文档时，仍尝试返回原始字节 base64（图片默认返回 base64）
         offset: 起始行号 (1-indexed)。path 与 file_id 两个分支含义相同，均可分页续读
         limit: 最多返回多少行
-    注意：单次返回【按字符数封顶】(READ_FILE_MAX_CHARS)，防止长行 JSON/大文档一次撑爆模型上下文。
+        max_chars: 本次单次返回的字符上限（0 = 用当前生效上限）。子智能体档案可为自己
+                   设更大的上限（如 50000），主智能体默认 20000 —— 互不影响。
+    注意：单次返回【按字符数封顶】，防止长行 JSON/大文档一次撑爆模型上下文。
     被截断时返回体带 next_offset，按其值续读即可读完整个文件（附件与磁盘文件同样适用）。
     """
     # 附件模式：按 file_id 读上传的文件
@@ -264,7 +293,8 @@ async def read_file(path: str = "", file_id: str = "", as_base64: bool = False, 
         text = await get_upload_text(fid)
         if text:
             p = _page_lines(text.splitlines(keepends=True), offset, limit,
-                            subject="附件正文", extra_note="续读时 file_id 保持不变。")
+                            subject="附件正文", extra_note="续读时 file_id 保持不变。",
+                            max_chars=max_chars)
             return json.dumps({"ok": True, "source": "attachment", "file_id": fid, "mode": "text",
                                "offset": offset, "limit": limit,
                                "total_chars": p["total_chars"],
@@ -309,7 +339,8 @@ async def read_file(path: str = "", file_id: str = "", as_base64: bool = False, 
                                                 f"图片请用 read_file，扫描 PDF 可试 mineru_parse）"},
                                       ensure_ascii=False)
                 p = _page_lines(_txt.splitlines(keepends=True), offset, limit,
-                                subject="原件正文", extra_note="续读时 file_id 保持不变。")
+                                subject="原件正文", extra_note="续读时 file_id 保持不变。",
+                                max_chars=max_chars)
                 _note = "该附件未预先解析（笔记附件），以上为本次即时提取的原文；未写入索引。"
                 if p["note"]:
                     _note += " " + p["note"]
@@ -366,7 +397,7 @@ async def read_file(path: str = "", file_id: str = "", as_base64: bool = False, 
         # 字符封顶：即便命中行数少、但单行超长（如整份 JSON 一行），也不会一次吐出超大文本
         p = _page_lines(lines, offset, limit, subject="该文件", extra_note=(
             "注意：勿整读巨型 JSON（layout.json / *_model.json / *_content_list_v2.json），"
-            "正文用 00_full_cleaned.md。"))
+            "正文用 00_full_cleaned.md。"), max_chars=max_chars)
         return json.dumps({
             "path": path,
             "total_lines": p["total_lines"],

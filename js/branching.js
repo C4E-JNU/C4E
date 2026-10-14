@@ -23,7 +23,7 @@
                         if (contextBudgetInput) {
                             contextBudgetInput.value = state.settings.contextBudget ?? 0;
                             const _cbv = document.getElementById('context-budget-value');
-                            if (_cbv) _cbv.textContent = (parseInt(contextBudgetInput.value) > 0) ? contextBudgetInput.value : '0（自动）';
+                            if (_cbv) _cbv.textContent = (parseInt(contextBudgetInput.value) > 0) ? contextBudgetInput.value : t('branch.budgetAuto');
                         }
                   
                   
@@ -114,8 +114,8 @@
                     }
                     applyFontSizes();
                     const btn = document.getElementById('reset-font-' + level + '-btn');
-                    const name = { small: '小', medium: '中', large: '大' }[level] || level;
-                    if (btn) showActionFeedback('已重置为' + name + '字号', 'success', btn);
+                    const name = { small: t('branch.fontSmall'), medium: t('branch.fontMedium'), large: t('branch.fontLarge') }[level] || level;
+                    if (btn) showActionFeedback(t('branch.fontReset').replace('{name}', name), 'success', btn);
                 }
 
                 function saveSettings() {
@@ -150,7 +150,7 @@
               const rawDataToggle = document.getElementById('raw-data-toggle');
               if (rawDataToggle) {
                   state.settings.showRawData = rawDataToggle.checked;
-                  document.getElementById('raw-data-status').textContent = rawDataToggle.checked ? '开启' : '关闭';
+                  document.getElementById('raw-data-status').textContent = rawDataToggle.checked ? t('branch.on') : t('branch.off');
               }
 
               // 保存分区字号设置（滑块拖动时已实时更新 state.settings，这里再兜底读取一次）
@@ -190,7 +190,7 @@
               // 智能体配置（引擎/轮次/权限/工具/Skill/子智能体）与设置同一颗「保存」提交
               if (typeof saveAgentConfig === 'function') saveAgentConfig();
 
-              showActionFeedback('设置已保存', 'success', saveSettingsBtn);
+              showActionFeedback(t('branch.saved'), 'success', saveSettingsBtn);
 
             updateTokenDisplay();  // 保存后立即刷新 Token 显示
             closeSettings();  // 立即收起设置面板（与智能体配置一致，避免 2 秒延迟）
@@ -274,7 +274,7 @@
             const branch = state.branches[targetBranchId];
 
             if (!branch) {
-                showKeyStatus('对话不存在', 'error');
+                showKeyStatus(t('branch.notFound'), 'error');
                 return;
             }
 
@@ -309,12 +309,12 @@
             const branch = state.branches[branchId];
 
             if (!newName) {
-                showKeyStatus('请输入新的对话名称', 'error');
+                showKeyStatus(t('branch.nameRequired'), 'error');
                 return;
             }
 
             if (newName === branch.name) {
-                showKeyStatus('名称未改变', 'warning');
+                showKeyStatus(t('branch.nameUnchanged'), 'warning');
                 closeRenameBranchModal();
                 return;
             }
@@ -327,7 +327,7 @@
             closeRenameBranchModal();
 
             // 只保留一个反馈：showKeyStatus 已更新状态文字 + 弹被动轻提示，避免重复弹两个
-            showKeyStatus(`已从"${oldName}"重命名为"${newName}"`, 'success');
+            showKeyStatus(t('branch.renamed').replace('{old}', oldName).replace('{new}', newName), 'success');
         }
 
         // ==================== 删除分支功能（原生确认） ====================
@@ -336,12 +336,12 @@
             const branch = state.branches[targetBranchId];
 
             if (!branch) {
-                showKeyStatus('对话不存在', 'error');
+                showKeyStatus(t('branch.notFound'), 'error');
                 return;
             }
 
             const branchName = branch.name;
-            if (!confirm(`确定要删除对话 "${branchName}" 吗？\n此操作不可恢复，将永久删除该对话所有记录、关联的后端附件和 Token 统计。`)) return;
+            if (!confirm(t('branch.confirmDel').replace('{name}', branchName))) return;
 
             // 删除该对话所有后端文件（消息附件 + 气泡文件）
             var allFileIds = [];
@@ -406,7 +406,7 @@
 
             // 只保留一个删除反馈：showKeyStatus 已同时更新状态文字 + 弹被动轻提示，
             // 此处不再重复 addSystemMessageWithDelete（避免弹两个微提示）
-            showKeyStatus(`"${branchName}" 已成功删除`, 'success');
+            showKeyStatus(t('branch.deleted').replace('{name}', branchName), 'success');
         }
 
         // ==================== 导出对话功能 ====================
@@ -429,14 +429,14 @@
             const dataStr = JSON.stringify(chatData, null, 2);
             const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
 
-            const exportFileDefaultName = `Quine-${branch.name}-${new Date().toISOString().split('T')[0]}.json`;
+            const exportFileDefaultName = `TruthCross-${branch.name}-${new Date().toISOString().split('T')[0]}.json`;
 
             const linkElement = document.createElement('a');
             linkElement.setAttribute('href', dataUri);
             linkElement.setAttribute('download', exportFileDefaultName);
             linkElement.click();
 
-            showKeyStatus('对话已导出', 'success');
+            showKeyStatus(t('branch.exported'), 'success');
         }
 
         // ==================== 模型选择与管理 ====================

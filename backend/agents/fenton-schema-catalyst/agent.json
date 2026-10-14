@@ -1,0 +1,23 @@
+{
+  "title": "Fenton 催化剂 Schema 填充员",
+  "description": "多智能体 Fenton 挖掘步骤七（拆分版）：每篇 1 个实例，只填 metadata 块 + 全部催化剂节点的 45 字段（表征数据，无曲线无变量）。每个字段直接产 {value, unit, raw} 三元组（value 纯数字、unit 规范单位、raw 原文保真），内含填好的 few-shot 全例。取值优先级 errata→图文 5% 规则→正文→留空。只读不写，结论交回主控装配 06_schema.json。",
+  "skills": [],
+  "tools": [
+    "read_file",
+    "list_files",
+    "find_files",
+    "search_files"
+  ],
+  "params": {
+    "max_rounds": 12,
+    "timeout": 1800,
+    "nudge": 300,
+    "warn": 900,
+    "abort": 1800,
+    "read_file_max_chars": 100000,
+    "tool_result_max_chars": 120000,
+    "tool_result_preview_chars": 3000,
+    "user_context_max_chars": 10000,
+    "max_images": 0
+  }
+}

@@ -5,75 +5,75 @@
             'deepseek': {
                 id: 'deepseek', name: 'DeepSeek',
                 defaultEndpoint: 'https://api.deepseek.com/v1',
-                desc: '深度求索官方 API｜通用对话与代码见长，性价比高',
+                desc: t('prov.desc.deepseek'),
                 models: []
             },
             'openai': {
                 id: 'openai', name: 'OpenAI',
                 defaultEndpoint: 'https://api.openai.com/v1',
-                desc: 'OpenAI 官方 API｜GPT 系列，多模态与生态最全',
+                desc: t('prov.desc.openai'),
                 models: []
             },
             'alibaba': {
                 id: 'alibaba', name: '阿里云百炼',
                 defaultEndpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
                 apiKeyHeader: 'Authorization', apiKeyPrefix: 'Bearer ',
-                desc: '通义千问 Qwen 官方 API｜中文与长文本能力强，额度友好',
+                desc: t('prov.desc.alibaba'),
                 models: []
             },
             'glm': {
                 id: 'glm', name: '智谱 GLM',
                 defaultEndpoint: 'https://open.bigmodel.cn/api/paas/v4',
                 apiKeyHeader: 'Authorization', apiKeyPrefix: 'Bearer ',
-                desc: '智谱 AI 官方 API｜GLM 系列，Agent 与代码能力突出',
+                desc: t('prov.desc.glm'),
                 models: []
             },
             'google': {
                 id: 'google', name: 'Google',
                 defaultEndpoint: 'https://generativelanguage.googleapis.com/v1beta/openai',
-                desc: 'Gemini 官方 API（OpenAI 兼容端点）｜多模态旗舰',
+                desc: t('prov.desc.google'),
                 models: []
             },
             'xai': {
                 id: 'xai', name: 'xAI',
                 defaultEndpoint: 'https://api.x.ai/v1',
-                desc: 'Grok 系列官方 API｜实时联网与强推理',
+                desc: t('prov.desc.xai'),
                 models: []
             },
             'anthropic': {
                 id: 'anthropic', name: 'Anthropic',
                 defaultEndpoint: 'https://api.anthropic.com/v1',
-                desc: 'Claude 系列官方 API｜长文本与复杂推理',
+                desc: t('prov.desc.anthropic'),
                 models: []
             },
             'qwen-local': {
                 id: 'qwen-local', name: '本地千问', hidden: true, type: 'openai',
                 defaultEndpoint: 'http://<HUB-IP>:8080/v1',
                 apiKeyHeader: 'Authorization', apiKeyPrefix: 'Bearer ',
-                desc: '实验室服务器本地推理｜免费不限量，内置无需配置',
+                desc: t('prov.desc.qwenLocal'),
                 models: [
-                    { id: 'qwen3-local', name: 'Qwen3.6 35B（本地）', desc: '实验室服务器本地推理，免费不限量，已内置无需配置', modelParam: 'Qwen3.6-35B-A3B-Q4_K_M.gguf', enableReasoning: false }
+                    { id: 'qwen3-local', name: 'Qwen3.6 35B（本地）', desc: t('prov.desc.qwenLocalModel'), modelParam: 'Qwen3.6-35B-A3B-Q4_K_M.gguf', enableReasoning: false }
                 ]
             },
             'kimi': {
                 id: 'kimi', name: 'Kimi（月之暗面）',
                 defaultEndpoint: 'https://api.moonshot.cn/v1',
                 apiKeyHeader: 'Authorization', apiKeyPrefix: 'Bearer ',
-                desc: 'Moonshot Kimi 官方 API（国内站）｜长上下文与 Agent 能力强；国际站为 https://api.moonshot.ai/v1，Kimi 编程套餐 key 用 https://api.kimi.com/coding',
+                desc: t('prov.desc.kimi'),
                 models: []
             },
             'hermes': {
                 id: 'hermes', name: 'Hermes', type: 'openai',
                 defaultEndpoint: '',
                 apiKeyHeader: 'Authorization', apiKeyPrefix: 'Bearer ',
-                desc: 'Agent 网关：可通过 agent gateway 连接任意主流 agent 到 C4EAI 进行回答，数据保存在您的浏览器前端，我们不获取您的任何隐私信息。注意：使用外部 agent 连接时，C4EAI 自身的工具与技能不可用，仅可纯问答。',
+                desc: t('prov.desc.gateway'),
                 models: []
             },
             'codex': {
                 id: 'codex', name: 'Codex', type: 'openai',
                 defaultEndpoint: '',
                 apiKeyHeader: 'Authorization', apiKeyPrefix: 'Bearer ',
-                desc: 'Agent 网关：可通过 agent gateway 连接任意主流 agent 到 C4EAI 进行回答，数据保存在您的浏览器前端，我们不获取您的任何隐私信息。注意：使用外部 agent 连接时，C4EAI 自身的工具与技能不可用，仅可纯问答。',
+                desc: t('prov.desc.gateway'),
                 models: []
             }
             };

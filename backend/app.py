@@ -600,6 +600,15 @@ async def api_tools():
         desc = getattr(t, "description", "") or ""
         tools.append({"name": name, "description": desc})
     return {"tools": tools}
+@app.get("/api/agents/profiles")
+async def api_agent_profiles():
+    """返回全部子智能体档案（各自的技能目录、工具目录、参数、模型），
+    供前端「子智能体管理」与主控派发时选档案。改动 agent.json 后立即生效，无需重启。"""
+    try:
+        from agent import profiles as _pf
+        return {"profiles": _pf.describe_profiles(), "root": _pf.agents_root()}
+    except Exception as e:
+        return {"profiles": [], "error": str(e)}
 @app.get("/api/skills")
 async def api_skills():
     """返回全部可用技能（供前端动态渲染技能勾选）。"""
@@ -1709,13 +1718,22 @@ async def agent_run(req: AgentRunRequest, request: Request):
 
 @app.post("/api/agent/nudge")
 async def api_agent_nudge(request: Request):
-    """用户在生成中点「⚡立即回答」：让正在跑的那一轮注入「立即作答」催促（与超时警告同一条通道）。
+    """用户在生成中点「催促回答」（原「立即回答」，2026-10-13 随按钮改名）：注入催促提示。
 
-    为什么不做成硬中断（用户 2026-09-27 定）：硬中断会把已经探索出来的东西全丢；
-    注入催促能让模型**用已有信息立刻收尾**，答案还在。
+    为什么默认不硬中断（用户 2026-09-27 定）：硬中断会把已经探索出来的东西全丢；
+    注入催促能让模型**用已有信息立刻收尾**，答案还在。要硬中断用 /api/agent/stop。
     """
     from agent.agent import request_immediate_answer
     request_immediate_answer()
+    return {"status": "ok"}
+
+
+@app.post("/api/agent/stop")
+async def api_agent_stop(request: Request):
+    """「立即终止」：强制中断正在跑的本轮生成（用户 2026-10-13 定）。
+    账本逐轮落盘 + 断点续跑：已完成的轮次都在，用户下一条消息可以让它接着跑。"""
+    from agent.agent import cancel_active_generation
+    cancel_active_generation()
     return {"status": "ok"}
 
 

@@ -41,13 +41,13 @@ def get_current_model_config() -> dict:
     return dict(_current_model_config)
 
 
-# ── 超时三级（催促 / 警告 / 终止）默认值，可被请求参数覆盖 ──
-DEFAULT_TIMEOUTS = {"nudge": 0, "warn": 0, "abort": 86400}   # 用户 2026-09-28：只剩「一天硬停」
+# ── 超时保护默认值：只剩一级强制中断（2026-10-13 删催促/警告两级——断点续跑让中断后可
+#     继续回答，多级递进失去意义；用户 2026-09-28 定硬停时限 = 一天）──
+DEFAULT_TIMEOUTS = {"abort": 86400}
 
 # 子智能体选项（前端设置传入）：轮次 / 并发上限 / 最大子任务数 / 三级超时
 _subagent_options = {"max_rounds": 0, "timeout": 86400, "enabled": True,
-                     "max_parallel": 8, "max_tasks": 8,
-                     "nudge": 0, "warn": 0, "abort": 86400,
+                     "max_parallel": 8, "max_tasks": 8, "abort": 86400,
                      "feed_steps": False}   # feed_steps=False（默认）：只把子智能体摘要回喂主控，防上下文爆炸
 
 
@@ -55,17 +55,14 @@ def set_subagent_options(opts: dict = None):
     """设置子智能体选项。opts 里出现的键覆盖默认（含 feed_steps，缺省保持 False）。"""
     global _subagent_options
     o = dict(_subagent_options)
-    for k in ("max_rounds", "timeout", "enabled", "max_parallel", "max_tasks",
-              "nudge", "warn", "abort"):
+    for k in ("max_rounds", "timeout", "enabled", "max_parallel", "max_tasks", "abort"):
         if opts and opts.get(k) is not None:
             o[k] = opts[k]
     try:
         o["max_rounds"] = max(0, int(o.get("max_rounds", 0)))   # 0 = 无限（用户 2026-09-27：不要锁死 20）
         o["max_parallel"] = max(1, min(8, int(o.get("max_parallel", 8))))     # 并发上限（自由调节 1-8）
         o["max_tasks"] = max(1, min(8, int(o.get("max_tasks", 8))))           # 单次最多子任务数
-        o["nudge"] = max(0, min(604800, int(o.get("nudge", 0))))     # 0=关闭该级；上限 7 天
-        o["warn"] = max(0, min(604800, int(o.get("warn", 0))))
-        o["abort"] = max(0, min(604800, int(o.get("abort", 86400))))  # 用户 2026-09-28：超时保护 = 一天
+        o["abort"] = max(0, min(604800, int(o.get("abort", 86400))))  # 唯一一级：强制中断（0=关闭；上限 7 天）
         o["timeout"] = o["abort"]                                             # 旧字段与新终止级保持一致
         o["enabled"] = bool(o.get("enabled", True))
         # feed_steps：False（默认）时子智能体只回喂摘要，不回喂其读取到的正文（防上下文爆炸）
@@ -73,16 +70,45 @@ def set_subagent_options(opts: dict = None):
             o["feed_steps"] = bool(opts.get("feed_steps"))
     except Exception:
         pass
-    # 递进保护：三级单调递增
-    if o["nudge"] and o["warn"] and o["warn"] < o["nudge"]:
-        o["warn"] = o["nudge"]
-    if o["abort"] and o["warn"] and o["abort"] < o["warn"]:
-        o["abort"] = o["warn"]
     _subagent_options = o
 
 
 def get_subagent_options() -> dict:
     return dict(_subagent_options)
+
+
+def _profile_info(name: str) -> dict:
+    """子智能体档案的显示信息（前端卡片/浮窗用）。
+
+    用户 2026-10-04：界面上要能看到**专有子智能体的名字**，不能只写"子智能体 1"。
+    返回 {profile, profile_title, profile_read_max, profile_rounds, profile_tools}，
+    取不到档案时降级为通用标签，绝不抛错（绝不因显示信息影响派发）。
+    """
+    n = (name or "").strip()
+    if not n or n.startswith("__"):
+        return {"profile": "", "profile_title": "通用子智能体"}
+    out = {"profile": n, "profile_title": n}
+    try:
+        from agent import profiles as _pf
+        p = _pf.get_profile(n)
+        if p:
+            out["profile_title"] = (p.get("title") or "").strip() or n
+            pp = p.get("params") or {}
+            try:
+                out["profile_read_max"] = int(pp.get("read_file_max_chars") or 0)
+            except Exception:
+                pass
+            if pp.get("max_rounds"):
+                out["profile_rounds"] = pp.get("max_rounds")
+            tl = p.get("tools")
+            if isinstance(tl, list) and tl:
+                out["profile_tools"] = len(tl)
+            sk = p.get("skills")
+            if isinstance(sk, list) and sk:
+                out["profile_skills"] = len(sk)
+    except Exception:
+        pass
+    return out
 
 
 # ── 子智能体事件槽（引擎无关）──────────────────────
@@ -129,24 +155,15 @@ def clear_delegate_pending():
 
 
 def _resolve_timeouts(t: dict = None) -> dict:
-    """解析三级超时（秒）：nudge=催促、warn=警告、abort=终止。0/缺省 = 关闭该级。"""
+    """超时保护（2026-10-13 起只剩一级）：abort = 强制中断秒数，0/缺省 = 关闭。
+    原催促/警告两级已删——断点续跑使中断后可继续回答，多级递进失去意义。"""
     out = dict(DEFAULT_TIMEOUTS)
-    if isinstance(t, dict):
-        for k in ("nudge", "warn", "abort"):
-            if t.get(k) is not None:
-                try:
-                    out[k] = max(0, int(t[k]))
-                except Exception:
-                    pass
-    # 递进保护：三级必须单调递增，避免误配导致顺序错乱
-    if out["nudge"] and out["warn"] and out["warn"] < out["nudge"]:
-        out["warn"] = out["nudge"]
-    if out["abort"] and out["warn"] and out["abort"] < out["warn"]:
-        out["abort"] = out["warn"]
-    if out["abort"] and out["nudge"] and out["abort"] < out["nudge"]:
-        out["abort"] = out["nudge"]
+    if isinstance(t, dict) and t.get("abort") is not None:
+        try:
+            out["abort"] = max(0, int(t["abort"]))
+        except Exception:
+            pass
     return out
-
 
 def set_current_user(user: str = ""):
     """记录当前登录身份：agent 内部用（历史/路径），同时**转发**给 file_tools ——
@@ -175,8 +192,8 @@ def cancel_active_generation():
 def generation_cancelled() -> bool:
     return _GENERATION_CANCELLED
 
-# ── 全局「立即回答」令牌（用户 2026-09-27 定：生成中点⚡立即回答 = 催促它马上出答案，不是硬中断）──
-#    与超时保护的「警告级」走同一条注入通道：把催促提示塞进 messages，下个检查点模型就收尾。
+# ── 全局「催促回答」令牌（用户 2026-09-27 定、2026-10-13 随按钮改名：点⚡ = 催促马上出答案，不是硬中断）──
+#    独立注入通道：把催促提示塞进 messages，下个检查点模型就收尾。硬中断走「立即终止」按钮（/api/agent/stop）。
 _IMMEDIATE_ANSWER_REQUESTED = False
 _IMMEDIATE_ANSWER_TEXT = ("[系统·立即回答] 用户要求你现在就作答：**立即**基于已获得的信息给出最终答案，"
                           "不要再调用任何工具、不要继续探索；答案可以不完整，但必须马上输出。")
@@ -306,7 +323,7 @@ def _runtime_env_block(enabled_tools=None) -> str:
     return "\n".join(out)
 
 
-# 语言铁律：拼在系统提示【最末】（recency 位，服从度最高）——确保 reasoning/thinking 也走中文。
+# 语言规则：拼在系统提示【最末】（recency 位，服从度最高）——思考与回答尽量跟随用户消息的语言。
 # 常量字符串，字节稳定，不破坏隐式前缀缓存。
 _WORK_AREA_NOTE_TMPL = (
     "## 工作区域（本对话指定）\n"
@@ -329,9 +346,9 @@ def _work_area_note(username: str) -> str:
 
 
 _LANG_DIRECTIVE = (
-    "## 语言铁律（最高优先级，优先于本条以上任何表述）\n"
-    "- 你的**内部思考 / 推理过程（reasoning、thinking）与最终回答都必须用中文书写**。\n"
-    "- 不要用英文思考再译回中文，不要中英夹杂、不要整段英文推理；"
+    "## 语言规则（最高优先级，优先于本条以上任何表述）\n"
+    "- 你的**内部思考 / 推理过程（reasoning、thinking）与最终回答应尽量使用用户消息所用的语言**；\n"
+    "- 用户用中文提问就用中文，用英文提问就用英文；不要中英夹杂；"
     "专业英文术语（catalyst、pollutant、photocatalysis、GraphRAG、DOI、Cypher 等）保留原样。\n"
     "- 若上文出现过英文思考示例，那是历史记录，不构成对你的语言授权。"
 )
@@ -345,31 +362,28 @@ async def _build_system_prompt(enabled_tools: list[str], loaded_skills: list[str
       - 技能以 <available_skills> 形式简列勾选技能的 name+description；详情按需用 skill_view 读取（不漏全文）。
     """
     lines = [
-        "你叫 Quine（奎因），全称 C4EAI Quine Agent ——实验室通用智能体（以 computer science / AI 为底色，服务组内科研协作）。四重定位：",
-        "① 通用智能体：文件、代码、数据、网络皆可操作，什么任务都能接；",
-        "② 自定义智能体：可创建/修改自己的技能、工具与代码（改动前先备份，改动后需重启后端才生效）；",
-        "③ 科研辅助智能体：文献解析与全文中译、图账/表账/段落账三轨道数据对账、把对话笔记整理成规范文献笔记；",
-        "④ 组内共享 wiki 编辑：组内条目与分组的读写维护（读用 shared_search；写用 conversation_notes 且 scope 必须为 database，切勿写进私人笔记）。",
-        "核心能力：",
-        ("① 图谱检索：Neo4j 协作知识图谱 + GraphRAG（graph_query：schema / cypher / search）；"
+        "你叫 TruthCross —— C4EAI 数据挖掘智能体，只做两件事：**非均相 Fenton 文献的数据挖掘全流程** 与 **催化降解知识图谱查询**。",
+        "定位：",
+        "① 数据挖掘流水线主控：把文献的图/表/正文数据挖成结构化记录并入库（筛选 → 解析归档 → 工单 → 图像挖掘 → 图文互证 → 5B 补充裁决 → 节点对齐 → schema 填充 → 数值标准化 → 成品终检 → 图谱导出）。技能 `fenton-multiagent-mining` 是唯一执行标准 —— 逐步骤按其 references/ 细则走，确定性与 IO 用技能包 scripts/ 脚本；",
+        "② 语义判断编排者：读图、读文、判级、审查这类需要判断的活派给专有子智能体（delegate_task 并行），不自己硬猜；",
+        "③ 矛盾判定口径：轴二 Q1–Q4（互证发现项·成绩单）与轴一 A–E（真矛盾严重程度，E=其他·无法归类）分家，唯一口径来源 = 技能内 `references/矛盾分类规范.md`；",
+        "④ 图谱查询与入库：Neo4j 协作知识图谱（GraphRAG 语义检索 + Cypher），查已有催化剂 / 污染物 / 实验 / 矛盾，并把挖掘结果导出入库。",
+        "核心能力（按本次已启用工具裁剪）：",
+        ("① 图谱查询：graph_query（schema / cypher / search）—— 查催化剂、污染物、实验条件、矛盾记录；"
          if "graph_query" in (enabled_tools or []) else
-         "① 图谱检索：本会话图谱未连接（Neo4j 不可用，graph_query 不在本次工具列表里）——"
-         "涉及图谱的问题请如实说明暂时查不了，不要谎称已查询；")
-        + ("② 多智能体协作：delegate_task 派发专有子智能体（矛盾核查/数据提取/数据核查）并行处理；"
-           "③ 数据分析与代码：run_code 计算/统计/绘图，terminal 执行命令；"
-           "④ 共享数据库：组内文献/笔记/文档的上传与语义检索（shared_upload / shared_search）；"
-           "⑤ RAG 检索增强：本地知识库与历史对话检索；"
-           "⑥ 高阶文献翻译：MinerU 解析归档 → 全文中译、图文并茂写笔记；"
-           "⑦ 文献内容审查：图账/表账/段落账三轨道数据对账与矛盾裁决；"
-           "⑧ 联网搜索与文件处理：web_search、read/write_file。"),
-        "被问候或问「你是谁/能做什么」时：先报名字（Quine / 奎因，全称 C4EAI Quine Agent），再按用户已启用的工具从上面列举核心能力（一行一项，不超过 8 项），不要空泛客套。",
+         "① 图谱查询：本会话未启用 graph_query（Neo4j 不可达）—— 涉及图谱的问题如实说明查不了，不要谎称已查询；")
+        + ("② Fenton 数据挖掘全流程：技能 fenton-multiagent-mining + 专有子智能体（screener / workorder / image / verifier / arbiter / node / schema / auditor）；"
+           "③ 单篇矛盾审计：技能 literature-contradiction（Q1–Q4 互证 + A–E 严重度）；"
+           "④ PDF 解析归档：技能 mineru-agent-parse + 技能包 step0 / step0c 脚本（按 bbox 裁图、全文清洗）；"
+           "⑤ 脚本与计算：run_code 计算/统计/绘图，terminal 跑技能包 scripts/ 与装包；"
+           "⑥ 文件与联网：read_file / write_file / search_files / find_files / web_search。"),
+        "被问候或问「你是谁/能做什么」时：先报名字（TruthCross，C4EAI 数据挖掘智能体），再按本次已启用的工具列举上面能力（一行一项，不超过 8 项），不要空泛客套，不要提通用智能体定位。",
         "",
         "",
         _runtime_env_block(enabled_tools),
         "## 规则",
-        "- **全程中文（含思考）**：最终回答与**内部思考/推理过程（reasoning、thinking）都必须用中文**书写，不要中英夹杂、不要整段用英文思考再翻回中文；"
+        "- **语言跟随用户（含思考）**：最终回答与**内部思考/推理过程（reasoning、thinking）应尽量使用用户消息所用的语言**书写；不要中英夹杂；"
         "专业英文术语（如 catalyst、pollutant、photocatalysis、GraphRAG、DOI）保留原样即可，不必翻译。",
-        "- 用中文回答，保留专业英文术语",
         "- 需要哪些能力时，直接使用对应工具（工具的能力与用法由各工具的接口说明给出）。",
         "- 图谱查询、联网搜索、文件解析、技能读取等，按用户问题需求选择合适的工具。",
         "- **不要在回答中重复或引用工具返回的原始 JSON 数据**。工具执行结果已被系统自动展示给用户，你在回答中只给出结论和分析。",
@@ -478,8 +492,29 @@ def _build_context(history: list[dict], user_input: str, context_length: int):
         total -= len(str(dropped.content))
     msgs = msgs + [HumanMessage(content=user_input)]
     if digest:
-        msgs = msgs[:0] + [HumanMessage(content=digest)] + msgs   # 要点放最前（稳定前缀）
+        # 要点并入**第一条消息**，而不是单独插一条 user 消息 —— 单独插会造成
+        # user,user 相邻；kimi 等要求严格交替的模型遇到非交替历史会退化（乱说话、不调用工具）。
+        if msgs and isinstance(msgs[0], HumanMessage):
+            msgs[0] = HumanMessage(content=str(msgs[0].content) + "\n\n" + digest)
+        else:
+            msgs = [HumanMessage(content=digest)] + msgs
+    msgs = _merge_adjacent_roles(msgs)
     return msgs
+
+
+def _merge_adjacent_roles(msgs: list) -> list:
+    """合并相邻同角色消息，保证发给模型的历史严格 user/assistant 交替。
+
+    空回复被跳过（前面 `if not content: continue`）、投影缺 assistant 的 turn、
+    删除提问后留下的孤立回答……都会留下同角色相邻；宽容模型（deepseek）无所谓，
+    kimi 这类严格模型会直接退化。合并对任何模型都无害。"""
+    out = []
+    for m in msgs:
+        if out and out[-1].__class__ is m.__class__:
+            out[-1] = out[-1].__class__(content=str(out[-1].content) + "\n\n" + str(m.content))
+        else:
+            out.append(m)
+    return out
 
 
 # ── 文件上下文注入 ────────────────────────────────
@@ -655,7 +690,7 @@ async def stream_agent(
       {"type":"tool_result","name":...,"content":...}
       {"type":"subagent_start","index":i,"goal":...,"total":N}
       {"type":"subagent_end","index":i,"ok":...,"summary":...,"steps":[...],"seconds":...}
-      {"type":"timeout_notice","level":"nudge|warn|abort","text":...}
+      {"type":"timeout_notice","level":"immediate|abort","text":...}
       {"type":"final","text":...}
       {"type":"error","message":...}
       {"type":"stopped","text":...}
@@ -831,7 +866,6 @@ async def stream_agent(
     final_answer = ""
     all_content = ""   # 累积所有轮次的模型正文，防止工具轮正文丢失
     _t_start = time.time()
-    _nudged = _warned = False
     # A0：单轮内上下文预算（用 API 真实 usage 校准；触发线 = (窗口 - 输出预留) × 0.75）
     # context_window = hard limit，仅用于计算触发线，绝不据此在本地报错/截断（真的超了交给模型端报错）
     # context_budget = 前端可显式指定的清理触发线；0/缺失 → 自动 (窗口 − 输出预留) × 75%
@@ -848,17 +882,17 @@ async def stream_agent(
                     yield {"type": "stopped", "text": "已停止"}
                     return
 
-                # ── 用户点「⚡立即回答」：注入与超时警告同款的催促，让模型马上收尾 ──
+                # ── 用户点「催促回答」：注入催促让模型马上收尾（独立于超时保护的通道）──
                 if immediate_answer_requested():
                     reset_immediate_answer()
                     messages.append({"role": "user", "content": _IMMEDIATE_ANSWER_TEXT})
                     yield {"type": "timeout_notice", "level": "immediate",
-                           "text": "已按你的「立即回答」注入催促：请它马上收尾出答案。",
+                           "text": "已按你的「催促回答」注入催促：请它马上收尾出答案。",
                            "elapsed": int(time.time() - _t_start)}
-                    _turn_notice("immediate", "已按你的「立即回答」注入催促：请它马上收尾出答案。",
+                    _turn_notice("immediate", "已按你的「催促回答」注入催促：请它马上收尾出答案。",
                                  int(time.time() - _t_start))
 
-                # ── 三级超时保护：催促 → 警告 → 终止 ──
+                # ── 超时保护：只剩一级强制中断（2026-10-13 删催促/警告两级）──
                 _elapsed = time.time() - _t_start
                 if _T.get("abort") and _elapsed >= _T["abort"]:
                     yield {"type": "timeout_notice", "level": "abort",
@@ -873,23 +907,6 @@ async def stream_agent(
                            "text": (final_answer + f"\n\n---\n⏱️ **超时终止**：本次生成用时超过 {_T['abort']} 秒上限，已强制结束（未完成的探索被中断）。"
                                                 f"可继续追问让它收尾，或在设置里调大「超时终止」时限。") if final_answer
                                    else f"⏱️ **超时终止**：本次生成超过 {_T['abort']} 秒上限且没有产出内容，已强制结束。"}
-                    return
-                if _T.get("warn") and not _warned and _elapsed >= _T["warn"]:
-                    _warned = True
-                    messages.append({"role": "user", "content":
-                        "[系统·超时警告] 已用时较长。请**立即**基于已获得的信息给出最终答案，"
-                        "不要再调用任何工具、不要继续探索；答案可以不完整，但必须马上输出。"})
-                    yield {"type": "timeout_notice", "level": "warn",
-                           "text": f"已超过警告时限 {_T['warn']}s，已注入「立即作答」提示。", "elapsed": int(_elapsed)}
-                    _turn_notice("warn", f"已超过警告时限 {_T['warn']}s，已注入「立即作答」提示。", int(_elapsed))
-                elif _T.get("nudge") and not _nudged and _elapsed >= _T["nudge"]:
-                    _nudged = True
-                    messages.append({"role": "user", "content":
-                        "[系统·超时催促] 时间过半，请尽快收尾：停止进一步探索与多余的工具调用，"
-                        "把已得到的信息总结成答案；如仍有缺口，在答案中标注「未完成部分」。"})
-                    yield {"type": "timeout_notice", "level": "nudge",
-                           "text": f"已超过催促时限 {_T['nudge']}s，已注入「尽快收尾」提示。", "elapsed": int(_elapsed)}
-                    _turn_notice("nudge", f"已超过催促时限 {_T['nudge']}s，已注入「尽快收尾」提示。", int(_elapsed))
 
                 cur_reasoning = ""
                 cur_content = ""
@@ -1037,9 +1054,12 @@ async def stream_agent(
                         else:
                             _o = get_subagent_options()
                             for _i, _t in enumerate(_valid):
+                                _pi = _profile_info((_t.get("profile", "") if isinstance(_t, dict) else "")
+                                                    or (_t.get("role", "") if isinstance(_t, dict) else ""))
                                 yield {"type": "subagent_start", "index": _i, "total": len(_valid),
                                        "goal": _t.get("goal", ""), "context": _t.get("context", ""),
-                                       "role": (_t.get("role", "") if isinstance(_t, dict) else "")}
+                                       "role": (_t.get("role", "") if isinstance(_t, dict) else ""),
+                                       **_pi}
                             _q = asyncio.Queue()
 
                             def _emit(_i, _step):
@@ -1053,7 +1073,7 @@ async def stream_agent(
                                 max_rounds=_o.get("max_rounds", 4),
                                 timeout=_o.get("timeout", 300),
                                 max_parallel=int(_o.get("max_parallel", 2) or 2),
-                                timeouts={"nudge": _o.get("nudge"), "warn": _o.get("warn"), "abort": _o.get("abort")},
+                                timeouts={"abort": _o.get("abort")},
                                 emit=_emit))
                             _draining = True
                             while _draining:
@@ -1087,7 +1107,11 @@ async def stream_agent(
                                        "goal": _r.get("goal", ""), "context": _r.get("context", ""),
                                        "summary": _r.get("summary", ""), "error": _r.get("error", ""),
                                        "steps": _r.get("steps", []), "rounds": _r.get("rounds", 0),
-                                       "seconds": _r.get("seconds", 0)}
+                                       "seconds": _r.get("seconds", 0),
+                                       "status": _r.get("status", ""),
+                                       "missing": _r.get("missing", ""),
+                                       "confidence": _r.get("confidence", ""),
+                                       **_profile_info(_r.get("profile", ""))}
                             from agent.tools import slim_subagent_results as _slim
                             result = json.dumps({"status": "ok", "count": len(_sa_results),
                                                  "results": _slim(_sa_results)}, ensure_ascii=False)
@@ -1411,10 +1435,13 @@ async def stream_agent_lc(
             if _new_tasks:
                 _delegate_active += 1
                 for _i, _t in enumerate(_new_tasks):
+                    _pi = _profile_info(((_t or {}).get("profile", "") if isinstance(_t, dict) else "")
+                                        or ((_t or {}).get("role", "") if isinstance(_t, dict) else ""))
                     yield {"type": "subagent_start", "index": _i, "total": len(_new_tasks),
                            "goal": (_t or {}).get("goal", "") if isinstance(_t, dict) else str(_t),
                            "context": (_t or {}).get("context", "") if isinstance(_t, dict) else "",
-                           "role": (_t or {}).get("role", "") if isinstance(_t, dict) else ""}
+                           "role": (_t or {}).get("role", "") if isinstance(_t, dict) else "",
+                           **_pi}
             _new_res = pop_delegate_results()
             if _new_res:
                 _delegate_active = max(0, _delegate_active - 1)
@@ -1424,7 +1451,10 @@ async def stream_agent_lc(
                            "goal": _r.get("goal", ""), "context": _r.get("context", ""),
                            "summary": _r.get("summary", ""), "error": _r.get("error", ""),
                            "steps": _r.get("steps", []), "rounds": _r.get("rounds", 0),
-                           "seconds": _r.get("seconds", 0)}
+                           "seconds": _r.get("seconds", 0),
+                           "status": _r.get("status", ""), "missing": _r.get("missing", ""),
+                           "confidence": _r.get("confidence", ""),
+                           **_profile_info(_r.get("profile", ""))}
             _inside_delegate = (_delegate_active > 0) or any(p in _delegate_runs for p in _parents)
             if e == "on_chat_model_stream":
                 chunk = (ev.get("data") or {}).get("chunk")

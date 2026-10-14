@@ -18,7 +18,7 @@
 | 环节 | 实现 |
 |---|---|
 | 取图 | `read_file(path="x.jpg")` 或 `read_file(file_id=...)` |
-| 尺寸闸门 | `IMAGE_INLINE_MAX_CHARS = 200000`（≈150 KB 原图）；超限返回 `mode=image_too_large` |
+| 尺寸闸门 | `IMAGE_INLINE_MAX_CHARS = 1600000`（≈1.2 MB 原图的 dataURL）；超限返回 `mode=image_too_large` |
 | 拆分助手 | `split_image_result(result) -> (data_url, text)`，两个引擎循环 + 子智能体共用；`extract_image_data_url()` 是它的薄包装 |
 | 子智能体 | `subagent.py` 同样处理，且**在 4000 字符截断之前**抽走图；但它**不能裁图**（无写文件权限），裁 panel 只能主控做 |
 | 引擎开关 | custom 流式 = `blocks`；langchain = `blocks`（可用环境变量 `C4EAI_LC_IMAGE_MODE=off` 关闭）；阻塞式入口 = `off` |
@@ -40,14 +40,15 @@
 ## 三、用法（图账前先做，主控自己跑）
 
 ```python
-# ① 把目标图裁成 panel 并压小（run_code 工作目录即产出区，直接写文件名）
+# ① 把目标图裁成 panel（run_code 工作目录即产出区，直接写文件名）
 from PIL import Image
 im = Image.open(r"<归档>/images/Figure6/<hash>.jpg")
 im.crop((0, 0, im.width, im.height//2)).convert("L").save("fig6_top.png", optimize=True)
 ```
 ② `list_outputs()` → 拿 `file_id` → ③ `read_file(file_id="...")` → 模型看到图 → ④ 逐 panel 转录"像素读数表"（`panel / 轴量程 / 图例 / 读数 / 单位 / 不确定度`）。
 
-**尺寸闸门**：单张 dataURL ≤ `IMAGE_INLINE_MAX_CHARS = 200000`（≈150 KB 原图）；实操建议 ≤20 KB/张（越小越省 token）。超限时工具返回 `mode=image_too_large` 并提示裁 panel。
+**尺寸闸门**：单张 dataURL ≤ `IMAGE_INLINE_MAX_CHARS = 1600000` 字符（2026-10-05 实测，旧值 200000 已废弃）；超限时工具返回 `mode=image_too_large` 并提示处理。超限了**裁 panel / 缩尺寸 / 切两半分别登记**。
+⚠️ **不要靠降 JPEG 质量"省 token"**：视觉 token 只与像素数成正比（约 1 token / 1024 px），降质量白丢信息、token 不降。要省就减小像素尺寸。
 **登记闸门**：按 `file_id` 读要求图在产出区（`users/<u>/outputs/`）并被登记 —— 用 `list_outputs()` 自动补登记。
 **路径读**：直接 `read_file(path="...")` 也行（非安全模式可给绝对路径），省掉登记步骤。
 
@@ -55,7 +56,7 @@ im.crop((0, 0, im.width, im.height//2)).convert("L").save("fig6_top.png", optimi
 
 | 项 | 位置 | 说明 |
 |---|---|---|
-| `IMAGE_INLINE_MAX_CHARS` | `file_tools.py` 顶部 | 单图 dataURL 上限，改小可省 token |
+| `IMAGE_INLINE_MAX_CHARS = 1600000` | `file_tools.py` 顶部 | 单图 dataURL 上限；可用环境变量 `C4EAI_IMAGE_INLINE_MAX_CHARS` 覆盖 |
 | `set_image_emit(mode)` | `file_tools.py` | 通道三态开关：`blocks`/`hoist`/`off` |
 | `split_image_result(result)` | `file_tools.py` | 拆分助手（返回 `data_url, text`），两引擎循环共用 |
 | `C4EAI_LC_IMAGE_MODE` | 环境变量 | langchain 引擎图片通道，默认 `blocks`；端点 400 时设 `off` 重启 |
@@ -68,4 +69,4 @@ im.crop((0, 0, im.width, im.height//2)).convert("L").save("fig6_top.png", optimi
 - 读不到就标 `需图核`，**禁止虚构数值**（历史事故：未读原文编出 0.88 → 假矛盾）。
 - 模型需支持视觉；若配的是纯文本模型，图会变成无效载荷 —— 此时关掉通道（custom 改 `off`、langchain 设 `C4EAI_LC_IMAGE_MODE=off`），改走"用户把图作为当轮附件发送"。
 - 若端点**拒收 `role=tool` 里的图像**（400 报错），把 langchain 引擎退到 `off`；custom 不受影响（它提升到 `user` 消息）。
-- 改代码前先读 `self-modify` 技能；改后**必须重启后端**（`python backend/app.py`）才生效。
+- 改代码前先备份原文件；改后**必须重启后端**（`python backend/app.py`）才生效。

@@ -62,7 +62,7 @@
                  /* 全屏模式下弹窗层级提升 */
                       /* 全屏模式下弹窗层级提升 */
                          body.full-screen-mode .modal {
-                             z-index: 3000;
+                             z-index: var(--z-modal);
                          }
 
                          body.full-screen-mode .modal-content {
