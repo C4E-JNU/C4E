@@ -113,12 +113,13 @@ def new_turn_id() -> str:
 # ══════════════════════════════════════════════════════
 
 def begin_turn(user: str, branch_id: str, turn_id: str, user_input: str,
-               client_id: str = "") -> None:
-    """一轮生成开始：写下 turn_start（含发起端 client_id，供广播过滤回声）。"""
+               client_id: str = "", client_msg_id: str = "") -> None:
+    """一轮生成开始：写下 turn_start（含发起端 client_id 供广播过滤回声；
+    client_msg_id = 前端本地消息 id，投影合并时用它挤掉本地副本防双气泡）。"""
     _append(_turn_file(user, branch_id), {
         "type": "turn_start", "turn_id": turn_id,
         "branch_id": branch_id or "", "input": user_input or "",
-        "client_id": client_id or "",
+        "client_id": client_id or "", "client_msg_id": client_msg_id or "",
     })
 
 

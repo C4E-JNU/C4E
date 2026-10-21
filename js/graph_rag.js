@@ -423,6 +423,8 @@ async function reactAgentLoop(userQuestion, options /* {fileIds:[], note_refs:[]
             },
             // 后端接管消息树（2026-10-03）：client_id 供多端广播滤掉「自己发的回声」
             client_id: (typeof window.getClientId === 'function') ? window.getClientId() : '',
+            // 本地用户消息 id：账本记录后投影合并凭它挤掉本地副本（防双气泡）
+            client_msg_id: (options && options.client_msg_id) || '',
         };
 
         console.log('[Agent] Full request:', JSON.stringify({

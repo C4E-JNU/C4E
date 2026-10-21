@@ -679,6 +679,7 @@ async def stream_agent(
     timeouts: dict = None,
     subagent: dict = None,
     client_id: str = "",
+    client_msg_id: str = "",
     skip_resume: bool = False,
 ):
     """真流式 Agent：直接调原始 OpenAI 兼容 API 流，逐 token 抓取。
@@ -833,7 +834,7 @@ async def stream_agent(
         messages.append({"role": "user", "content": _resume_note})
     # 开新轮（顺序关键：必须在 build_resume_note 之后，否则读到的是本轮自己）
     try:
-        _turn_store.begin_turn(user, branch_id, _turn_id, user_input, client_id=client_id)
+        _turn_store.begin_turn(user, branch_id, _turn_id, user_input, client_id=client_id, client_msg_id=client_msg_id)
     except Exception as _e:
         print("[turn_store] begin_turn error:", _e)
 
@@ -1259,6 +1260,7 @@ async def stream_agent_lc(
     timeouts: dict = None,
     subagent: dict = None,
     client_id: str = "",
+    client_msg_id: str = "",
     skip_resume: bool = False,
 ):
     """LangChain 流式 Agent：create_agent + astream_events。
@@ -1372,7 +1374,7 @@ async def stream_agent_lc(
     if _resume_note:
         messages = list(messages) + [HumanMessage(content=_resume_note)]
     try:
-        _turn_store.begin_turn(user, branch_id, _turn_id, user_input, client_id=client_id)
+        _turn_store.begin_turn(user, branch_id, _turn_id, user_input, client_id=client_id, client_msg_id=client_msg_id)
     except Exception as _e:
         print("[turn_store] begin_turn error:", _e)
 

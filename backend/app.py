@@ -165,6 +165,7 @@ class AgentRunRequest(BaseModel):
     engine: str = "custom"          # custom=裸API手写循环 / langchain=LangChain流式
     max_rounds: Optional[int] = None  # 工具循环步数，0=无限
     client_id: str = ""             # 发起端标识：多端广播时供各端过滤回声（见 /api/events chats_delta）
+    client_msg_id: str = ""         # 前端本地用户消息 id：账本 turn_start 记录它，投影合并时挤掉本地副本（防双气泡）
     skip_resume: bool = False       # True=本次是「重新生成」：绝不注入上次中断摘要
 
 # ── 健康检查 ──────────────────────────────────────
@@ -1794,7 +1795,8 @@ async def agent_stream(req: AgentRunRequest, request: Request = None):
                 file_ids=req.file_ids or [],
                 permission_mode=req.permission_mode or "safe",
                 max_rounds=max_rounds,
-                user=cur_user, client_id=_client, skip_resume=bool(req.skip_resume),
+                user=cur_user, client_id=_client, client_msg_id=(req.client_msg_id or "").strip(),
+                skip_resume=bool(req.skip_resume),
                 timeouts=req.timeouts or {}, subagent=req.subagent or {}):
                 if isinstance(event, dict) and event.get("type") in ("token", "reasoning"):
                     _chars += len(event.get("text", "") or "")

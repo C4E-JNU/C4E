@@ -981,7 +981,7 @@
                  await deleteMessagesAfter(messageIndex);
 
                  // 重新生成 — 智能体自动决策，不走旧的知识库模式
-                 await reactAgentLoop(userMessage);
+                 await reactAgentLoop(userMessage, { client_msg_id: message.id });
 
              } else if (message.role === 'assistant') {
                  const prevMessage = currentBranch.messages[messageIndex - 1];
@@ -995,7 +995,7 @@
                      // 截断对话（删除当前消息及后续所有消息）
                      await deleteMessagesAfter(messageIndex - 1);
 
-                     await reactAgentLoop(userMessage);
+                     await reactAgentLoop(userMessage, { client_msg_id: prevMessage.id });
                  }
              }
         }
@@ -1265,7 +1265,7 @@
                  }
 
                  // 添加用户消息（附件只存元数据，不再把文件全文写入 localStorage）
-                 addMessage('user', displayContent, 0, false, null, null, attachmentsMetadata, refsMeta);
+                 const _localMsgId = addMessage('user', displayContent, 0, false, null, null, attachmentsMetadata, refsMeta);
                  messageInput.value = '';
                  expandedTextarea.value = '';
                  collapseExpandMode();
@@ -1282,7 +1282,8 @@
                  //    file_ids 恒为空 → 附件内容没进 LLM → 表现为"答非所问/未能生成回答"）
                  await reactAgentLoop(fullMessage, {
                      note_refs: refsMeta,
-                     fileIds: attachmentsMetadata.map(function (a) { return a.file_id; }).filter(Boolean)
+                     fileIds: attachmentsMetadata.map(function (a) { return a.file_id; }).filter(Boolean),
+                     client_msg_id: _localMsgId
                  });
         }
 

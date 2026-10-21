@@ -151,13 +151,14 @@ def _turn_blocks(events: list) -> list:
         if tid not in by_turn:
             by_turn[tid] = {"turn_id": tid, "input": "", "ts": "", "events": [],
                             "texts": [], "final": "", "end_ts": "", "partial": "",
-                            "status": ""}
+                            "status": "", "client_msg_id": ""}
             order.append(tid)
         k = by_turn[tid]
         t = e.get("type")
         if t == "turn_start":
             k["input"] = e.get("input", "") or ""
             k["ts"] = e.get("ts", "") or k["ts"]
+            k["client_msg_id"] = e.get("client_msg_id", "") or k["client_msg_id"]
         elif t in ("reasoning", "step", "notice"):
             k["events"].append(e)
         elif t == "text":
@@ -227,12 +228,15 @@ def messages_from_events(events: list, branch_id: str) -> list:
         tid = k["turn_id"]
         ts = _norm_ts(k.get("ts"))
         if (k.get("input") or "").strip():
-            msgs.append({
+            _umsg = {
                 "id": "msg-u-" + tid, "role": "user", "content": k["input"],
                 "tokens": 0, "timestamp": ts, "branchId": branch_id,
                 "thinkingChain": None, "type": None,
                 "attachments": [], "noteRefs": [],
-            })
+            }
+            if k.get("client_msg_id"):
+                _umsg["client_msg_id"] = k["client_msg_id"]   # 前端本地副本 id：合并时凭它去重（防双气泡）
+            msgs.append(_umsg)
         content = (k.get("final") or "").strip()
         if not content:
             joined = "".join(k.get("texts") or []).strip()
@@ -286,6 +290,28 @@ def project_branch(user: str, branch_id: str, legacy: dict = None):
         import re as _re
         _ledger_id = _re.compile(r"^(?:msg-u-|agent-)t[0-9a-f]+$")
         old = [m for m in old if not _ledger_id.match(str(m.get("id") or ""))]
+        # ── 挤掉前端本地副本（防双气泡，2026-10-21）：新对话首条用户消息先有前端本地 id
+        #    （msg-<ts>-<rand>），账本投影再生成 msg-u-t* —— 两套 id 判重失败会双双落盘。
+        #    判据（客观事实）：① turn_start 记了 client_msg_id → 按 id 精确挤掉；
+        #    ② 存量旧账（无记录）→ 本地用户消息与投影用户消息按内容一一配对挤掉
+        #    （账本再生了全部已发用户轮，每条本地副本必有唯一同名投影；未发出去的没有投影配对，自然留下）。
+        _client_ids = {str(m.get("client_msg_id")) for m in new_msgs if m.get("client_msg_id")}
+        if _client_ids:
+            old = [m for m in old if str(m.get("id") or "") not in _client_ids]
+        _proj_users = [m for m in new_msgs if m.get("role") == "user"]
+        _used = set()
+        _kept = []
+        for m in old:
+            _drop = False
+            if (m.get("role") == "user"
+                    and isinstance(m.get("content"), str)):
+                for _i, _pu in enumerate(_proj_users):
+                    if _i not in _used and _pu.get("content") == m.get("content"):
+                        _used.add(_i)
+                        _drop = True
+                        break
+            _kept.append(None if _drop else m)
+        old = [m for m in _kept if m is not None]
         have = {m.get("id") for m in old}
         merged = old + [m for m in new_msgs if m.get("id") not in have]
         # ── 单条删除（delete 补偿事件）：前端「删除这条消息」按完整消息 id 精确剔除 ──
