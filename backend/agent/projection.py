@@ -328,6 +328,10 @@ def project_branch(user: str, branch_id: str, legacy: dict = None):
                 expanded.update((t, "msg-u-" + t, "agent-" + t))
             merged = [m for m in merged if m.get("id") not in expanded]
         base["messages"] = merged
+        try:
+            _link_output_files(merged, events, user)
+        except Exception as _e:
+            print("[projection] link outputs error:", _e)
         base.setdefault("id", branch_id)
         base.setdefault("name", "")
         base.setdefault("parentId", None)
@@ -341,6 +345,117 @@ def project_branch(user: str, branch_id: str, legacy: dict = None):
     except Exception as e:                            # 安全阀 3
         print("[projection] project_branch error:", e)
         return None
+
+
+def _link_output_files(msgs: list, events: list, user: str) -> None:
+    """产出文件 ↔ 前端卡片（2026-10-21，用户定 B+）：
+
+    ① 助手正文里客观出现的 outputs/ 路径（相对或绝对）→ 登记（幂等）→ 原位换成
+       {{file:file_id:文件名}} 占位符。模型给裸路径/Markdown 链接都通吃，不依赖提示词自觉。
+    ② 本轮时间窗内新落盘、且正文未提及的产出 → 在该 turn 的助手消息末尾自动追加占位符卡片
+       （「模型提了但没给链接」「一个字没提」两个死角都由机制兜底）。
+    纯函数式补丁：每次投影都从账本原文重算，天然幂等、可再生成，与三条安全阀不冲突。
+    """
+    import os as _os
+    import re as _re
+    from tools import file_tools as FT
+
+    # outputs/ 相对路径或以其结尾的绝对路径；文件名不含空格与括号（含半角），
+    # 允许中文。前缀段允许含空格目录（如 D:\xxx\text mining\...\outputs\），
+    # 向左吞到空白/标点为止；登记失败（文件不存在）一律原样不动。
+    _PAT = _re.compile(r"outputs[\\/](?P<name>[^\s\"'()）\]，。；、]+)")
+    _STOP = set(" \t" + chr(13) + chr(10) + "\"'`，。；、：:,.;!?()（）[]【】{}<>|")
+
+    def _reg(rel: str, name: str) -> str:
+        try:
+            d = json.loads(FT.register_output(rel, user, name))
+            return d.get("file_id") or ""
+        except Exception:
+            return ""
+
+    def _convert(content: str) -> str:
+        seen = {}
+        out, pos = [], 0
+        for m in _PAT.finditer(content):
+            name = m.group("name").strip().rstrip(".,;，。")
+            if not name:
+                continue
+            fid = _reg("outputs/" + name, name)
+            if not fid:
+                continue                       # 登记失败 = 不是真产出文件 → 原样
+            start = m.start()
+            while start > 0 and content[start - 1] not in _STOP:
+                start -= 1                   # 向左吞绝对路径前缀（含空格目录名）
+            if fid in seen:                  # 同一文件多处提及：第一处变卡片，其余留文件名纯文本
+                out.append(content[pos:start])
+                out.append(name)
+            else:
+                seen[fid] = True
+                out.append(content[pos:start])
+                out.append("{{file:%s:%s}}" % (fid, name))
+            pos = m.end()
+        out.append(content[pos:])
+        return "".join(out)
+
+    for msg in msgs:
+        if msg.get("role") == "assistant" and isinstance(msg.get("content"), str) \
+                and "outputs/" in msg["content"]:
+            msg["content"] = _convert(msg["content"])
+
+    # ② 本轮新产出未提及 → 追加卡片（判据：mtime 落在 turn_start..turn_end 窗内 + 正文无该 file_id）
+    def _epoch(ts) -> float:
+        from datetime import datetime as _dt
+        for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f"):
+            try:
+                return _dt.strptime(str(ts)[:26], fmt).timestamp()
+            except Exception:
+                pass
+        return 0.0
+
+    windows = {}
+    for e in events:
+        if not isinstance(e, dict):
+            continue
+        t = e.get("type")
+        tid = e.get("turn_id") or ""
+        if t == "turn_start":
+            w = windows.setdefault(tid, {"start": 0.0, "end": 0.0})
+            w["start"] = _epoch(e.get("ts")) or w["start"]
+        elif t == "turn_end":
+            w = windows.setdefault(tid, {"start": 0.0, "end": 0.0})
+            w["end"] = _epoch(e.get("ts")) or w["end"]
+    if not windows:
+        return
+
+    try:
+        out_dir = FT._user_outputs_dir(user)
+        names = [fn for fn in _os.listdir(out_dir)
+                 if _os.path.isfile(_os.path.join(out_dir, fn))]
+    except Exception:
+        return
+    by_id = {m.get("id"): m for m in msgs}
+    for tid, w in windows.items():
+        lo = (w["start"] or 0) - 2.0
+        hi = (w["end"] or w["start"] or 0) + 3.0
+        if hi <= 0:
+            continue
+        amsg = by_id.get("agent-" + tid)
+        if not amsg:                      # 该 turn 无助手消息（空 turn 被跳过）→ 无处追加
+            continue
+        cards = []
+        for fn in names:
+            try:
+                mt = _os.path.getmtime(_os.path.join(out_dir, fn))
+            except Exception:
+                continue
+            if not (lo <= mt <= hi):
+                continue
+            fid = _reg("outputs/" + fn, fn)
+            if fid and ("{{file:%s:" % fid) not in (amsg.get("content") or ""):
+                cards.append("{{file:%s:%s}}" % (fid, fn))
+        if cards:
+            base_c = (amsg.get("content") or "").rstrip()
+            amsg["content"] = (base_c + "\n\n" if base_c else "") + "📎 " + " ".join(cards)
 
 
 def sync_branch(user: str, branch_id: str) -> bool:

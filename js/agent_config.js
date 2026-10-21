@@ -14,6 +14,7 @@ const TOOL_GROUPS = [
     { name: t('agentcfg.gr.task'), tools: ['todo'] },
     { name: t('agentcfg.gr.subagent'), tools: ['delegate_task'] },
     { name: t('agentcfg.gr.documents'), tools: ['mineru_parse'] },
+    { name: 'XWiki', tools: ['wiki_search', 'wiki_get', 'wiki_create', 'wiki_update', 'wiki_delete', 'wiki_list_pages', 'wiki_list_spaces', 'wiki_upload_attachment', 'wiki_list_attachments'] },
 ];
 
 // ── 工具：从后端 /api/tools 动态加载 + 按分组渲染勾选 ──
