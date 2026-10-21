@@ -76,7 +76,8 @@
                 // 手动检查禁用状态（disabled 属性已被移除，避免阻止点击事件）
                 if (sendBtn.classList.contains('btn-disabled')) return;
                 if (state.isGenerating) {
-                    requestImmediateAnswer();
+                    // 生成中：发送位 = 终止（硬中断；已完成轮次保留）。催促在「收起思考」下方。
+                    stopCurrentRun();
                 } else {
                     sendMessage();
                 }
@@ -446,6 +447,18 @@
                 showToast(t('msg.urged'), 'success');
             } catch (e) {
                 showToast(t('msg.reqFailed') + (e && e.message ? e.message : t('msg.netErr')), 'error');
+            }
+        }
+
+        // 终止本轮生成（2026-10-21：发送位的 ⏹ 调这里；账本已落的轮次保留，可继续追问）
+        async function stopCurrentRun() {
+            if (!state.isGenerating) return;
+            try {
+                const r = await fetch('/api/agent/stop', { method: 'POST' });
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                showToast(t('gr.abortedToast'), 'success');
+            } catch (e) {
+                showToast('❌ ' + t('gr.abortFailed') + (e && e.message ? e.message : t('gr.networkError')), 'error');
             }
         }
 

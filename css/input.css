@@ -695,7 +695,7 @@
         }
 
         .send-circle-btn.stop {
-            background: var(--dark);
+            background: var(--error, #d03050);
         }
 
         .theme-colorful .send-circle-btn:not(:disabled),

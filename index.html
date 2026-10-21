@@ -732,12 +732,13 @@
                 <div class="chat-container">
 
                     <!-- 智能体思考：收起浮动键（对话区右侧留白，垂直居中）—— 只在屏幕上真的有未收起的思考时出现 -->
-                    <!-- 「立即终止」浮动键：贴着「收起思考」键正下方（用户 2026-10-13 定）。只在生成中出现。 -->
-                    <button class="reasoning-rail-btn agent-stop-btn" id="agent-stop-btn" hidden title="Stop this run (finished progress is kept; ask a follow-up to resume)" data-i18n-title="gen.stop.t">
+                    <!-- 「快速回答」浮动键：贴着「收起思考」键正下方。只在生成中出现。
+                         2026-10-21 用户定：与发送位的「终止」对调——终止放发送位，催促放这里。 -->
+                    <button class="reasoning-rail-btn agent-nudge-btn" id="agent-nudge-btn" hidden title="Nudge: ask it to answer now (nothing is lost)" data-i18n-title="gen.nudge.t">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                            <rect x="6" y="6" width="12" height="12" rx="2"/>
+                            <path d="M13 2 3 14h7l-1 8 12-14h-8l1-6z"/>
                         </svg>
-                        <span class="rrb-label" data-i18n="gen.stop">Stop</span>
+                        <span class="rrb-label" data-i18n="gen.nudge">Quick answer</span>
                     </button>
 
                     <button class="reasoning-rail-btn" id="reasoning-rail-btn" hidden title="Collapse agent reasoning" data-i18n-title="gen.collapse.t">

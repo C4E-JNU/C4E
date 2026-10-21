@@ -54,15 +54,15 @@
             .reasoning-rail-btn .rrb-label { display: none; }
         }
 
-        /* 「立即终止」键（2026-10-13）：与「收起思考」同列，贴它正下方；红色系提示破坏性操作 */
-        #agent-stop-btn {
+        /* 「快速回答」键（2026-10-21）：与「收起思考」同列，贴它正下方；非破坏性，用主题色 */
+        #agent-nudge-btn {
             top: calc(50% + 32px);
             transform: none;
-            color: var(--error, #d03050);
+            color: var(--primary, #4361ee);
         }
-        #agent-stop-btn:hover {
-            background: rgba(208, 48, 80, 0.06);
-            border-color: rgba(208, 48, 80, 0.35);
+        #agent-nudge-btn:hover {
+            background: rgba(67, 97, 238, 0.06);
+            border-color: rgba(67, 97, 238, 0.35);
         }
 
         .message {

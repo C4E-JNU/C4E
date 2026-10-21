@@ -69,13 +69,14 @@ async function reactAgentLoop(userQuestion, options /* {fileIds:[], note_refs:[]
         }
     }
     noteRefs = (noteRefs || []).map(function (r) { return { id: r.id, scope: r.scope || 'notes', title: r.title || '' }; });
-    // 生成开始：按钮切成「⚡立即回答」（用户 2026-09-27 定：不硬中断、不丢已探索内容，只催它马上出答案）
+    // 生成开始：发送位切成「⏹ 终止」（2026-10-21 用户定：与「⚡快速回答」对调）；
+    // 催促键移到「收起思考」下方 —— 终止是硬中断，催促只让它马上出答案、不丢已探索内容。
     state.isGenerating = true;
     state._runBranchId = state.currentBranchId;   // 记住这次回答属于哪条对话（中途切走也不会标错）
     if (typeof markChatRunning === 'function') markChatRunning(state._runBranchId);
     state.userHasScrolledUp = false;   // 刚发出去 = 人在看底部，允许贴底
-    if (typeof sendBtn !== 'undefined' && sendBtn) { sendBtn.innerHTML = '⚡'; sendBtn.classList.add('stop'); sendBtn.title = t('gr.nudge'); }
-    var _stopBtn = document.getElementById('agent-stop-btn'); if (_stopBtn) _stopBtn.hidden = false;
+    if (typeof sendBtn !== 'undefined' && sendBtn) { sendBtn.innerHTML = '⏹'; sendBtn.classList.add('stop'); sendBtn.title = t('gen.stop.t'); }
+    var _nudgeBtn = document.getElementById('agent-nudge-btn'); if (_nudgeBtn) _nudgeBtn.hidden = false;
     if (typeof updateSendButtonState === 'function') updateSendButtonState();
     const enabledTools = state.agentConfig?.enabledTools || ['graph_query', 'shared_search', 'search_history', 'conversation_notes', 'skill_view', 'web_search', 'web_extract', 'todo', 'delegate_task', 'mineru_parse', 'read_file', 'list_files', 'search_files', 'find_files', 'edit_file', 'crossref_lookup', 'arxiv_search', 'semantic_scholar_search', 'gh_search_code', 'gh_read_file', 'wiki_read', 'wiki_write'];
     const loadedSkills = state.agentConfig?.loadedSkills || ['self-modify'];
@@ -548,7 +549,7 @@ async function reactAgentLoop(userQuestion, options /* {fileIds:[], note_refs:[]
     // 生成期间被推迟的同步通知，现在补做（见 js/user_chats.js 的 flushPendingSync）
     if (typeof window.flushPendingSync === 'function') { try { window.flushPendingSync(); } catch (e) {} }
     if (typeof sendBtn !== 'undefined' && sendBtn) { sendBtn.innerHTML = '➤'; sendBtn.classList.remove('stop'); sendBtn.title = t('gr.send'); }
-    var _stopBtn2 = document.getElementById('agent-stop-btn'); if (_stopBtn2) _stopBtn2.hidden = true;
+    var _nudgeBtn2 = document.getElementById('agent-nudge-btn'); if (_nudgeBtn2) _nudgeBtn2.hidden = true;
     if (typeof updateSendButtonState === 'function') updateSendButtonState();
     return answer;
 }
@@ -610,17 +611,12 @@ window.neo4jConnector = neo4jConnector;
 window.ensureNeo4jConnected = ensureNeo4jConnected;
 window.updateNeo4jStatusUI = updateNeo4jStatusUI;
 
-// ── 「立即终止」键（2026-10-13）：硬中断本轮生成；账本已落的轮次保留，可继续追问 ──
+// ── 「快速回答」键（2026-10-21）：与「终止」对调后，催促移到收起思考下方 ──
 (function () {
-    var btn = document.getElementById('agent-stop-btn');
+    var btn = document.getElementById('agent-nudge-btn');
     if (!btn) return;
     btn.addEventListener('click', function () {
         if (!state.isGenerating) return;
-        fetch('/api/agent/stop', { method: 'POST' }).then(function (r) {
-            if (!r.ok) throw new Error('HTTP ' + r.status);
-            if (typeof showToast === 'function') showToast(t('gr.abortedToast'), 'success');
-        }).catch(function (e) {
-            if (typeof showToast === 'function') showToast('❌ ' + t('gr.abortFailed') + (e && e.message ? e.message : t('gr.networkError')), 'error');
-        });
+        if (typeof requestImmediateAnswer === 'function') requestImmediateAnswer();
     });
 })();
