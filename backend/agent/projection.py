@@ -360,11 +360,28 @@ def _link_output_files(msgs: list, events: list, user: str) -> None:
     import re as _re
     from tools import file_tools as FT
 
-    # outputs/ 相对路径或以其结尾的绝对路径；文件名不含空格与括号（含半角），
-    # 允许中文。前缀段允许含空格目录（如 D:\xxx\text mining\...\outputs\），
-    # 向左吞到空白/标点为止；登记失败（文件不存在）一律原样不动。
-    _PAT = _re.compile(r"outputs[\\/](?P<name>[^\s\"'()）\]，。；、]+)")
-    _STOP = set(" \t" + chr(13) + chr(10) + "\"'`，。；、：:,.;!?()（）[]【】{}<>|")
+    # outputs/ 相对路径或以其结尾的绝对路径；文件名不含空格/引号（半角括号允许，
+    # 如 输出(1).png）。登记失败（文件不存在）一律原样不动。
+    _PAT = _re.compile(r"outputs[\\/](?P<name>[^\s\"'）\]，。；、]+)")
+    _STOP = set(" \t" + chr(13) + chr(10) + "\"'`，。；、：:,.;!?（）[]【】{}<>|")
+
+    def _swallow(content: str, start: int, out_end: int) -> int:
+        """从 outputs/ 匹配点向左吞绝对路径前缀：吞「非硬停字符」（空格可穿行），
+        剪边后仅当整条以盘符/根斜杠开头（客观绝对路径判据）才生效，否则不吞。
+        （「我说 D:\\…outputs\\x」这类正文夹路径的极端场景不吞，宁可留原文也不误吃正文。）"""
+        j = start
+        n = 0
+        while j > 0 and n < 240:
+            ch = content[j - 1]
+            if ch in _STOP and ch not in " \t:":
+                break
+            j -= 1
+            n += 1
+        token = content[j:out_end]
+        m2 = _re.search(r"(?:^|[\s\"'`，。；、:（(])(?P<p>[A-Za-z]:[\\/]|[\\/])", token)
+        if m2:
+            return j + m2.start("p")
+        return start
 
     def _reg(rel: str, name: str) -> str:
         try:
@@ -383,9 +400,7 @@ def _link_output_files(msgs: list, events: list, user: str) -> None:
             fid = _reg("outputs/" + name, name)
             if not fid:
                 continue                       # 登记失败 = 不是真产出文件 → 原样
-            start = m.start()
-            while start > 0 and content[start - 1] not in _STOP:
-                start -= 1                   # 向左吞绝对路径前缀（含空格目录名）
+            start = _swallow(content, m.start(), m.start())
             if fid in seen:                  # 同一文件多处提及：第一处变卡片，其余留文件名纯文本
                 out.append(content[pos:start])
                 out.append(name)
@@ -399,7 +414,7 @@ def _link_output_files(msgs: list, events: list, user: str) -> None:
 
     for msg in msgs:
         if msg.get("role") == "assistant" and isinstance(msg.get("content"), str) \
-                and "outputs/" in msg["content"]:
+                and ("outputs/" in msg["content"] or "outputs\\" in msg["content"]):
             msg["content"] = _convert(msg["content"])
 
     # ② 本轮新产出未提及 → 追加卡片（判据：mtime 落在 turn_start..turn_end 窗内 + 正文无该 file_id）
