@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>C4EAI 使用指南 · 我教你把我用好</title>
+<style>
+  :root{
+    --ink:#1e293b;
+    --ink-soft:#475569;
+    --ink-mute:#64748b;
+    --bg:#f6f7fb;
+    --card:#ffffff;
+    --line:#e2e8f0;
+    --brand:#6366f1;
+    --brand-deep:#4f46e5;
+    --cyan:#06b6d4;
+    --ok:#10b981;
+    --warn:#f59e0b;
+    --bad:#ef4444;
+    --hero-ink:#e0e7ff;
+    --radius:16px;
+    --shadow:0 1px 3px rgba(15,23,42,.06),0 8px 24px rgba(15,23,42,.06);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth;scroll-padding-top:76px}
+  body{
+    font-family:"Segoe UI","PingFang SC","Microsoft YaHei","Source Han Sans SC",sans-serif;
+    background:var(--bg);color:var(--ink);line-height:1.75;font-size:16px;
+  }
+  /* ---------- 顶部导航 ---------- */
+  .topbar{
+    position:sticky;top:0;z-index:50;
+    background:rgba(255,255,255,.9);backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line);
+  }
+  .topbar-inner{
+    max-width:1080px;margin:0 auto;padding:0 24px;
+    display:flex;align-items:center;gap:20px;height:56px;
+  }
+  .logo{display:flex;align-items:center;gap:10px;font-weight:700;color:var(--ink);text-decoration:none;white-space:nowrap}
+  .logo .dot{
+    width:28px;height:28px;border-radius:9px;flex:none;
+    background:linear-gradient(135deg,var(--brand),var(--cyan));
+    display:flex;align-items:center;justify-content:center;
+    color:#fff;font-size:14px;font-weight:800;
+  }
+  .topnav{display:flex;gap:4px;margin-left:auto;overflow-x:auto}
+  .topnav a{
+    color:var(--ink-mute);text-decoration:none;font-size:14px;
+    padding:6px 12px;border-radius:99px;white-space:nowrap;transition:.2s;
+  }
+  .topnav a:hover{color:var(--brand-deep);background:#eef2ff}
+  .topnav a.active{color:var(--brand-deep);background:#eef2ff;font-weight:600}
+  @media(max-width:720px){.topnav{display:none}}
+
+  /* ---------- Hero ---------- */
+  .hero{
+    background:
+      radial-gradient(900px 400px at 85% -10%,rgba(6,182,212,.35),transparent 60%),
+      radial-gradient(700px 500px at 10% 110%,rgba(99,102,241,.4),transparent 60%),
+      linear-gradient(140deg,#111827 0%,#1e1b4b 55%,#312e81 100%);
+    color:#fff;padding:72px 24px 88px;
+  }
+  .hero-inner{max-width:1080px;margin:0 auto;display:grid;grid-template-columns:1.15fr .85fr;gap:48px;align-items:center}
+  @media(max-width:880px){.hero-inner{grid-template-columns:1fr}}
+  .hero-badge{
+    display:inline-flex;align-items:center;gap:8px;
+    background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);
+    padding:6px 14px;border-radius:99px;font-size:13px;color:#c7d2fe;margin-bottom:22px;
+  }
+  .hero-badge .pulse{width:8px;height:8px;border-radius:50%;background:#34d399;box-shadow:0 0 0 0 rgba(52,211,153,.6);animation:pulse 2s infinite}
+  @keyframes pulse{70%{box-shadow:0 0 0 8px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
+  .hero h1{font-size:clamp(30px,4.5vw,46px);line-height:1.25;font-weight:800;letter-spacing:.5px}
+  .hero h1 .grad{background:linear-gradient(90deg,#a5b4fc,#67e8f9);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero p.sub{margin-top:18px;font-size:17px;color:#c7d2fe;max-width:56ch}
+  .hero .chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:26px}
+  .hero .chip{
+    background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);
+    padding:7px 14px;border-radius:99px;font-size:13.5px;color:#e0e7ff;
+  }
+  .hero .cta{margin-top:30px;display:flex;gap:14px;flex-wrap:wrap}
+  .btn{
+    display:inline-flex;align-items:center;gap:8px;text-decoration:none;
+    padding:12px 22px;border-radius:12px;font-size:15px;font-weight:600;transition:.2s;border:0;cursor:pointer;
+  }
+  .btn-primary{background:linear-gradient(90deg,var(--brand),var(--cyan));color:#fff;box-shadow:0 8px 24px rgba(79,70,229,.4)}
+  .btn-primary:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(79,70,229,.5)}
+  .btn-ghost{background:rgba(255,255,255,.1);color:#e0e7ff;border:1px solid rgba(255,255,255,.25)}
+  .btn-ghost:hover{background:rgba(255,255,255,.18)}
+
+  /* Hero 右侧：对话演示 */
+  .chat-demo{
+    background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);
+    border-radius:20px;padding:18px;backdrop-filter:blur(6px);
+    box-shadow:0 24px 60px rgba(0,0,0,.35);
+  }
+  .chat-head{display:flex;align-items:center;gap:8px;padding:2px 6px 14px}
+  .chat-head i{width:10px;height:10px;border-radius:50%;display:inline-block}
+  .chat-head i:nth-child(1){background:#f87171}.chat-head i:nth-child(2){background:#fbbf24}.chat-head i:nth-child(3){background:#34d399}
+  .chat-head span{margin-left:8px;font-size:12.5px;color:#a5b4fc}
+  .msg{max-width:88%;padding:11px 15px;border-radius:14px;font-size:14px;line-height:1.65;margin-bottom:12px}
+  .msg.user{background:rgba(255,255,255,.92);color:#1e293b;margin-left:auto;border-bottom-right-radius:4px}
+  .msg.agent{background:rgba(99,102,241,.22);border:1px solid rgba(129,140,248,.35);color:#e0e7ff;border-bottom-left-radius:4px}
+  .toolchip{
+    display:inline-flex;align-items:center;gap:6px;margin:3px 4px 3px 0;
+    background:rgba(6,182,212,.18);border:1px solid rgba(34,211,238,.4);
+    color:#a5f3fc;font-size:12px;padding:3px 10px;border-radius:99px;
+    font-family:Consolas,Menlo,monospace;
+  }
+  .msg .final{margin-top:8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,.25);color:#fff}
+
+  /* ---------- 通用区块 ---------- */
+  section{max-width:1080px;margin:0 auto;padding:64px 24px 8px}
+  .sec-tag{
+    display:inline-block;font-size:13px;font-weight:700;letter-spacing:2px;
+    color:var(--brand-deep);background:#eef2ff;padding:4px 14px;border-radius:99px;margin-bottom:14px;
+  }
+  h2{font-size:clamp(24px,3vw,32px);font-weight:800;line-height:1.35}
+  .sec-sub{color:var(--ink-mute);margin-top:10px;max-width:70ch}
+  .grid{display:grid;gap:18px;margin-top:34px}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  @media(max-width:880px){.g3{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:600px){.g3,.g2{grid-template-columns:1fr}}
+  .card{
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:22px;box-shadow:var(--shadow);transition:.25s;
+  }
+  .card:hover{transform:translateY(-3px);box-shadow:0 4px 10px rgba(15,23,42,.08),0 16px 36px rgba(15,23,42,.1)}
+  .card .icon{font-size:26px;width:52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;margin-bottom:14px}
+  .card h3{font-size:17px;font-weight:700;margin-bottom:6px}
+  .card p{font-size:14px;color:var(--ink-soft)}
+  .card .tools{margin-top:12px;display:flex;flex-wrap:wrap;gap:6px}
+  .tool-tag{
+    font-family:Consolas,Menlo,monospace;font-size:11.5px;
+    background:#f1f5f9;border:1px solid var(--line);color:#475569;
+    padding:2px 8px;border-radius:6px;
+  }
+  .i-indigo{background:#eef2ff}.i-cyan{background:#ecfeff}.i-amber{background:#fffbeb}
+  .i-green{background:#ecfdf5}.i-rose{background:#fff1f2}.i-violet{background:#f5f3ff}
+  .i-sky{background:#f0f9ff}.i-slate{background:#f8fafc}
+
+  /* ---------- 对比块 ---------- */
+  .vs-box{border-radius:var(--radius);padding:20px;border:1px solid}
+  .vs-bad{background:#fff7f7;border-color:#fecaca}
+  .vs-good{background:#f0fdf4;border-color:#bbf7d0}
+  .vs-head{display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px;margin-bottom:10px}
+  .vs-bad .vs-head{color:#b91c1c}.vs-good .vs-head{color:#15803d}
+  .vs-box p{font-size:14.5px;color:var(--ink-soft)}
+  .vs-box .why{margin-top:10px;font-size:13px;padding:8px 12px;border-radius:10px}
+  .vs-bad .why{background:#fee2e2;color:#991b1b}
+  .vs-good .why{background:#dcfce7;color:#166534}
+
+  /* ---------- 循环图 ---------- */
+  .loop-wrap{display:grid;grid-template-columns:1.05fr .95fr;gap:36px;margin-top:34px;align-items:center}
+  @media(max-width:880px){.loop-wrap{grid-template-columns:1fr}}
+  .loop-steps{display:flex;flex-direction:column;gap:0}
+  .lstep{display:flex;gap:16px;position:relative;padding-bottom:22px}
+  .lstep:last-child{padding-bottom:0}
+  .lstep::before{content:"";position:absolute;left:19px;top:40px;bottom:0;width:2px;background:linear-gradient(#c7d2fe,#e0e7ff)}
+  .lstep:last-child::before{display:none}
+  .lnum{
+    width:40px;height:40px;border-radius:12px;flex:none;z-index:1;
+    background:linear-gradient(135deg,var(--brand),var(--cyan));color:#fff;
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;
+    box-shadow:0 4px 12px rgba(79,70,229,.3);
+  }
+  .lstep h4{font-size:16px;font-weight:700}
+  .lstep p{font-size:14px;color:var(--ink-soft);margin-top:2px}
+  .lstep .back{
+    margin-left:56px;margin-top:-12px;margin-bottom:18px;font-size:13px;color:var(--brand-deep);
+    background:#eef2ff;border:1px dashed #c7d2fe;border-radius:10px;padding:6px 12px;display:inline-block;
+  }
+
+  /* ---------- 提问法则 ---------- */
+  .rule{display:flex;gap:18px;padding:22px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+  .rule .rnum{
+    font-size:22px;font-weight:800;color:transparent;flex:none;
+    -webkit-text-stroke:1.5px var(--brand);
+  }
+  .rule h3{font-size:16.5px;font-weight:700;margin-bottom:6px}
+  .rule p{font-size:14px;color:var(--ink-soft)}
+  .rule code, .p code, details code, .qa code{
+    font-family:Consolas,Menlo,monospace;font-size:.88em;
+    background:#eef2ff;color:#4338ca;padding:1px 6px;border-radius:6px;
+  }
+
+  /* ---------- 场景 Tabs ---------- */
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-top:30px}
+  .tab-btn{
+    border:1px solid var(--line);background:#fff;color:var(--ink-soft);
+    padding:9px 18px;border-radius:99px;font-size:14.5px;cursor:pointer;transition:.2s;font-family:inherit;
+  }
+  .tab-btn:hover{border-color:#c7d2fe;color:var(--brand-deep)}
+  .tab-btn.active{background:linear-gradient(90deg,var(--brand),var(--cyan));color:#fff;border-color:transparent;font-weight:600}
+  .tab-panel{display:none;margin-top:20px}
+  .tab-panel.show{display:grid;gap:14px;animation:fadein .3s}
+  @keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .prompt-card{
+    background:#0f172a;border-radius:14px;padding:18px 18px 14px;color:#e2e8f0;
+    display:flex;flex-direction:column;gap:10px;
+  }
+  .prompt-card .p-label{font-size:12.5px;color:#7dd3fc;font-weight:700;letter-spacing:1px}
+  .prompt-card .p{font-size:14.5px;line-height:1.8;color:#cbd5e1}
+  .prompt-card .foot{display:flex;align-items:center;justify-content:space-between;border-top:1px solid #1e293b;padding-top:10px}
+  .prompt-card .hint{font-size:12.5px;color:#64748b}
+  .copy-btn{
+    background:#1e293b;border:1px solid #334155;color:#94a3b8;font-size:12.5px;
+    padding:5px 14px;border-radius:8px;cursor:pointer;transition:.2s;font-family:inherit;
+  }
+  .copy-btn:hover{color:#e2e8f0;border-color:#64748b}
+  .copy-btn.done{color:#34d399;border-color:#34d399}
+
+  /* ---------- 小测验 ---------- */
+  .quiz{margin-top:34px;display:grid;gap:18px}
+  .q-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:24px;box-shadow:var(--shadow)}
+  .q-title{font-weight:700;font-size:15.5px;margin-bottom:4px}
+  .q-scene{font-size:14px;color:var(--ink-mute);margin-bottom:16px}
+  .q-opts{display:grid;gap:10px}
+  .q-opt{
+    text-align:left;border:1.5px solid var(--line);background:#f8fafc;border-radius:12px;
+    padding:13px 16px;font-size:14.5px;cursor:pointer;transition:.2s;font-family:inherit;color:var(--ink);line-height:1.7;
+  }
+  .q-opt:hover{border-color:#a5b4fc;background:#eef2ff}
+  .q-opt.right{border-color:var(--ok);background:#ecfdf5}
+  .q-opt.wrong{border-color:var(--bad);background:#fef2f2}
+  .q-opt:disabled{cursor:default}
+  .q-exp{display:none;margin-top:14px;font-size:13.5px;border-radius:10px;padding:10px 14px;background:#fffbeb;border:1px solid #fde68a;color:#92400e}
+  .q-exp.show{display:block;animation:fadein .3s}
+
+  /* ---------- 权限 ---------- */
+  .perm{border-top:6px solid;border-radius:var(--radius);background:var(--card);border-left:1px solid var(--line);border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:22px;box-shadow:var(--shadow)}
+  .perm .p-icon{font-size:30px}
+  .perm h3{font-size:17px;margin:8px 0 6px}
+  .perm p{font-size:14px;color:var(--ink-soft)}
+  .perm .scene{margin-top:12px;font-size:13px;padding:8px 12px;border-radius:10px;background:#f1f5f9;color:var(--ink-mute)}
+  .perm-safe{border-color:#10b981}.perm-ask{border-color:#f59e0b}.perm-full{border-color:#ef4444}
+
+  /* ---------- FAQ ---------- */
+  details{
+    background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:0 22px;box-shadow:var(--shadow);margin-bottom:12px;
+  }
+  details summary{
+    cursor:pointer;list-style:none;padding:18px 0;font-weight:600;font-size:15.5px;
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+  }
+  details summary::-webkit-details-marker{display:none}
+  details summary .arr{transition:.25s;color:var(--brand);flex:none;font-size:14px}
+  details[open] summary .arr{transform:rotate(180deg)}
+  details .ans{padding:0 0 18px;font-size:14.5px;color:var(--ink-soft)}
+
+  /* ---------- 清单 ---------- */
+  .check-card{
+    background:linear-gradient(140deg,#111827,#312e81);color:#e0e7ff;
+    border-radius:20px;padding:34px;box-shadow:0 20px 50px rgba(30,27,75,.35);
+  }
+  .check-card h3{font-size:20px;color:#fff;margin-bottom:18px}
+  .check-card ol{list-style:none;counter-reset:c;display:grid;gap:12px}
+  .check-card li{counter-increment:c;display:flex;gap:14px;font-size:14.5px;line-height:1.7}
+  .check-card li::before{
+    content:counter(c);flex:none;width:26px;height:26px;border-radius:8px;margin-top:2px;
+    background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);
+    display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#a5f3fc;
+  }
+
+  footer{
+    margin-top:80px;background:#0f172a;color:#94a3b8;
+    padding:44px 24px;text-align:center;font-size:14px;
+  }
+  footer .foot-logo{font-weight:800;font-size:18px;color:#e0e7ff;margin-bottom:8px}
+  footer code{background:#1e293b;padding:2px 8px;border-radius:6px;color:#7dd3fc;font-family:Consolas,monospace;font-size:13px}
+</style>
+</head>
+<body>
+
+<!-- ============ 导航 ============ -->
+<nav class="topbar">
+  <div class="topbar-inner">
+    <a class="logo" href="#top"><span class="dot">C4</span>C4EAI 使用指南</a>
+    <div class="topnav">
+      <a href="#diff">我和聊天机器人</a>
+      <a href="#skills">功能面板</a>
+      <a href="#rules">提问五法则</a>
+      <a href="#scene">场景示范</a>
+      <a href="#quiz">小测验</a>
+      <a href="#safety">安全边界</a>
+      <a href="#faq">FAQ</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ============ Hero ============ -->
+<header class="hero" id="top">
+  <div class="hero-inner">
+    <div>
+      <div class="hero-badge"><span class="pulse"></span>C4EAI · 组内科研辅助智能体 · 在线</div>
+      <h1>你好，我是 <span class="grad">C4EAI</span>。<br>这份指南，由我自己来写。</h1>
+      <p class="sub">
+        你们可以把我当成一位<b>会动手的科研助手</b>：不只回答问题，还能上网查资料、解析文献、查知识图谱、跑代码、读写文件、把结果整理成表格和图。
+        但要把我用好，你得先知道我"怎么想"、我"会什么"、以及"怎么说"我才能听懂。下面这套方法，是我根据上千轮对话总结出来的——照着用，效率翻倍。
+      </p>
+      <div class="chips">
+        <span class="chip">🧰 16 个后端工具</span>
+        <span class="chip">🕸️ Neo4j 知识图谱</span>
+        <span class="chip">📄 MinerU 文献解析</span>
+        <span class="chip">🔍 联网搜索</span>
+        <span class="chip">💾 技能系统</span>
+        <span class="chip">👥 多用户共享 Wiki</span>
+      </div>
+      <div class="cta">
+        <a class="btn btn-primary" href="#rules">先学怎么提问 ↓</a>
+        <a class="btn btn-ghost" href="#skills">看看我会什么</a>
+      </div>
+    </div>
+
+    <!-- 对话演示 -->
+    <div class="chat-demo">
+      <div class="chat-head"><i></i><i></i><i></i><span>c4eai · 对话实录</span></div>
+      <div class="msg user">帮我查查"零价铁"降解四环素最近有什么进展，整理成一段综述.</div>
+      <div class="msg agent">
+        好的，我先查资料，再动笔——
+        <div style="margin-top:6px">
+          <span class="toolchip">🔍 web_search("零价铁 四环素 降解")</span>
+          <span class="toolchip">🌐 web_extract(3 篇综述)</span>
+          <span class="toolchip">🕸️ graph_query · search</span>
+        </div>
+        <div class="final">✔ 已检索 12 篇文献、比对图谱中 8 个相关实体，综述草稿如下：零价铁通过还原脱氯与吸附协同作用……（需要的话我可以把全文写入 Wiki 或导出 .docx）</div>
+      </div>
+      <div class="msg user">存到共享 Wiki，分类放"水处理"。</div>
+      <div class="msg agent"><span class="toolchip">📁 write_file → Wiki/水处理/</span><div class="final">✔ 已保存，组内同学现在都能看到了。</div></div>
+    </div>
+  </div>
+</header>
+
+<!-- ============ 1. 我和聊天机器人的区别 ============ -->
+<section id="diff">
+  <span class="sec-tag">01 · 先搞懂我</span>
+  <h2>我不只是"聊天机器人"——我是一个会动手的智能体</h2>
+  <p class="sec-sub">
+    普通聊天机器人只能"说话"；我有一条<b>工具循环</b>：接到任务后，我会自己拆解步骤、调用工具、观察结果、发现问题就重来，最后把<b>做好的东西</b>交给你，而不是一段"你应该这样做"的建议。
+  </p>
+  <div class="loop-wrap">
+    <div class="loop-steps">
+      <div class="lstep">
+        <div class="lnum">1</div>
+        <div><h4>接收任务</h4><p>你用自然语言描述目标，越清楚越好（下面第 3 节教你怎么说）。</p></div>
+      </div>
+      <div class="lstep">
+        <div class="lnum">2</div>
+        <div><h4>规划拆解</h4><p>复杂任务我会先拆成小步骤，用任务清单（todo）管理进度，你能看到我在干什么。</p></div>
+      </div>
+      <div class="lstep">
+        <div class="lnum">3</div>
+        <div><h4>调用工具</h4><p>搜索、读文件、查图谱、跑代码……每一步调用都会显示在对话里，全程透明。</p></div>
+      </div>
+      <div class="lstep">
+        <div class="lnum">4</div>
+        <div><h4>观察与修正</h4><p>我会检查工具返回的结果：报错了就改，资料不够就再搜，不满意就换思路。</p></div>
+      </div>
+      <div class="lstep">
+        <div class="lnum">5</div>
+        <div><h4>交付成果</h4><p>给你答案、表格、图或文件。需要落盘的，我会用 write_file 帮你保存。</p></div>
+      </div>
+      <div class="back" style="margin-top:6px">↺ 结果不理想？第 4 步会自动回到第 3 步重试，你也可以直接说"哪里不对"</div>
+    </div>
+    <div>
+      <div class="vs-box vs-bad" style="margin-bottom:16px">
+        <div class="vs-head">🤖 普通聊天机器人</div>
+        <p>"处理 PDF？建议你安装 xx 软件然后用 yy 脚本……（然后你自己动手两小时）"</p>
+      </div>
+      <div class="vs-box vs-good">
+        <div class="vs-head">✨ 我（C4EAI）</div>
+        <p>"收到，这批 10 篇 PDF 我用 MinerU 解析完了，方法和结论已提取成表格，存在 <b>output/summary.xlsx</b>，其中 2 篇解析失败已列出原因。"</p>
+      </div>
+      <p style="margin-top:16px;font-size:13.5px;color:var(--ink-mute)">
+        💡 所以，请把我当<b>执行者</b>而不是<b>咨询台</b>：与其问我"怎么提取数据"，不如直接说"帮我把数据提取出来"。
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 2. 功能面板 ============ -->
+<section id="skills">
+  <span class="sec-tag">02 · 功能面板</span>
+  <h2>我会什么？——我的工具箱全在这里</h2>
+  <p class="sec-sub">这些工具按分组挂在我的配置面板里，你可以在「智能体配置」中按需钩选。平时不用记命令，<b>用自然语言描述需求，我会自己挑工具</b>。</p>
+  <div class="grid g3">
+    <div class="card"><div class="icon i-cyan">🔍</div><h3>联网搜索与网页阅读</h3><p>实时搜索并抓取网页正文，查最新进展、找协议、追参考文献都不在话下。</p>
+      <div class="tools"><span class="tool-tag">web_search</span><span class="tool-tag">web_extract</span></div></div>
+    <div class="card"><div class="icon i-rose">📄</div><h3>文献批量解析</h3><p>MinerU 引擎批量把 PDF 转成 Markdown，支持整个文件夹，论文表格公式也能较好保留。</p>
+      <div class="tools"><span class="tool-tag">mineru_parse</span></div></div>
+    <div class="card"><div class="icon i-indigo">🕸️</div><h3>知识图谱检索</h3><p>查询组内 Neo4j 图谱：看结构、写 Cypher、搜实体关系，把散落的科研知识连成网。</p>
+      <div class="tools"><span class="tool-tag">graph_query (schema/cypher/search)</span></div></div>
+    <div class="card"><div class="icon i-sky">📎</div><h3>全能文件解析</h3><p>上传 pdf / docx / xlsx / pptx / txt 都能读；附件会存成 file_id，之后随时引用，不用重复上传。</p>
+      <div class="tools"><span class="tool-tag">附件上传</span><span class="tool-tag">file_id 引用</span></div></div>
+    <div class="card"><div class="icon i-violet">🖼️</div><h3>图片理解</h3><p>把图发给我，我能看懂内容：读图表数据、认谱图、检查实验照片里的现象。</p>
+      <div class="tools"><span class="tool-tag">多模态视觉模型</span></div></div>
+    <div class="card"><div class="icon i-green">💻</div><h3>代码执行与终端</h3><p>run_code 沙箱跑脚本，terminal 直接在项目真实环境里操作——装包、建 venv、批处理都行。</p>
+      <div class="tools"><span class="tool-tag">run_code</span><span class="tool-tag">terminal</span></div></div>
+    <div class="card"><div class="icon i-amber">🗂️</div><h3>文件读写</h3><p>读取、创建、修改项目里的文件，也可以直接读你上传过的附件。成果落盘靠它。</p>
+      <div class="tools"><span class="tool-tag">read_file</span><span class="tool-tag">write_file</span><span class="tool-tag">list_files</span></div></div>
+    <div class="card"><div class="icon i-slate">🧠</div><h3>记忆与知识库</h3><p>我能搜历史对话、检索知识库、记工作笔记——跨会话的重要信息不会轻易丢。</p>
+      <div class="tools"><span class="tool-tag">search_history</span><span class="tool-tag">search_knowledge</span><span class="tool-tag">conversation_notes</span></div></div>
+    <div class="card"><div class="icon i-indigo">💾</div><h3>技能系统</h3><p>SKILL.md 把成套工作流固化为"技能"，按需加载；我甚至能自己编写新技能沉淀经验。</p>
+      <div class="tools"><span class="tool-tag">skill_list</span><span class="tool-tag">skill_view</span><span class="tool-tag">skill_write</span></div></div>
+    <div class="card"><div class="icon i-cyan">✅</div><h3>任务清单</h3><p>长任务我会列 todo 逐项推进、逐项勾销，你随时能看到进度，不怕我干一半忘事。</p>
+      <div class="tools"><span class="tool-tag">todo</span></div></div>
+    <div class="card"><div class="icon i-green">📚</div><h3>共享 Wiki</h3><p>组内共享的笔记/文档库。让我把成果写入 Wiki，师弟师妹就能直接接着用。</p>
+      <div class="tools"><span class="tool-tag">多用户共享</span></div></div>
+    <div class="card"><div class="icon i-rose">🎛️</div><h3>权限模式</h3><p>三档权限控制我能"动手"的范围：能读、能写还是要先问你，你说了算（见第 6 节）。</p>
+      <div class="tools"><span class="tool-tag">安全</span><span class="tool-tag">询问</span><span class="tool-tag">完全访问</span></div></div>
+  </div>
+</section>
+
+<!-- ============ 3. 提问五法则 ============ -->
+<section id="rules">
+  <span class="sec-tag">03 · 核心技能</span>
+  <h2>把我用好的关键：把话说清楚</h2>
+  <p class="sec-sub">同一个我，提问方式不同，产出天差地别。记住这五条法则，它们覆盖了 90% 的场景。</p>
+  <div class="grid g2" style="margin-top:28px">
+    <div class="rule"><div class="rnum">1</div><div>
+      <h3>说目标，别只说动作</h3>
+      <p>告诉我要<b>什么产出</b>，而不只是"帮我看看"。说清：要一份表格？一段综述？一张图？还是存成文件？</p>
+    </div></div>
+    <div class="rule"><div class="rnum">2</div><div>
+      <h3>给足上下文</h3>
+      <p>文件在哪、数据是什么、导师有什么要求、 audience 是谁——这些背景直接决定我做得对不对。<b>上传的附件和路径尽量一起给</b>。</p>
+    </div></div>
+    <div class="rule"><div class="rnum">3</div><div>
+      <h3>放心把多步任务交给我</h3>
+      <p>不用你把步骤切碎。一句"解析→提取→作图→存档"的完整需求，我会自己规划、逐项执行、逐项汇报。</p>
+    </div></div>
+    <div class="rule"><div class="rnum">4</div><div>
+      <h3>指定格式与落点</h3>
+      <p>明确"输出成 csv / Markdown / 图，保存到 xx 文件夹"。我不猜你的偏好——你说，我就照做。</p>
+    </div></div>
+    <div class="rule"><div class="rnum">5</div><div>
+      <h3>不满意就直说</h3>
+      <p>"表格列别合并""综述再精简到 300 字""第 3 篇数据不对重查"——<b>迭代比重开一轮快得多</b>，我保留着完整上下文。</p>
+    </div></div>
+    <div class="rule"><div class="rnum">★</div><div>
+      <h3>万能提问公式</h3>
+      <p><code>角色/背景</code> + <code>具体任务</code> + <code>材料/路径</code> + <code>产出格式</code> + <code>保存位置</code>。<br>例如："我是做 Fenton 降解的（背景），把这批文献的反应条件整理成表（任务），文件在 data/papers（材料），输出 csv（格式），存到 output/（落点）。"</p>
+    </div></div>
+  </div>
+</section>
+
+<!-- ============ 4. 场景示范 ============ -->
+<section id="scene">
+  <span class="sec-tag">04 · 照着抄就行</span>
+  <h2>场景示范：科研日常的现成话术</h2>
+  <p class="sec-sub">选一个分类，点右上角按钮即可复制，把文件名和路径换成你自己的就能用。</p>
+  <div class="tabs" id="tabs">
+    <button class="tab-btn active" data-tab="t1">📄 文献处理</button>
+    <button class="tab-btn" data-tab="t2">🕸️ 知识图谱</button>
+    <button class="tab-btn" data-tab="t3">📊 数据分析</button>
+    <button class="tab-btn" data-tab="t4">✍️ 写作与知识沉淀</button>
+  </div>
+
+  <div class="tab-panel show" id="t1">
+    <div class="prompt-card">
+      <div class="p-label">批量解析一批 PDF</div>
+      <div class="p">"帮我解析 D:/papers/UV-Fenton 文件夹里的全部 PDF，转成 Markdown；然后每篇用 200 字总结：研究体系、催化剂、污染物、关键结论，汇总成一个表格给我。"</div>
+      <div class="foot"><span class="hint">我会调用 mineru_parse 逐篇解析，再逐篇读文件提炼</span><button class="copy-btn">📋 复制</button></div>
+    </div>
+    <div class="prompt-card">
+      <div class="p-label">从文献里提取参数</div>
+      <div class="p">"这几篇 PDF 已上传。请提取每篇的：催化剂种类与投加量、H₂O₂ 浓度、初始 pH、污染物及初始浓度、反应时间与降解率。整理成 csv，缺失的参数标 'NR'，并注明来自哪一篇。"</div>
+      <div class="foot"><span class="hint">说清"缺失标 NR"能避免我瞎编数据</span><button class="copy-btn">📋 复制</button></div>
+    </div>
+    <div class="prompt-card">
+      <div class="p-label">文献对比与批判</div>
+      <div class="p">"对比这 3 篇文献在相同污染物下的降解效率差异，分析可能的原因（催化剂、光源、水质），指出它们实验设计上的局限，最后给出你认为最可借鉴的方案。"</div>
+      <div class="foot"><span class="hint">要求"指出局限"能触发更有深度的分析</span><button class="copy-btn">📋 复制</button></div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="t2">
+    <div class="prompt-card">
+      <div class="p-label">图谱探索</div>
+      <div class="p">"查一下图谱里和'零价铁'相关的催化剂节点，以及它们各自催化降解过的污染物，整理成'催化剂—污染物'对应表。"</div>
+      <div class="foot"><span class="hint">我会先用 graph_query·search 找实体，再顺着关系扩展</span><button class="copy-btn">📋 复制</button></div>
+    </div>
+    <div class="prompt-card">
+      <div class="p-label">图谱统计与可视化</div>
+      <div class="p">"用 Cypher 统计图谱里每种污染物被研究的频次，输出柱状图；如果图谱里缺少 'UV-Fenton' 相关的关系，列出我可能需要补充的节点和边。"</div>
+      <div class="foot"><span class="hint">graph_query 的 schema 模式可先让我看图谱结构</span><button class="copy-btn">📋 复制</button></div>
+    </div>
+    <div class="prompt-card">
+      <div class="p-label">文献 → 图谱入库</div>
+      <div class="p">"我刚解析完这篇综述（附件），把其中出现的催化剂、污染物、反应体系抽成实体和关系，按图谱现有 schema 生成一份待入库清单，先给我确认再写。"</div>
+      <div class="foot"><span class="hint">"先确认再写"= 让我在询问模式下工作，更稳</span><button class="copy-btn">📋 复制</button></div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="t3">
+    <div class="prompt-card">
+      <div class="p-label">数据清洗与拟合</div>
+      <div class="p">"读取 data/kinetics_exp3.csv，先检查缺失值和异常点并报告；然后对 C/C₀–t 数据分别拟合准一级和准二级动力学，输出 k 值、R² 和对比图，图保存为 output/kinetics.png。"</div>
+      <div class="foot"><span class="hint">我会用 run_code 写脚本跑，报错自己修</span><button class="copy-btn">📋 复制</button></div>
+    </div>
+    <div class="prompt-card">
+      <div class="p-label">批量处理实验记录</div>
+      <div class="p">"output/ 下有 12 个批次的 xlsx 记录，格式统一。请合并成一个总表，按批次计算平均降解率和标准差，标出低于 90% 的批次，生成周报用的汇总表。"</div>
+      <div class="foot"><span class="hint">批处理 + 汇总 + 预警，一次说完</span><button class="copy-btn">📋 复制</button></div>
+    </div>
+    <div class="prompt-card">
+      <div class="p-label">画 publication 级图的初稿</div>
+      <div class="p">"用 matplotlib 画吸附等温线：Langmuir 和 Freundlich 两个模型画在同一条散点图上，标注拟合参数，配色用色盲友好方案，300 dpi，图例放图内左上角。"</div>
+      <div class="foot"><span class="hint">图的细节要求越具体，返工越少</span><button class="copy-btn">📋 复制</button></div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="t4">
+    <div class="prompt-card">
+      <div class="p-label">起草综述段落</div>
+      <div class="p">"基于这 5 篇文献和我们 Wiki 里'水处理'分类的笔记，写一段 500 字的 UV-Fenton 机理综述：先讲 •OH 生成路径，再讲协同效应，每个论点标注来源（文献编号或 Wiki 页面）。"</div>
+      <div class="foot"><span class="hint">"标注来源"让我有据可查，你能核验</span><button class="copy-btn">📋 复制</button></div>
+    </div>
+    <div class="prompt-card">
+      <div class="p-label">沉淀为共享知识</div>
+      <div class="p">"把我们刚才关于'催化剂投加量优化'的讨论整理成一篇结构化笔记（背景/结论/注意事项/参考文件），写入共享 Wiki 的'实验方法'分类。"</div>
+      <div class="foot"><span class="hint">让讨论成果进 Wiki，才是组内复利的开始</span><button class="copy-btn">📋 复制</button></div>
+    </div>
+    <div class="prompt-card">
+      <div class="p-label">把经验固化为技能</div>
+      <div class="p">"我们每次提取文献参数都要重复同样流程。请把这次的完整流程写成一个新的 SKILL.md 技能，命名 'fenton-param-extract'，下次一句话就能复用。"</div>
+      <div class="foot"><span class="hint">skill_write：教会我一次，终身受用</span><button class="copy-btn">📋 复制</button></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 5. 小测验 ============ -->
+<section id="quiz">
+  <span class="sec-tag">05 · 自测一下</span>
+  <h2>你会怎么问我？——3 道小题</h2>
+  <p class="sec-sub">每题两个选项，点一个看看你是不是已经会"和智能体说话"了。</p>
+  <div class="quiz">
+    <div class="q-card" data-answer="B">
+      <div class="q-title">Q1 · 你有一篇英文文献想快速了解</div>
+      <div class="q-scene">场景：组会前 10 分钟，你需要向师妹讲清这篇论文做了什么。</div>
+      <div class="q-opts">
+        <button class="q-opt" data-k="A">A. "帮我总结一下这篇论文。"</button>
+        <button class="q-opt" data-k="B">B. "我上传了这篇 PDF。用 5 句话总结：研究问题、方法、核心结果、创新点、局限；再列 3 个组会可能被问到的问题。"（附上附件）</button>
+      </div>
+      <div class="q-exp">✅ 选 B 更好：明确了产出长度（5 句）、结构（五个方面）和额外用途（预判提问）。A 也能做，但我只能猜你想要多细——结果常常"不对味"，来回返工。</div>
+    </div>
+    <div class="q-card" data-answer="B">
+      <div class="q-title">Q2 · 你要处理 30 篇 PDF</div>
+      <div class="q-scene">场景：课题需要把这批文献的实验条件汇总成数据库。</div>
+      <div class="q-opts">
+        <button class="q-opt" data-k="A">A. "这 30 篇你能处理吗？是不是太多了？要不先来 3 篇试试？"</button>
+        <button class="q-opt" data-k="B">B. "解析 papers/batch05 文件夹下全部 30 篇 PDF，提取催化剂/氧化剂剂量/pH/污染物/降解率 5 个字段，存成 output/batch05.csv；解析失败的列个清单，我们再单独处理。"</button>
+      </div>
+      <div class="q-exp">✅ 选 B 更好：批量任务交给我时，请说清<b>字段、输出位置、失败怎么办</b>。我会用任务清单逐篇推进。不需要替我"省力气"——重复性劳动正是我最擅长的。</div>
+    </div>
+    <div class="q-card" data-answer="A">
+      <div class="q-title">Q3 · 我给出的降解率数据和你的实验记录对不上</div>
+      <div class="q-scene">场景：我从某篇文献表格里提取的数值，和你印象中的不一样。</div>
+      <div class="q-opts">
+        <button class="q-opt" data-k="A">A. "第 7 行降解率 92% 和原文表格不一致，你重新读原文第 4 页那个表核对一下，并把提取时的页码标注出来。"</button>
+        <button class="q-opt" data-k="B">B. "你这数据是错的，你自己看着办。"</button>
+      </div>
+      <div class="q-exp">✅ 选 A 更好：<b>我会犯错</b>——尤其在表格密集、扫描件模糊的页面上。指出具体位置让我复核，是最有效的纠错方式。原则：我的产出可以信，但关键数据要过你的眼。</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 6. 安全边界 ============ -->
+<section id="safety">
+  <span class="sec-tag">06 · 必读</span>
+  <h2>安全边界：我有多大的"动手权"，你来定</h2>
+  <p class="sec-sub">智能体的能力和风险是一体两面。组内共享环境尤其要管好权限——在「智能体配置」面板切换这三档：</p>
+  <div class="grid g3" style="margin-top:28px">
+    <div class="card perm perm-safe">
+      <div class="p-icon">🛡️</div><h3>安全模式</h3>
+      <p>我只读不写：可以查资料、读文件、跑分析，但<b>不修改文件、不执行有副作用的命令</b>。</p>
+      <div class="scene">适合：查资料、读文献、回答问题等"只动嘴"的任务。</div>
+    </div>
+    <div class="card perm perm-ask">
+      <div class="p-icon">🙋</div><h3>询问模式（推荐日常）</h3>
+      <p>写文件、跑命令前我会先列出"我准备做什么"，<b>你点头我才动手</b>。</p>
+      <div class="scene">适合：日常科研任务——既能放手让我干，关键操作又有你把关。</div>
+    </div>
+    <div class="card perm perm-full">
+      <div class="p-icon">⚡</div><h3>完全访问</h3>
+      <p>我直接执行，不再逐步确认，效率最高，但<b>风险自担</b>。</p>
+      <div class="scene">适合：可信的批处理、你已验证过的重复流程。重要目录请先备份。</div>
+    </div>
+  </div>
+  <div class="grid g2" style="margin-top:18px">
+    <div class="card">
+      <h3>⚠️ 三条底线，请记住</h3>
+      <p style="margin-top:8px">
+      ① <b>关键数据要复核</b>：我从 PDF/图表里提取的数值，抽查几条对照原文；我的推理可能错，工具返回也可能被误读。<br>
+      ② <b>敏感信息别乱喂</b>：API Key、密码、未发表的核心数据，不要让我拿去联网检索或写进共享 Wiki。<br>
+      ③ <b>删除覆盖要看清</b>：我在询问/完全模式下执行删除、覆盖操作时，弹出的确认不是走形式——那 3 秒值得看。</p>
+    </div>
+    <div class="card">
+      <h3>💡 让成果"落袋为安"</h3>
+      <p style="margin-top:8px">
+      对话会被新会话冲淡，所以养成三个习惯：<br>
+      ① 重要结论让我 <code>write_file</code> 存成文件或写入 <b>共享 Wiki</b>；<br>
+      ② 跨会话要记住的事，让我用 <code>conversation_notes</code> 记下来，下次我能 <code>search_history</code> 找回；<br>
+      ③ 重复流程让写成 <b>技能（SKILL.md）</b>——教会我一次，全组受益。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 7. FAQ ============ -->
+<section id="faq">
+  <span class="sec-tag">07 · 你可能想问</span>
+  <h2>FAQ：同学们最常问我的几个问题</h2>
+  <div style="margin-top:28px">
+    <details>
+      <summary>你说的"工具"到底是什么？我需要学命令吗？<span class="arr">▼</span></summary>
+      <div class="ans">工具是我后台注册的能力（如 <code>web_search</code>、<code>mineru_parse</code>、<code>run_code</code>），由标准接口描述。你<b>完全不需要学命令</b>——自然语言说需求，我自动选择和串联工具。想看细节的话，对话里每次工具调用都是透明的，配置面板里也能看到全部清单并按组钩选。</div>
+    </details>
+    <details>
+      <summary>为什么你有时会答错，甚至"一本正经地胡说"？<span class="arr">▼</span></summary>
+      <div class="ans">我的底层是大语言模型，本质是概率预测，在记忆型细节（数值、引文、公式编号）上可能出错。降低错误的办法：① 让我"用工具查证"而不是凭记忆答；② 要求<b>标注来源和页码</b>；③ 关键数据抽查核对。发现错误请像 Q3 那样具体指出，我会重新核查。</div>
+    </details>
+    <details>
+      <summary>技能（Skill）和工具（Tool）有什么区别？<span class="arr">▼</span></summary>
+      <div class="ans">工具是单个动作（搜一次网页、读一个文件）；技能是<b>成套的工作流</b>——用 SKILL.md 把"先做什么、再做什么、注意什么"写下来。你可以用现成技能，也可以让我把你们的流程写成新技能。技能平时只列名字，用时才加载详情，省上下文。</div>
+    </details>
+    <details>
+      <summary>开个新对话，你就不记得我了吗？<span class="arr">▼</span></summary>
+      <div class="ans">会话内的上下文我很清楚；跨会话记忆需要主动存：① 让我用 <code>conversation_notes</code> 记要点；② 重要成果写入共享 Wiki；③ 我也能 <code>search_history</code> 检索历史对话。最稳的办法还是那句话——<b>重要的事，落盘</b>。</div>
+    </details>
+    <details>
+      <summary>我上传的文件去哪了？别人能看到吗？<span class="arr">▼</span></summary>
+      <div class="ans">上传后文件存在后端并分配一个 <code>file_id</code>，之后对话里我可以直接按 id 引用，无需重复上传。共享 Wiki 里<b>明确写入的内容</b>组内可见；普通附件和对话请默认视为组内共享资源，真正敏感的东西别传。</div>
+    </details>
+    <details>
+      <summary>任务做到一半卡住了 / 结果不是我想要的，怎么办？<span class="arr">▼</span></summary>
+      <div class="ans">直接说就行，不用客气：哪里不对、期望什么，越具体越快。如果是我跑偏了，说"回到第 2 步，改成 xx 思路"；如果是工具失败（如 MinerU 对扫描件解析失败），我会换路径（OCR / 换参数）或明确告诉你哪篇处理不了。长任务我挂着 todo 清单，你可以随时问"现在到哪一步了"。</div>
+    </details>
+    <details>
+      <summary>怎么开始用？<span class="arr">▼</span></summary>
+      <div class="ans">Windows 下双击项目里的 <code>start.bat</code>（或 <code>C4EAI.exe</code>），浏览器打开 <code>http://127.0.0.1:8080</code>。首次使用在「智能体配置」里：① 填模型 API Key（DeepSeek / 千问 / OpenAI 兼容）；② 按需连接 Neo4j 图谱、配置 MinerU Token；③ 钩选你要的工具分组。然后，把第一个任务交给我就行。</div>
+    </details>
+  </div>
+</section>
+
+<!-- ============ 8. 上手清单 ============ -->
+<section id="checklist">
+  <span class="sec-tag">08 · 收尾</span>
+  <h2>把这一页压缩成一张卡</h2>
+  <div class="check-card" style="margin-top:28px">
+    <h3>📌 和我合作的七条军规</h3>
+    <ol>
+      <li>把我当<b>执行者</b>：说"帮我做"，而不是"教我怎么做"。</li>
+      <li>提需求带五要素：<b>背景 + 任务 + 材料 + 格式 + 落点</b>。</li>
+      <li>多步任务一次交代，我自己拆解、自己推进、自己修错。</li>
+      <li>要求我<b>标注来源</b>，关键数据抽查核对——我会犯错。</li>
+      <li>不满意就具体反馈，<b>迭代比重开快</b>。</li>
+      <li>权限按需选：日常用<b>询问模式</b>，批处理再开完全访问。</li>
+      <li>重要成果<b>落盘</b>：存文件、进 Wiki、沉淀成技能。</li>
+    </ol>
+  </div>
+</section>
+
+<footer>
+  <div class="foot-logo">C4EAI · Shared Wiki</div>
+  <div>本页面由 C4EAI 撰写 —— 我把自己说明白了，接下来轮到你了。</div>
+  <div style="margin-top:10px">启动 <code>start.bat</code> → 打开 <code>http://127.0.0.1:8080</code> → 说一句"你好，我们开始吧"</div>
+</footer>
+
+<script>
+  // ---------- Tabs ----------
+  document.querySelectorAll('.tab-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('show'));
+      btn.classList.add('active');
+      document.getElementById(btn.dataset.tab).classList.add('show');
+    });
+  });
+
+  // ---------- Copy buttons ----------
+  document.querySelectorAll('.copy-btn').forEach(btn=>{
+    btn.addEventListener('click',async ()=>{
+      const text=btn.closest('.prompt-card').querySelector('.p').textContent.trim();
+      let ok=false;
+      try{ await navigator.clipboard.writeText(text); ok=true; }
+      catch(e){
+        const ta=document.createElement('textarea');
+        ta.value=text; document.body.appendChild(ta); ta.select();
+        try{ ok=document.execCommand('copy'); }catch(_){}
+        document.body.removeChild(ta);
+      }
+      if(ok){
+        btn.textContent='✅ 已复制'; btn.classList.add('done');
+        setTimeout(()=>{btn.textContent='📋 复制';btn.classList.remove('done');},1600);
+      }
+    });
+  });
+
+  // ---------- Quiz ----------
+  document.querySelectorAll('.q-card').forEach(card=>{
+    const answer=card.dataset.answer;
+    card.querySelectorAll('.q-opt').forEach(opt=>{
+      opt.addEventListener('click',()=>{
+        card.querySelectorAll('.q-opt').forEach(o=>{
+          o.disabled=true;
+          if(o.dataset.k===answer) o.classList.add('right');
+        });
+        if(opt.dataset.k!==answer) opt.classList.add('wrong');
+        card.querySelector('.q-exp').classList.add('show');
+      });
+    });
+  });
+
+  // ---------- Scroll spy ----------
+  const links=[...document.querySelectorAll('.topnav a')];
+  const targets=links.map(a=>document.querySelector(a.getAttribute('href'))).filter(Boolean);
+  const spy=new IntersectionObserver(es=>{
+    es.forEach(e=>{
+      if(e.isIntersecting){
+        links.forEach(l=>l.classList.toggle('active',l.getAttribute('href')==='#'+e.target.id));
+      }
+    });
+  },{rootMargin:'-30% 0px -60% 0px'});
+  targets.forEach(t=>spy.observe(t));
+</script>
+</body>
+</html>
