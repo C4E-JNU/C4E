@@ -137,7 +137,7 @@
                 '<div style="' + OV_CARD_STYLE + 'width:346px;background:var(--card-bg,#fff);border:1px solid var(--border,#ddd);border-radius:14px;overflow:hidden;box-shadow:0 16px 44px rgba(0,0,0,.28);position:relative;display:flex;">' +
                     // 左：品牌栏（底色跟随主题）
                     '<div style="flex:0 0 94px;background:linear-gradient(160deg,var(--primary-soft,#e8f4fd),#e9f8f5);border-right:1px solid var(--border,#eee);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:14px 6px;text-align:center;">' +
-                        '<img src="assets/icons/c4e-logo.png" alt="" style="width:34px;height:34px;border-radius:50%;object-fit:contain;background:#fff;padding:2px;box-sizing:border-box;">' +
+                        '<img src="assets/icons/c4e-app-48.png" alt="" style="width:34px;height:34px;border-radius:8px;object-fit:contain;">' +
                         '<div style="font-size:.64rem;line-height:1.35;color:var(--text-secondary,#5b6676);">' + t('auth.brand') + '</div>' +
                     '</div>' +
                     // 右：表单

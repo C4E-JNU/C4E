@@ -2,7 +2,7 @@
 
 > 前置：步骤五（`04_verified_image_data.json` + `04c_errata.json` + `04_annotation_table.json`）+ 步骤六（`05_node_inventory.json`）就绪
 > 执行：每篇 1 个 `fenton-schema-catalyst` + 每个实验节点 1 个 `fenton-schema-experiment`（**一次全批并行**）
->       + 主控（装配 → 曲线回填 → 对账门 → 数值标准化）
+>       + 主控（装配 → 曲线片段合并 → 对账门 → 数值标准化）
 
 ## 派发（拆两档案，一次全批并行）
 
@@ -33,7 +33,7 @@ context 给的是 **`datamining` 目录**（子智能体的输入文件、落盘
 （`x_unit`/`y_unit` 从 04 图账 `xy_axes` 照抄，随曲线透传进图谱；绑定表字段定义唯一载体见 fenton-schema-experiment 档案）；
 主控脚本按 `(figure, subfigure) + curve_label` 从 `04_verified_image_data.json` 取点，
 挂到主 `degradation_profiles`、**各水平自己的 `levels[].degradation_profiles`** 与实验 `other.control_curves`；
-`level_value` 随绑定表落到曲线条目上（缺则由回填脚本按所在 level 自动补）。
+`level_value` 随绑定表落到曲线条目上（由子智能体填充时按所在 level 写明，不得留空）。
 
 **变量 = 扫描组，水平进 `levels[]`（v2，2026-10-07 起）**：一个变量扫描组 = 一条 `variable_experiments`；
 该组扫的每个水平在 `levels[]` 里各占一项 —— **水平值 + 该水平的指标 + 该水平的曲线三者在同一项内一一对应**
@@ -55,14 +55,15 @@ context 给的是 **`datamining` 目录**（子智能体的输入文件、落盘
 1. **装配**：收集全部片段（片段数 = 派发实例数，缺谁按纪律重派）→ 催化剂片段（含 metadata）为树根 →
    实验片段按其 `catalyst_id` 内嵌进对应催化剂的 `experiments[]`（**ID 锚定，勿按名字配对**；
    装配只做结构插入、不改任何字段值）→ 逐篇落盘 `06_schema.json`；
-2. **曲线回填**：`python step7b_curve_backfill.py <论文夹 或 批次根> [--dry-run]`
-   - 按 `(figure, subfigure) + curve_label` 从 `04_verified_image_data.json` 取点（缺则 `03_image_data.json` 兜底），就地写回 `06_schema.json`（首次先备份 `06_schema.preraw.json`）；
-   - 报告 `06_curve_bindings.json`：`filled / already / unmatched / partial`；**未匹配不静默丢** —— 原条目保留并标 `qc.needs_review`，stdout 打印 `ref` 与原因；
-   - 先看结果不落盘用 `--dry-run`。
+2. **曲线片段合并**：收集各子智能体写好的 `datamining/06_curves_<ID>.json`（子智能体读 04 逐点复制的
+   点位 + 照抄的 `x_unit`/`y_unit`），合并进 `06_schema.json` 对应位置——**合并 LLM 产物属脚本允许的
+   确定性 IO；任何脚本不得从 04/03 取内容写 06**。合并后核对：verified 每条 curve 在 06 有归宿、
+   有 `points`、有非 null 的 `x_unit`/`y_unit`；缺 → **重派子智能体读 04/03 补齐**（修订闭环，
+   同步骤八 normalizer 模式），不许脚本代填。
 3. **对账门**：`python step7_reconcile.py <论文夹 或 批次根>`
    - **六项**：① 清点数 ↔ 填充数（催化剂/实验/变量**扫描组**）；② properties 键名在清单内（45 / 41 + stability 6）；③ `fill_stats` 四项和 = 总字段数；④ `pollutant_name` 单值；⑤ verified 每条 curve 在 schema 中有归宿、无缺 `points`；⑥ **变量水平对齐**：`levels[]` 每项须同时有 `level_value` 与 `metric_name`/`metric_value`（**塞了水平却不给对应指标 = FAIL**）、曲线 `level_value` 须与所在项一致、`levels` 项数须 ≥ 步骤六登记的 `declared_levels` 数（少 = 漏水平 FAIL；多 = WARN 待复核）；
    - 产物 `07_reconciliation.json`（单篇 → `<篇>/datamining/`；批次 → `<批次根>/_ledgers/`）；
-   - FAIL → 按 `missing` 补齐（缺字段补填 / 缺水平补 `levels` 项 / 缺 `points` 先跑回填）后重跑，直到 PASS。
+   - FAIL → 按 `missing` 补齐（缺字段补填 / 缺水平补 `levels` 项 / 缺 `points` 或缺轴单位 → **重派子智能体读 04 补齐**）后重跑，直到 PASS。
 4. **单位化已完成（填充时 LLM 完成）→ 交步骤八纯 LLM 复核**：`fenton-normalizer` 换主体只读复核
    `06_schema.json` 的【数】字段三元组（单位白名单 / 换算 / 缺失补充），修订闭环回填充员——
    全程无脚本，详见《步骤八_数值标准化与单位统一.md》。

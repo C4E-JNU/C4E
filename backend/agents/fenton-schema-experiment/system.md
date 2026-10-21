@@ -11,41 +11,46 @@
 
 context 给的是该篇的 **`datamining` 目录路径**——下列文件全在它下面。
 
-| 文件（均在 `<datamining 目录>` 下） | 用途 |
-|---|---|
-| `00_full_cleaned.md` | text 字段唯一来源（实验条件/动力学/机理/全部表格） |
-| `04_verified_image_data.json` | 图像侧已裁决数据：`xy_axes`（照抄坐标单位）、曲线、图内标注值 |
-| `04c_errata.json` | 真错误表，命中字段**必须取勘误值** |
-| `04_annotation_table.json` | 互证标注表；`finding.endpoint_backfill` = 量程内端点回填指令（Q4 一致，非矛盾） |
-| `05_node_inventory.json` | 你的实验骨架（exp_id / catalyst_id / 变量参数名与 `declared_levels`） |
+
+| 文件（均在`<datamining 目录>` 下） | 用途                                                                            |
+| ---------------------------------- | ------------------------------------------------------------------------------- |
+| `00_full_cleaned.md`               | text 字段唯一来源（实验条件/动力学/机理/全部表格）                              |
+| `04_verified_image_data.json`      | 图像侧已裁决数据：`xy_axes`（照抄坐标单位）、曲线、图内标注值                   |
+| `04c_errata.json`                  | 真错误表，命中字段**必须取勘误值**                                              |
+| `04_annotation_table.json`         | 互证标注表；`finding.endpoint_backfill` = 量程内端点回填指令（Q4 一致，非矛盾） |
+| `05_node_inventory.json`           | 你的实验骨架（exp_id / catalyst_id / 变量参数名与`declared_levels`）            |
 
 ## 二、取值优先级（逐字段判断）
 
 1. **errata 命中** → 取勘误值（`qc.q_flag=true`）；
 2. **同一事实正文与图都有数值**：差 < 5% y 轴量程 → **取正文值**；差 ≥ 5% 量程 → 取 `adopted_value`
    （存疑加 `needs_review`）；**曲线量程内端点回填同此口径**：标注表该曲线 `finding.endpoint_backfill`
-   命中 → 终点取正文值，绑定表附 `points_compact`（**照抄 `points_after`**），其派生指标
+   命中 → 终点取正文值，该曲线点位照抄 `points_after`（图账原点位仅终点替换为正文值），其派生指标
    `metric_source: "text_backfill@<时间>"` 标注；
 3. **仅图文矛盾已裁决的 dual_source 字段** → 取 `adopted_value`（存疑加 `needs_review`）；
-4. **degradation_profiles** → **只给绑定表，不贴点**（点位由主控回填）。实验级主曲线与每个变量节点的曲线
-   必须**逐条全部有归宿**（挂主 profiles、变量各水平 profiles 或实验 `other`）——verified 里每条 curve 都要在
-   schema 里出现一次、一条都不许漏（曲线整条未读是最大失分点）；绑定表格式
+4. **degradation_profiles** → **子智能体自己从 04 逐条复制**：打开 `04_verified_image_data.json` 该图记录，
+   把每条 curve 的 `points` 逐点复制进 schema（**不改数、不平滑、不插值**），连同 `x_unit`/`y_unit`
+   （从该记录 `xy_axes` **照抄**）一起写入曲线片段文件 `datamining/06_curves_<实验ID>.json`（用 python 写文件即可，不经聊天回贴，
+   无截断问题；主控装配合并进 06_schema.json——合并 LLM 产物属脚本允许的确定性 IO）。
+   无截断问题）。实验级主曲线与每个变量节点的曲线必须**逐条全部有归宿**（挂主 profiles、变量各水平
+   profiles 或实验 `other`）——verified 里每条 curve 都要在 schema 里出现一次、一条都不许漏
+   （曲线整条未读是最大失分点）；绑定表格式
    `{"ref": "Fig.7a", "curve_label": "pH=3", "metric": "C/C0", "x_unit": "min", "y_unit": "", "level_value": "3"}`：
-   `ref` = 图号 + 子图字母（整图不写字母）、`curve_label` **照抄图例原文**（对不上则回填失败）、
-   **`x_unit` / `y_unit` 必填**（从 `04_verified_image_data.json` 同 `(figure, subfigure)` 记录的 `xy_axes` **照抄**，
+   `ref` = 图号 + 子图字母（整图不写字母）、`curve_label` **照抄图例原文**、
+   **`x_unit` / `y_unit` 必填**（`x_axis.unit` → `x_unit`、`y_axis.unit` → `y_unit`，**永不留 null**，
    无量纲写 `""`，去除率写 `"%"`）、**`level_value`** = 该曲线对应的水平值（实验级主曲线不写）、
    一条绑定对多条曲线时用 `curve_labels: [...]`；
    **绑定三步（防找错曲线，每条绑定都过一遍）**：
    ① **先列后绑**：打开 04 里该 `(figure, subfigure)` 记录，把 `curves[].label` 的**全部原文**列出来；
    ② **逐字照抄**：`curve_label` 必须与图账标签**逐字一致**——下标（H₂O₂）、希腊字母、斜杠、括号全照抄，
-      不许简写（`"H2O2"`、`"cat"` 都对不上）；不同子图的同名曲线（Fig.6a 与 6b 都有 H2O2）靠
-      `ref` 的子图字母区分，别串台；
+   不许简写（`"H2O2"`、`"cat"` 都对不上）；不同子图的同名曲线（Fig.6a 与 6b 都有 H2O2）靠
+   `ref` 的子图字母区分，别串台；
    ③ **拿不准不绑**：标签对不上、或同面板两条相近曲线分不清归属 → 挂 `{"ref": "…", "missing": true}`
-      + `qc.needs_review=true`，**禁止按近似猜一条**——错一条曲线比缺一条曲线严重得多；
-   主控跑 `step7b_curve_backfill.py` 按 `(figure, subfigure) + curve_label` 从 `04_verified_image_data.json`
-   （缺则 `03_image_data.json` 兜底）取点回填；
-   **`metric` 只写指标名**（`C/C0` / `removal_efficiency` / `toc_removal` / `rate_constant_k` 等物理量名）；
-   **时间、数值、图号禁入 metric**——时间在点位的 x 里、数值在 levels 里、图号在 ref 里、单位在 x_unit/y_unit 里；
+   + `qc.needs_review=true`，**禁止按近似猜一条**——错一条曲线比缺一条曲线严重得多；
+     04 该图记录缺失时直接读 `03_image_data.json` 对应记录（同为提取件，直接读即可）；
+     **任何脚本不得从 04/03 取内容写 06——读取与填充全部由子智能体完成**；
+     **`metric` 只写指标名**（`C/C0` / `removal_efficiency` / `toc_removal` / `rate_constant_k` 等物理量名）；
+     **时间、数值、图号禁入 metric**——时间在点位的 x 里、数值在 levels 里、图号在 ref 里、单位在 x_unit/y_unit 里；
 5. **其余字段** → 正文直读；
 6. **两处都没有** → 省略空键，严禁臆造。
 
@@ -74,75 +79,80 @@ experiments[]（催化剂 × 一污染物 = 一个实验）
 
 ### 身份（3，全【文】，扁平）
 
-| 字段 | unit | 装什么 |
-|---|---|---|
-| `pollutant_name` | "" | 污染物名（**单值**，一实验一污染物；混合体系注明） |
-| `pollutant_class` | "" | 抗生素 / 染料 / 农药 / 酚类… |
-| `chemical_formula` | "" | 污染物分子式（`C14H15N3O3S`） |
+
+| 字段               | unit | 装什么                                             |
+| ------------------ | ---- | -------------------------------------------------- |
+| `pollutant_name`   | ""   | 污染物名（**单值**，一实验一污染物；混合体系注明） |
+| `pollutant_class`  | ""   | 抗生素 / 染料 / 农药 / 酚类…                      |
+| `chemical_formula` | ""   | 污染物分子式（`C14H15N3O3S`）                      |
 
 ### 基准条件（19，扁平）
 
-| 字段 | 类型 | 统一 unit | 装什么 |
-|---|---|---|---|
-| `oxidant_type` | 文 | "" | H2O2 / PMS / PS / 过硫酸盐 |
-| `oxidant_concentration` | 数 | mmol/L | 氧化剂浓度（被扫描 → levels） |
-| `oxidant_dosage` | 数 | mmol | 投加量（mL 记 raw 换算） |
-| `initial_pollutant_conc` | 数 | mg/L | 初始污染物浓度（ppm 视同 mg/L） |
-| `catalyst_dosage` | 数 | g/L | 催化剂投加量（mg/L <1 视为笔误改写注明） |
-| `solution_volume` | 数 | mL | 反应液体积 |
-| `initial_pH` | 数 | "" | 初始 pH（无量纲纯数字） |
-| `temperature` | 数 | ℃ | 反应温度（K − 273.15） |
-| `reaction_time` | 数 | min | 反应时长（h×60 / s÷60） |
-| `coexisting_substances` | 文 | "" | 共存离子 / HA 等列表（含各自浓度，原句直书） |
-| `light_condition` | 文 | "" | 暗场 / 可见光 / UV（波长强度入句） |
-| `reaction_system` | 文 | "" | 体系一句话（cat + 氧化剂 + 污染物 + 光/热） |
-| `process_mode` | 文 | "" | batch / 连续流 / 固定床 |
-| `agitation` | 数\|文 | "" 或 rpm | "300 rpm" 用三元组；"磁力搅拌" 字符串 |
-| `medium` | 文 | "" | 去离子水 / 自来水 / 实际废水 |
-| `replicates` | 数\|文 | "" 或 次 | "3 次" 三元组；未说明则省略 |
-| `oxidant_pollutant_molar_ratio` | 数 | "" | 摩尔比（raw 带式子 `H2O2:SMX = 50:1`） |
-| `catalyst_pollutant_mass_ratio` | 数 | "" | 质量比 |
-| `other_condition` | 文 | "" | 未列尽的条件 |
+
+| 字段                            | 类型   | 统一 unit | 装什么                                       |
+| ------------------------------- | ------ | --------- | -------------------------------------------- |
+| `oxidant_type`                  | 文     | ""        | H2O2 / PMS / PS / 过硫酸盐                   |
+| `oxidant_concentration`         | 数     | mmol/L    | 氧化剂浓度（被扫描 → levels）               |
+| `oxidant_dosage`                | 数     | mmol      | 投加量（mL 记 raw 换算）                     |
+| `initial_pollutant_conc`        | 数     | mg/L      | 初始污染物浓度（ppm 视同 mg/L）              |
+| `catalyst_dosage`               | 数     | g/L       | 催化剂投加量（mg/L <1 视为笔误改写注明）     |
+| `solution_volume`               | 数     | mL        | 反应液体积                                   |
+| `initial_pH`                    | 数     | ""        | 初始 pH（无量纲纯数字）                      |
+| `temperature`                   | 数     | ℃        | 反应温度（K − 273.15）                      |
+| `reaction_time`                 | 数     | min       | 反应时长（h×60 / s÷60）                    |
+| `coexisting_substances`         | 文     | ""        | 共存离子 / HA 等列表（含各自浓度，原句直书） |
+| `light_condition`               | 文     | ""        | 暗场 / 可见光 / UV（波长强度入句）           |
+| `reaction_system`               | 文     | ""        | 体系一句话（cat + 氧化剂 + 污染物 + 光/热）  |
+| `process_mode`                  | 文     | ""        | batch / 连续流 / 固定床                      |
+| `agitation`                     | 数\|文 | "" 或 rpm | "300 rpm" 用三元组；"磁力搅拌" 字符串        |
+| `medium`                        | 文     | ""        | 去离子水 / 自来水 / 实际废水                 |
+| `replicates`                    | 数\|文 | "" 或 次  | "3 次" 三元组；未说明则省略                  |
+| `oxidant_pollutant_molar_ratio` | 数     | ""        | 摩尔比（raw 带式子`H2O2:SMX = 50:1`）        |
+| `catalyst_pollutant_mass_ratio` | 数     | ""        | 质量比                                       |
+| `other_condition`               | 文     | ""        | 未列尽的条件                                 |
 
 ### 性能（8，扁平 = 标准条件值；**该指标被扫描时各水平值进 levels[].metric_value**）
 
-| 字段 | 类型 | 统一 unit | 装什么 |
-|---|---|---|---|
-| `removal_efficiency` | 数 | % | 去除率（标准条件） |
-| `decolorization_efficiency` | 数 | % | 脱色率 |
-| `rate_constant_k` | 数 | min⁻¹ | 准一级速率常数（h⁻¹÷60） |
-| `rate_constant_R2` | 数 | "" | 拟合 R² |
-| `toc_removal` | 数 | % | TOC 矿化率 |
-| `cod_removal` | 数 | % | COD 去除 |
-| `adsorption_contribution` | 数 | % | 吸附贡献占比（暗吸附对照） |
-| `chloride_release` | 数\|文 | mg/L | 氯释放；"未检出" 直书 |
+
+| 字段                        | 类型   | 统一 unit | 装什么                      |
+| --------------------------- | ------ | --------- | --------------------------- |
+| `removal_efficiency`        | 数     | %         | 去除率（标准条件）          |
+| `decolorization_efficiency` | 数     | %         | 脱色率                      |
+| `rate_constant_k`           | 数     | min⁻¹   | 准一级速率常数（h⁻¹÷60） |
+| `rate_constant_R2`          | 数     | ""        | 拟合 R²                    |
+| `toc_removal`               | 数     | %         | TOC 矿化率                  |
+| `cod_removal`               | 数     | %         | COD 去除                    |
+| `adsorption_contribution`   | 数     | %         | 吸附贡献占比（暗吸附对照）  |
+| `chloride_release`          | 数\|文 | mg/L      | 氯释放；"未检出" 直书       |
 
 ### 机理结论（10，全扁平）
 
-| 字段 | 类型 | 装什么 |
-|---|---|---|
-| `degradation_products` | 文 | 中间产物列表（LC-MS 鉴定名） |
-| `dominant_ROS` | 文 | ·OH / SO4·⁻ / ¹O₂（主+辅） |
-| `ros_detection_method` | 文 | EPR（DMPO/TEMP）+ 淬灭剂种类 |
-| `epr_signal_desc` | 文 | 信号形状（DMPO-·OH 四重峰 1:2:2:1） |
-| `xps_after_reaction` | 文 | 反应后价态变化描述 |
-| `degradation_pathway` | 文 | 降解途径（断键→羟基化→开环矿化） |
-| `toxicity_change` | 数\|文 | 毒性变化（发光细菌抑制率数值可三元组；定性直书） |
-| `pms_alone_control` | 数\|文 | % | 氧化剂单独对照 |
-| `h2o2_generation_consumption` | 数\|文 | mmol/L | 生成/消耗 |
-| `catalytic_activity` | 数\|文 | | 活性对比 |
-| `kinetics_model` | 文 | | 准一级 / 准二级（R² 入句） |
+
+| 字段                          | 类型   | 装什么                                           |
+| ----------------------------- | ------ | ------------------------------------------------ |
+| `degradation_products`        | 文     | 中间产物列表（LC-MS 鉴定名）                     |
+| `dominant_ROS`                | 文     | ·OH / SO4·⁻ / ¹O₂（主+辅）                  |
+| `ros_detection_method`        | 文     | EPR（DMPO/TEMP）+ 淬灭剂种类                     |
+| `epr_signal_desc`             | 文     | 信号形状（DMPO-·OH 四重峰 1:2:2:1）             |
+| `xps_after_reaction`          | 文     | 反应后价态变化描述                               |
+| `degradation_pathway`         | 文     | 降解途径（断键→羟基化→开环矿化）               |
+| `toxicity_change`             | 数\|文 | 毒性变化（发光细菌抑制率数值可三元组；定性直书） |
+| `pms_alone_control`           | 数\|文 | %                                                |
+| `h2o2_generation_consumption` | 数\|文 | mmol/L                                           |
+| `catalytic_activity`          | 数\|文 |                                                  |
+| `kinetics_model`              | 文     |                                                  |
 
 ### stability 6 键（嵌套① 子对象；循环数据**永不**进 properties、也不算变量组）
 
-| 键 | 类型 | unit | 装什么 |
-|---|---|---|---|
-| `cycle_count` | 数 | "" | 循环次数 |
-| `initial_efficiency` | 数 | % | 首次循环效率 |
-| `final_efficiency` | 数 | % | 末次循环效率 |
-| `efficiency_retention` | 数 | % | 保持率 |
-| `metal_leaching_conc` | 数 | mg/L | 金属浸出（ICP） |
-| `structure_after_rxn` | 文 | | 反应后 XRD/SEM 结构表征描述 |
+
+| 键                     | 类型 | unit | 装什么                      |
+| ---------------------- | ---- | ---- | --------------------------- |
+| `cycle_count`          | 数   | ""   | 循环次数                    |
+| `initial_efficiency`   | 数   | %    | 首次循环效率                |
+| `final_efficiency`     | 数   | %    | 末次循环效率                |
+| `efficiency_retention` | 数   | %    | 保持率                      |
+| `metal_leaching_conc`  | 数   | mg/L | 金属浸出（ICP）             |
+| `structure_after_rxn`  | 文   |      | 反应后 XRD/SEM 结构表征描述 |
 
 > 类型与步骤八校验门 `EXPERIMENT_NUM_KEYS` / `STABILITY_NUM_KEYS` 对齐：【文】字段字符串合法，
 > 不许包成 `{"value": null, …}` 空壳。
@@ -209,13 +219,14 @@ other:               {…}
 - `raw`：**必填，永不省**——原文原句或描述，保真上下文与次要口径；
 - 可选：`range: [30, 90]`、`qualifier: ">"`、`uncertainty: "±0.1"`。
 
-| 情形 | ✅ 正确 | ❌ 禁止 |
-|---|---|---|
-| 常规 | `{"value": 5, "unit": "mmol/L", "raw": "5 mmol/L H2O2"}` | `{"value": "5 mmol/L"}`（value 夹单位） |
-| 区间 | `{"value": null, "unit": "min", "range": [30, 90], "raw": "30-90 min 内降解完全"}` | `{"value": "30-90"}` |
-| 多口径 | `{"value": 95, "unit": "%", "raw": "95%（120 min；TOC 61%）"}` | 只留一个数丢其余 |
-| 【数|文】默认定性 | `"可忽略（PMS 单独 <5%）"` 直书；有数值 → `{"value": 8, "unit": "%", "raw": "PMS 单独吸附 8%"}` | 无脑包 null 三元组 |
-| 【数】字段无数值 | `"具磁性回收能力（未给浸出数值）"` 退字符串（步骤八标 unparsed，正常） | 硬凑假数值 |
+
+| 情形             | ✅ 正确                                                                            | ❌ 禁止                                                                                          |
+| ---------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 常规             | `{"value": 5, "unit": "mmol/L", "raw": "5 mmol/L H2O2"}`                           | `{"value": "5 mmol/L"}`（value 夹单位）                                                          |
+| 区间             | `{"value": null, "unit": "min", "range": [30, 90], "raw": "30-90 min 内降解完全"}` | `{"value": "30-90"}`                                                                             |
+| 多口径           | `{"value": 95, "unit": "%", "raw": "95%（120 min；TOC 61%）"}`                     | 只留一个数丢其余                                                                                 |
+| 【数             | 文】默认定性                                                                       | `"可忽略（PMS 单独 <5%）"` 直书；有数值 → `{"value": 8, "unit": "%", "raw": "PMS 单独吸附 8%"}` |
+| 【数】字段无数值 | `"具磁性回收能力（未给浸出数值）"` 退字符串（步骤八标 unparsed，正常）             | 硬凑假数值                                                                                       |
 
 ## 七、完整示例（few-shot，照这个密度和形态填）
 
@@ -264,7 +275,40 @@ other:               {…}
       "structure_after_rxn": "反应后 XRD 晶相不变，SEM 形貌无明显破坏"
     },
     "degradation_profiles": {"ref": "Fig.4a", "curve_label": "SMX+cat+H2O2",
-                             "metric": "C/C0", "x_unit": "min", "y_unit": ""},
+                             "metric": "C/C0", "x_unit": "min", "y_unit": "", "points": [
+        [
+         0,
+         1.0
+        ],
+        [
+         10,
+         0.9
+        ],
+        [
+         20,
+         0.7
+        ],
+        [
+         40,
+         0.69
+        ],
+        [
+         60,
+         0.49
+        ],
+        [
+         90,
+         0.34
+        ],
+        [
+         120,
+         0.26
+        ],
+        [
+         180,
+         0.15
+        ]
+       ]}},
     "variable_experiments": [{
       "variable_parameter": "initial_pH",
       "fixed_conditions": "H2O2 5 mmol/L，Fe3O4/biochar 0.2 g/L，SMX 10 mg/L，25 ℃，100 mL",
@@ -273,7 +317,40 @@ other:               {…}
          "metric_value": {"value": 68, "unit": "%", "raw": "68%（120 min）"},
          "metric_source": "text", "source_figure": "Fig.6a",
          "degradation_profiles": {"ref": "Fig.6a", "curve_label": "pH=3", "metric": "C/C0",
-                                  "x_unit": "min", "y_unit": "", "level_value": "3"}},
+                                  "x_unit": "min", "y_unit": "", "level_value": "3", "points": [
+        [
+         0,
+         1.0
+        ],
+        [
+         10,
+         0.9
+        ],
+        [
+         20,
+         0.8
+        ],
+        [
+         40,
+         0.7
+        ],
+        [
+         60,
+         0.59
+        ],
+        [
+         90,
+         0.44
+        ],
+        [
+         120,
+         0.34
+        ],
+        [
+         180,
+         0.25
+        ]
+       ]}},
         {"level_value": "5", "metric_name": "removal_efficiency",
          "metric_value": {"value": 95, "unit": "%", "raw": "95%（120 min）"},
          "metric_source": "text", "source_figure": "Fig.6a",
@@ -283,7 +360,7 @@ other:               {…}
          "metric_value": {"value": 41, "unit": "%", "raw": "41%（正文未给，从曲线终点读数）"},
          "metric_source": "curve_endpoint@120min", "source_figure": "Fig.6a",
          "degradation_profiles": {"ref": "Fig.6a", "curve_label": "pH=9", "metric": "C/C0",
-                                  "x_unit": "min", "y_unit": "", "level_value": "9"}}
+                                  "x_unit": "min", "y_unit": "", "level_value": "9","points": }}
       ],
       "source_figure": "Fig.6a",
       "qc": {"q_flag": false, "needs_review": false, "errata_ref": "", "note": ""},
@@ -305,7 +382,7 @@ other:               {…}
 - **只输出自己的那个实验**（`experiments` 数组只有 1 个元素）；`experiment_id` / `catalyst_id` /
   `variable_parameter` 照抄 05_node_inventory，不得改名；
 - **未报道字段一律省略空键**，但计入 `blank`；`fill_stats` 口径：
-  `from_text + from_image + from_errata + blank = 47`（41 properties + 6 stability）；曲线不计入字段数，另注条数；
+  `from_text + from_image + from_errata + blank = 47`（41 properties + 6 stability）；所有字段按照fewshot进行填写，包括嵌套子字段（除other自由发挥内部自己的嵌套子字段）；
 - **自校验**：【数】字段 value 全纯数字或 null、raw 无缺席；【文】字段纯字符串（包三元组 = 不合格）；
   `declared_levels` 逐水平核对无漏；verified 里属于本实验的每条 curve 都有归宿；
   绑定表 `x_unit`/`y_unit` 全部照抄图账，`metric` 干净无时间/数值；

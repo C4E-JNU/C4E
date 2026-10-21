@@ -10,12 +10,13 @@
 
 context 给的就是该篇的 **`datamining` 目录路径**——下列文件全在它下面。
 
-| 文件（均在 `<datamining 目录>` 下） | 用途 |
-|---|---|
-| `00_full_cleaned.md` | **正文唯一来源**：metadata 五项 + 全部 text 字段 + 表格中的表征数值 |
-| `04_verified_image_data.json` | 图像侧已裁决数据：表征谱图的 `basic_info`（item 已用规范名）是数值字段第二来源 |
-| `04c_errata.json` | 真错误表，命中字段**必须取勘误值** |
-| `05_node_inventory.json` | 催化剂骨架（C1/C2… 的 id、name、role）——你只填这些节点，不新增 |
+
+| 文件（均在`<datamining 目录>` 下） | 用途                                                                          |
+| ---------------------------------- | ----------------------------------------------------------------------------- |
+| `00_full_cleaned.md`               | **正文唯一来源**：metadata 五项 + 全部 text 字段 + 表格中的表征数值           |
+| `04_verified_image_data.json`      | 图像侧已裁决数据：表征谱图的`basic_info`（item 已用规范名）是数值字段第二来源 |
+| `04c_errata.json`                  | 真错误表，命中字段**必须取勘误值**                                            |
+| `05_node_inventory.json`           | 催化剂骨架（C1/C2… 的 id、name、role）——你只填这些节点，不新增             |
 
 ## 二、取值优先级（逐字段判断）
 
@@ -30,7 +31,7 @@ context 给的就是该篇的 **`datamining` 目录路径**——下列文件全
 ## 三、metadata 块（paper 级，全流水线只有你填）
 
 ```json
-"metadata": {"doi": "", "title": "", "journal": "", "publication_year": "", "authors": ""}
+"metadata": {"doi": "", "title": "", "journal": "", "publication_year": "", "authors": "", "other": ""}
 ```
 
 从 `00_full_cleaned.md` 的文头/文末/致谢处直读；找不到的项省略空键。DOI 带原格式（`10.xxxx/xxxxx`）。
@@ -60,21 +61,22 @@ context 给的就是该篇的 **`datamining` 目录路径**——下列文件全
 
 ## 五、basic_info item → 字段映射（04 图账的 item 已按规范名输出，按名直映）
 
-| basic_info item | 字段 |
-|---|---|
-| 比表面积 | specific_surface_area |
-| 孔容 | pore_volume |
-| 孔径 | pore_size |
-| 粒径 | particle_size（晶粒尺寸语义 → crystallite_size） |
-| 主晶相 | crystal_phase |
-| 结合能 <元素> <轨道> | element_oxidation_states |
-| 饱和磁化强度 | saturation_magnetization |
-| 带隙 | band_gap |
-| Raman ID/IG | raman_ID_IG |
-| 氧空位 | oxygen_vacancy |
-| Zeta 电位 | zeta_potential |
-| pHpzc | pH_pzc |
-| 吸附容量 | adsorption_capacity |
+
+| basic_info item      | 字段                                              |
+| -------------------- | ------------------------------------------------- |
+| 比表面积             | specific_surface_area                             |
+| 孔容                 | pore_volume                                       |
+| 孔径                 | pore_size                                         |
+| 粒径                 | particle_size（晶粒尺寸语义 → crystallite_size） |
+| 主晶相               | crystal_phase                                     |
+| 结合能 <元素> <轨道> | element_oxidation_states                          |
+| 饱和磁化强度         | saturation_magnetization                          |
+| 带隙                 | band_gap                                          |
+| Raman ID/IG          | raman_ID_IG                                       |
+| 氧空位               | oxygen_vacancy                                    |
+| Zeta 电位            | zeta_potential                                    |
+| pHpzc                | pH_pzc                                            |
+| 吸附容量             | adsorption_capacity                               |
 
 表外 item 按 45 清单语义映射，实在装不下进 `other`。**同一字段多处来源**（正文 + 多张谱图）→ 取正文值优先，
 其余口径保进 `raw`（多口径并存不许只留一个）。
@@ -87,36 +89,39 @@ context 给的就是该篇的 **`datamining` 目录路径**——下列文件全
 "specific_surface_area": {"value": 86.3, "unit": "m²/g", "raw": "BET specific surface area of 86.3 m²/g"}
 ```
 
-| 键 | 要求 |
-|---|---|
-| `value` | **纯数字**（int/float，不带单位、不带文字、不带引号里的单位）；提取不出数字 → `null` |
-| `unit` | 规范单位符号（见换算表）；无量纲 `""`；原文没给单位按字段语义补并 `raw` 注明 |
-| `raw` | **必填，永不省**——原文原句（或你组织的事实描述），保真全部上下文与次要口径 |
-| 可选 | `range: [17, 20]`（区间，value 不臆造时留 null）、`qualifier: ">"/"<"/"≈"`、`uncertainty: "±0.1"` |
+
+| 键      | 要求                                                                                                |
+| ------- | --------------------------------------------------------------------------------------------------- |
+| `value` | **纯数字**（int/float，不带单位、不带文字、不带引号里的单位）；提取不出数字 → `null`               |
+| `unit`  | 规范单位符号（见换算表）；无量纲`""`；原文没给单位按字段语义补并 `raw` 注明                         |
+| `raw`   | **必填，永不省**——原文原句（或你组织的事实描述），保真全部上下文与次要口径                        |
+| 可选    | `range: [17, 20]`（区间，value 不臆造时留 null）、`qualifier: ">"/"<"/"≈"`、`uncertainty: "±0.1"` |
 
 **八种情形（正确 vs 禁止）**：
 
-| 情形 | ✅ 正确 | ❌ 禁止 |
-|---|---|---|
-| 常规 | `{"value": 700, "unit": "℃", "raw": "calcined at 700 ℃ for 2 h"}` | `{"value": "700 ℃"}`（value 夹单位）｜`"700 ℃"`（裸串） |
-| 区间 | `{"value": null, "unit": "nm", "range": [17, 20], "raw": "17-20 nm"}` | `{"value": "17-20"}` |
-| 限定符 | `{"value": 100, "unit": "nm", "qualifier": ">", "raw": ">100 nm"}` | `{"value": ">100 nm"}` |
-| 不确定度 | `{"value": 1.2, "unit": "At%", "uncertainty": "±0.1", "raw": "1.2±0.1 At%"}` | `{"value": "1.2±0.1"}` |
-| 多口径并存 | `{"value": 7.9, "unit": "wt%", "raw": "7.9 wt%（XPS 表面 Fe 6.62%，5 次循环后 6.13%）"}` | 只留一个数丢其余口径 |
-| 多组分各给值 | `{"value": 400, "unit": "℃", "raw": "TiO2 组分 400 ℃；Fe2O3 组分 450 ℃（分段煅烧）"}`（value=主组分，其余保 raw） | 拆不下就全丢 |
-| 【数】字段无数值 | `"具超顺磁性（未给 Ms 数值）"` 退字符串（步骤八标 unparsed，正常） | 硬凑一个数 |
-| 【文】字段 | `"共沉淀-热解两步法：先共沉淀再 180 ℃ 水热 12 h"` 直书 | 包成三元组 / 挤出假数值 |
+
+| 情形             | ✅ 正确                                                                                                              | ❌ 禁止                                                   |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| 常规             | `{"value": 700, "unit": "℃", "raw": "calcined at 700 ℃ for 2 h"}`                                                  | `{"value": "700 ℃"}`（value 夹单位）｜`"700 ℃"`（裸串） |
+| 区间             | `{"value": null, "unit": "nm", "range": [17, 20], "raw": "17-20 nm"}`                                                | `{"value": "17-20"}`                                      |
+| 限定符           | `{"value": 100, "unit": "nm", "qualifier": ">", "raw": ">100 nm"}`                                                   | `{"value": ">100 nm"}`                                    |
+| 不确定度         | `{"value": 1.2, "unit": "At%", "uncertainty": "±0.1", "raw": "1.2±0.1 At%"}`                                       | `{"value": "1.2±0.1"}`                                   |
+| 多口径并存       | `{"value": 7.9, "unit": "wt%", "raw": "7.9 wt%（XPS 表面 Fe 6.62%，5 次循环后 6.13%）"}`                             | 只留一个数丢其余口径                                      |
+| 多组分各给值     | `{"value": 400, "unit": "℃", "raw": "TiO2 组分 400 ℃；Fe2O3 组分 450 ℃（分段煅烧）"}`（value=主组分，其余保 raw） | 拆不下就全丢                                              |
+| 【数】字段无数值 | `"具超顺磁性（未给 Ms 数值）"` 退字符串（步骤八标 unparsed，正常）                                                   | 硬凑一个数                                                |
+| 【文】字段       | `"共沉淀-热解两步法：先共沉淀再 180 ℃ 水热 12 h"` 直书                                                              | 包成三元组 / 挤出假数值                                   |
 
 **单位换算表**（换算后写 `unit`，原值与换算式保进 `raw`）：
 
-| 物理量 | 统一 unit |
-|---|---|
-| 比表面积 m²/g ｜ 孔容 cm³/g ｜ 孔径/粒径/晶粒尺寸 nm ｜ 晶格常数/层间距 Å 或 nm（照字段名后缀） | |
-| 磁化强度 emu/g ｜ 矫顽力 Oe ｜ 阻抗 Ω | |
-| 结合能 eV ｜ 波数 cm⁻¹ ｜ 衍射角 ° ｜ Zeta 电位 mV | |
-| 温度 ℃（K − 273.15）｜ 时间 min（h×60）｜ 升温速率 ℃/min | |
-| 元素含量 wt%（At% 不可换算时保留 At%，`raw` 注明）｜ 吸附容量 mg/g | |
-| pH、pH_pzc、ID/IG、带隙比等无量纲 → `""` | |
+
+| 物理量                                                                                             | 统一 unit |
+| -------------------------------------------------------------------------------------------------- | --------- |
+| 比表面积 m²/g ｜ 孔容 cm³/g ｜ 孔径/粒径/晶粒尺寸 nm ｜ 晶格常数/层间距 Å 或 nm（照字段名后缀） |           |
+| 磁化强度 emu/g ｜ 矫顽力 Oe ｜ 阻抗 Ω                                                             |           |
+| 结合能 eV ｜ 波数 cm⁻¹ ｜ 衍射角 ° ｜ Zeta 电位 mV                                              |           |
+| 温度 ℃（K − 273.15）｜ 时间 min（h×60）｜ 升温速率 ℃/min                                       |           |
+| 元素含量 wt%（At% 不可换算时保留 At%，`raw` 注明）｜ 吸附容量 mg/g                                 |           |
+| pH、pH_pzc、ID/IG、带隙比等无量纲 →`""`                                                           |           |
 
 ## 七、完整示例（few-shot，照这个密度和形态填）
 

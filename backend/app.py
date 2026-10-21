@@ -1741,7 +1741,9 @@ async def api_agent_stop(request: Request):
 async def agent_stream(req: AgentRunRequest, request: Request = None):
     """SSE 流式 Agent 端点（支持用户停止：前端 abort → 检测断连 → 取消生成）"""
     if not req.model or not req.model.get("model"):
-        return {"final_answer": "错误: 缺少模型配置"}
+        # 必须走 HTTP 错误而非普通 JSON：前端按 SSE 解析流，
+        # 普通 JSON 不是 data: 帧会被静默跳过，用户看到的就是「发出去没反应」。
+        raise HTTPException(400, "缺少模型配置：请先在设置中选择模型并填写 API Key")
 
     from agent.agent import (cancel_active_generation, reset_generation_cancel,
                             reset_immediate_answer)
@@ -1801,6 +1803,11 @@ async def agent_stream(req: AgentRunRequest, request: Request = None):
                     _notify_delta(cur_user, {"type": "chats_delta", "branch_id": _branch,
                                              "client_id": _client, "event": event})
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+        except Exception as _gen_err:
+            # 生成器异常不许静默：打全量 traceback 并让前端收到错误事件（排查 lc 引擎静默断流的 mask 问题）
+            import traceback as _tb
+            _tb.print_exc()
+            yield f"data: {json.dumps({'type':'error','message':f'生成中断：{_gen_err}'}, ensure_ascii=False)}\n\n"
         finally:
             stop_flag.set()
             w.cancel()

@@ -54,7 +54,7 @@ STABILITY_FIELDS = ["cycle_count", "initial_efficiency", "final_efficiency",
 MULTI_POLLUTANT = ["、", "和", " + ", "+", " respectively", "respectively", "混合", " and "]
 # 模板自带的收纳键：允许出现在 properties 内，不计入 45/41 字段数
 EXTRA_ALLOWED = {"other"}
-# 曲线容器键（与 step7b_curve_backfill.py 同一口径）
+# 曲线容器键（与 schema_fill 模板曲线绑定表同一口径）
 CURVE_KEY_RE = re.compile(r"(profiles|curves)$", re.I)
 REF_RE = re.compile(r"^(fig(?:ure)?\.?\s*s?\d+)([a-z])?$", re.I)
 
@@ -118,7 +118,7 @@ def schema_curve_index(schema):
     """递归收集 schema 中所有曲线容器的 (fig, sub, label)；另统计缺 points 的条数。
 
     覆盖 `degradation_profiles` 及自定义键（`quenching_degradation_profiles`、
-    `other.control_curves`、`system_control_profiles` …）——与回填脚本同一口径。
+    `other.control_curves`、`system_control_profiles` …）——与 schema_fill 模板曲线容器同一口径。
     """
     seen, empty, total = set(), 0, 0
 
@@ -250,7 +250,7 @@ def check(paper):
         if lost:
             fails.append(f"曲线未落位 {len(lost)} 条: " + "; ".join("/".join(x) for x in lost[:6]))
         if empty_pts:
-            fails.append(f"曲线缺 points {empty_pts} 条（曲线回填未跑？）")
+            fails.append(f"曲线缺 points {empty_pts} 条（子智能体漏复制，重派补读 04）")
 
     # ⑥ 变量水平（v2）：levels[] 每项须同时有 level_value 与指标；曲线 level_value 与所在项一致；
     #    levels 项数 >= 步骤六登记的 declared_levels 数（少 = 漏水平）
@@ -362,7 +362,7 @@ def main(root):
                   ensure_ascii=False, indent=1)
     print(f"=== 对账 {sum(1 for r in recs if r['pass'])}/{len(recs)} PASS → {out}")
     if any(not r["pass"] for r in recs):
-        print("FAIL 篇目：按 missing 逐条补齐（缺字段→补填；曲线缺 points→先跑 step7b_curve_backfill.py）后重跑本脚本")
+        print("FAIL 篇目：按 missing 逐条补齐（缺字段→补填；曲线缺 points/缺轴单位→重派子智能体读 04 补齐）后重跑本脚本")
     return 0 if all(r["pass"] for r in recs) else 1
 
 

@@ -44,21 +44,21 @@ metadata
 
 1. **errata 命中** → 取勘误值；
 2. **同一事实正文与图都有数值**：差 < 5% y 轴量程 → **取正文值**；差 ≥ 5% 量程 → 取 `adopted_value`（存疑加 `needs_review`）；
-   **曲线量程内端点回填同此口径**：标注表该曲线 `finding.endpoint_backfill` 命中 → 终点取正文值，绑定表附
-   `points_compact`（**照抄 `points_after`**），其派生指标 `metric_source: "text_backfill@<时间>"` 标注；
+   **曲线量程内端点回填同此口径**：标注表该曲线 `finding.endpoint_backfill` 命中 → 终点取正文值，
+   该曲线点位照抄 `points_after`（图账原点位仅终点替换为正文值），其派生指标
+   `metric_source: "text_backfill@<时间>"` 标注；
 3. **仅图文矛盾已裁决的 dual_source 字段** → 取 `adopted_value`（存疑加 `needs_review`）；
-4. **degradation_profiles** → **只给绑定表，不贴点**（点位由主控回填）。实验级主曲线与每个变量节点的曲线
+4. **degradation_profiles** → **子智能体自己从 04 逐条复制点位写入 06_schema.json 文件**（用 python 读写文件、
+   不经聊天回贴；04 缺失读 `03_image_data.json`；**任何脚本不得从 04/03 取内容写 06**）。实验级主曲线与每个变量节点的曲线
    必须**逐条全部有归宿**（挂主 profiles、变量各水平 profiles 或实验 `other`）——verified 里每条 curve 都要在 schema 里
    出现一次、一条都不许漏（曲线整条未读是最大失分点）；绑定表格式
    `{"ref": "Fig.7a", "curve_label": "pH=3", "metric": "C/C0", "x_unit": "min", "y_unit": "", "level_value": "3"}`：
    `ref` = 图号 + 子图字母（整图不写字母）、
-   `curve_label` **照抄图例原文**（对不上则回填失败）、**`level_value` = 该曲线对应的水平值**
+   `curve_label` **照抄图例原文**（对不上则填充失败）、**`level_value` = 该曲线对应的水平值**
    （写在 level 内，须与所在 level 的 `level_value` 一致；实验级主曲线不写）、一条绑定对多条曲线时用 `curve_labels: [...]`；
    **`x_unit` / `y_unit` 必填**：从 `04_verified_image_data.json` 同 `(figure, subfigure)` 记录的 `xy_axes` **照抄**
-   （`x_axis.unit` → `x_unit`、`y_axis.unit` → `y_unit`；无量纲写 `""`，去除率写 `"%"`）——
+   （`x_axis.unit` → `x_unit`、`y_axis.unit` → `y_unit`；无量纲写 `""`，去除率写 `"%"`；**永不留 null****）——
    这两个键随曲线一路透传进图谱 Curve 节点，缺了图谱就分不清时间轴是 min 还是 h、y 是百分比还是浓度；
-   主控跑 `step7b_curve_backfill.py` 按 `(figure, subfigure) + curve_label` 从 `04_verified_image_data.json`
-   （缺则 `03_image_data.json` 兜底）取点回填；
    **`metric` 只写指标名**（`C/C0` / `removal_efficiency` / `toc_removal` / `rate_constant_k` / `Fe leaching (mg/L)` 等物理量名）；
    **时间、数值、图号禁入 metric**（`"残留比 C/C0（60 min）"`、`"末值 0.86"` 均不合格）——
    时间在点位的 x 里、数值在 levels 里、图号在 ref 里、单位在 x_unit/y_unit 里；
@@ -234,10 +234,15 @@ other:               {…}
 - **设计矩阵强制逐行提取**：正文若有 CCD/BBD/RSM 设计矩阵与响应表（逐 run 的因子水平 + 响应值），
   每个 run 的响应值作为对应变量的 `metric_value`，或汇入实验 `other.design_matrix`；严禁只取最优/主效应值而丢弃轴向点与中心点；
 - **profiles 挂载**：实验级与每个变量节点都要有（有曲线数据时）；主实验曲线 = 标准条件那条；
-- **曲线一律只给绑定表 `{ref, curve_label, metric, x_unit, y_unit}`**：不写 `points`、不逐点展开；
-  `x_unit` / `y_unit` 从 04 图账 `xy_axes` 照抄（无量纲写 `""`）；主控脚本从 `04_verified_image_data.json` 回填点位。
-  **唯一例外**：`endpoint_backfill` 命中的曲线改用 `points_compact` 给**修正后全点位**（照抄标注表 `points_after`，
-  即图账原点位仅终点替换为正文值）——回填脚本原生支持 `points_compact`，其余曲线仍走绑定表；
+- **曲线由子智能体自己读取 04 填充**：打开 `04_verified_image_data.json` 对应 `(figure, subfigure)` 记录，
+  把每条 curve 的 `points` **逐点复制**（不改数、不平滑、不插值）连同绑定表
+  `{ref, curve_label, metric, x_unit, y_unit}` 写入曲线片段文件 `datamining/06_curves_<ID>.json`（用 python 写文件完成、
+  不经聊天回贴，无截断问题）；04 该图记录缺失时读 `03_image_data.json` 对应记录；
+  `x_unit` / `y_unit` 从 04 图账 `xy_axes` **照抄**（无量纲写 `""`），**永不留 null**；
+  verified 里每条 curve 都要在 schema 里有归宿（主 profiles / 水平 profiles / other），一条不许漏；
+  **任何脚本不得从 04/03 取内容写 06**；
+  **唯一例外**：`endpoint_backfill` 命中的曲线用标注表 `points_after`（图账原点位仅终点替换为正文值）
+  作为该曲线点位写入；
 - **单次只做 1~2 个实验节点**（主控会按实验分批派你），**单实例输出目标 ≤ 12000 字符**——超了必被截断、结论整份丢失；
 - **JSON 紧凑**（不缩进或缩进 1）；
 - `fill_stats` 口径：`from_text + from_image + from_errata + blank = total_fields`。

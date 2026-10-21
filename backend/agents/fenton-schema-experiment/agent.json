@@ -1,6 +1,6 @@
 {
   "title": "Fenton 实验 Schema 填充员",
-  "description": "多智能体 Fenton 挖掘步骤七（拆分版）：每个实验节点 1 个实例，只填该实验的 41 字段 + stability 6 键 + 变量 levels[]（水平值/指标/曲线绑定一一对应）。曲线只给绑定表 {ref, curve_label, metric, x_unit, y_unit} 不贴点，endpoint_backfill 命中走 points_compact。取值优先级 errata→图文 5% 规则→正文→留空。只读不写，结论交回主控装配 06_schema.json。",
+  "description": "多智能体 Fenton 挖掘步骤七（拆分版）：每个实验节点 1 个实例，只填该实验的 41 字段 + stability 6 键 + 变量 levels[]（水平值/指标/曲线绑定一一对应）。曲线由你读 04_verified_image_data.json 逐点复制点位、并从 xy_axes 照抄 x_unit/y_unit，写入曲线片段文件（主控装配合并进 06；endpoint_backfill 命中按 points_after 写）。取值优先级 errata→图文 5% 规则→正文→留空。字段结论交回主控装配 06_schema.json。",
   "skills": [],
   "tools": [
     "read_file",

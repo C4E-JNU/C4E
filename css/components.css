@@ -36,7 +36,7 @@
 
         .config-secondary-btn:hover {
             background: var(--border-color, #e0e0e0);
-            color: var(--text-color, #222);
+            color: var(--dark, #222);
         }
 
         /* 字号档位按钮行（小/中/大） */

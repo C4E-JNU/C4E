@@ -471,18 +471,18 @@ async function reactAgentLoop(userQuestion, options /* {fileIds:[], note_refs:[]
                 if (!dataStr) continue;
                 var ev;
                 try { ev = JSON.parse(dataStr); } catch(e) { continue; }
-                var t = ev.type;
-                if (t === 'reasoning') { handleReasoning(ev.text || ''); }
-                else if (t === 'token') { if (ev.text) { streamedText += ev.text; currentRoundText += ev.text; answerDiv.textContent += ev.text; showLiveStatus(t('gr.generating')); } }
-                else if (t === 'tool_call') { handleToolCall(ev.name || '', ev.input || ''); }
-                else if (t === 'tool_result') { handleToolResult(ev.name || '', ev.content || ''); }
-                else if (t === 'subagent_start') { handleSubagentStart(ev); }
-                else if (t === 'subagent_step') { handleSubagentStep(ev); }
-                else if (t === 'subagent_end') { handleSubagentEnd(ev); }
-                else if (t === 'timeout_notice') { handleTimeoutNotice(ev.level || 'nudge', ev.text || '', ev.elapsed || 0); }
-                else if (t === 'final') { finalAnswer = ev.text || ''; currentRoundText = ''; answerDiv.textContent = finalAnswer; }
-                else if (t === 'stopped') { finalAnswer = t('gr.stoppedGen'); currentRoundText = ''; answerDiv.textContent = (streamedText || '') + '\n\n⏹️ ' + t('gr.stopped'); }
-                else if (t === 'error') { throw new Error(ev.message || '后端错误'); }
+                var evType = ev.type;
+                if (evType === 'reasoning') { handleReasoning(ev.text || ''); }
+                else if (evType === 'token') { if (ev.text) { streamedText += ev.text; currentRoundText += ev.text; answerDiv.textContent += ev.text; showLiveStatus(t('gr.generating')); } }
+                else if (evType === 'tool_call') { handleToolCall(ev.name || '', ev.input || ''); }
+                else if (evType === 'tool_result') { handleToolResult(ev.name || '', ev.content || ''); }
+                else if (evType === 'subagent_start') { handleSubagentStart(ev); }
+                else if (evType === 'subagent_step') { handleSubagentStep(ev); }
+                else if (evType === 'subagent_end') { handleSubagentEnd(ev); }
+                else if (evType === 'timeout_notice') { handleTimeoutNotice(ev.level || 'nudge', ev.text || '', ev.elapsed || 0); }
+                else if (evType === 'final') { finalAnswer = ev.text || ''; currentRoundText = ''; answerDiv.textContent = finalAnswer; }
+                else if (evType === 'stopped') { finalAnswer = t('gr.stoppedGen'); currentRoundText = ''; answerDiv.textContent = (streamedText || '') + '\n\n⏹️ ' + t('gr.stopped'); }
+                else if (evType === 'error') { throw new Error(ev.message || '后端错误'); }
             }
         }
         hideLiveStatus();     // 本轮结束：收掉转圈状态行

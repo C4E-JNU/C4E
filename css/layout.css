@@ -40,8 +40,8 @@
         .c4e-art-logo,
         .c4e-sidebar-art-logo {
             background: none;
-            border: none;   /* 新 logo 自带圆环，不再描边 */
-            border-radius: 50%;
+            border: none;
+            border-radius: 0;   /* 用 C4E 应用图标原样的方形圆角，不做圆形裁切 */
             display: flex;
             align-items: center;
             justify-content: center;

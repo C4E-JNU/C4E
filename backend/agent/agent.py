@@ -1383,7 +1383,11 @@ async def stream_agent_lc(
         temperature=model_config.get("temperature", 0.7),
         max_tokens=model_config.get("max_tokens") or 32768,
     )
-    agent = create_agent(model=llm, tools=tools, system_prompt=system_prompt)
+    # 上下文护栏：与 custom 引擎的 prune/cap 策略对齐（lc 路径 2026-10-14 前无治理）
+    from agent.lc_middleware import make_context_guard
+    _lc_guard = make_context_guard(int(model_config.get("context_window") or 200000))
+    agent = create_agent(model=llm, tools=tools, system_prompt=system_prompt,
+                         middleware=[_lc_guard])
 
     cap = max_rounds if max_rounds and max_rounds > 0 else 100000  # 0 = 无限
     config = {"recursion_limit": cap * 2 + 5}

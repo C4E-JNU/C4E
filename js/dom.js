@@ -155,9 +155,9 @@
     }
     document.addEventListener('contextmenu', function (ev) {
         // 输入框/textarea 走系统自带菜单（WebView2 对编辑控件有内置菜单）；且别拦数据库面板的移动菜单
-        var t = ev.target;
-        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-        if (t && t.closest && t.closest('.db-move-menu')) return;
+        var evT = ev.target;
+        if (evT && (evT.tagName === 'INPUT' || evT.tagName === 'TEXTAREA' || evT.isContentEditable)) return;
+        if (evT && evT.closest && evT.closest('.db-move-menu')) return;
         ev.preventDefault();
         hide();
         var sel = String(window.getSelection() || '');

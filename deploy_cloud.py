@@ -44,7 +44,7 @@ def make_tar():
     with tarfile.open(fileobj=buf, mode="w:gz") as tf:
         root = os.path.dirname(os.path.abspath(__file__))
         for dirpath, dirnames, filenames in os.walk(root):
-            dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS]
+            dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS and not d.startswith("_bak")]
             for fn in filenames:
                 if fn in EXCLUDE_FILES or os.path.splitext(fn)[1] in EXCLUDE_EXT or fn.startswith(EXCLUDE_PREFIX):
                     continue

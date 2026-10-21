@@ -221,7 +221,7 @@
             resize: vertical;
             outline: none;
             line-height: 1.6;
-            color: var(--text, #333);
+            color: var(--dark, #333);   /* 主题主文字色（原 var(--text) 无定义，深色主题回退 #333 近黑字看不清） */
             padding: 4px 0;
         }
 
@@ -566,7 +566,7 @@
             height: auto;                     /* 定高 24px 会把字裁掉（内容区只剩 8px）→ 交回内容决定 */
             overflow-y: auto;
             scrollbar-width: none;            /* 滚动条不占位、也看不见（内容超 120px 仍可滚） */
-            color: var(--text, #333);
+            color: var(--dark, #333);   /* 主题主文字色（原 var(--text) 无定义，深色主题回退 #333 近黑字看不清） */
         }
 
         .modern-input::-webkit-scrollbar { width: 0; display: none; }

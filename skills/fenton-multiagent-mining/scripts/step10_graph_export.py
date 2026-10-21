@@ -318,6 +318,8 @@ def main():
                 title=meta.get('title'), journal=meta.get('journal'),
                 doi=meta.get('doi'), publication_year=meta.get('publication_year'),
                 authors=meta.get('authors'),
+                # 【2026-10-17】重复归档标记（同 DOI 另一份的论文夹名），见 _duplicate_papers_report.md
+                duplicate_of=meta.get('duplicate_of'),
                 search_text=' | '.join(str(meta.get(k)) for k in ('title', 'journal', 'doi') if meta.get(k)) or None,
                 contradiction_count=led.get('total', 0),
                 # 【2026-10-06】严重度摘要（字符串，Neo4j 属性不能是 dict）
@@ -503,7 +505,10 @@ def main():
                             if lvv is not None:
                                 lv_txt = ('水平 %g' % lvv) if isinstance(lvv, (int, float)) \
                                     and not isinstance(lvv, bool) else ('水平 %s' % lvv)
-                            vnode = dict(node_id=vid, paper_id=pid, experiment_id=eid, **vp)
+                            # 【2026-10-14 修】06 变量节点可能自带旧元数据 experiment_id（如 cl.130313 的 'E1'），
+                            # 与显式 kwarg 撞键；eid 以迭代上下文（cid::E{i}）为准，剥离三个显式键防覆盖。
+                            _vp = {k: v_ for k, v_ in vp.items() if k not in ('node_id', 'paper_id', 'experiment_id')}
+                            vnode = dict(node_id=vid, paper_id=pid, experiment_id=eid, **_vp)
                             vnode['search_text'] = _join(
                                 ep.get('pollutant_name'), vp.get('variable_parameter'), lv_txt,
                                 vp.get('metric_name'), vp.get('metric_value'))
@@ -670,6 +675,31 @@ def main():
                             if fig: E.append({'type': 'FROM_FIGURE', 'from': kid, 'to': 'FIG::%s::%s' % (pid, fig)})
                     dps = e.get('degradation_profiles') or []
                     if isinstance(dps, dict): dps = [dps]
+                    # 【2026-10-15 修】实验级 profile 自身无点位而点位在 curves[] 子曲线时拆为逐曲线
+                    # descriptor（与变量级/QX 兜底同规则；实测 B070 早期 schema 6 曲线、B073 两篇 8 曲线全丢点位）
+                    _dps2 = []
+                    for _q in dps:
+                        if isinstance(_q, dict) and not (_q.get('points') or _q.get('xs')) and _q.get('curves'):
+                            _n = 0
+                            for _c in (_q.get('curves') or []):
+                                if isinstance(_c, dict):
+                                    _cl = _c.get('curve_label') or _c.get('label')
+                                    if not (_cl or not _q.get('curve_label')):
+                                        continue  # 有标签 profile 下的无标签子曲线不拆（防误去重）
+                                    _qq = dict(_q)
+                                    _qq.pop('curves', None)
+                                    if _cl:
+                                        _qq['curve_label'] = _cl
+                                    for f in ('points', 'xs', 'x_unit', 'y_unit', 'metric', 'source_figure'):
+                                        if _c.get(f) and not _qq.get(f):
+                                            _qq[f] = _c[f]
+                                    _dps2.append(_qq)
+                                    _n += 1
+                            if not _n:
+                                _dps2.append(_q)
+                        else:
+                            _dps2.append(_q)
+                    dps = _dps2
                     for qi, q in enumerate(dps):
                         if not isinstance(q, dict): continue
                         kid = f'{eid}::Q{qi+1}'
