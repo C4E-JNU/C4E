@@ -14,7 +14,7 @@ const TOOL_GROUPS = [
     { name: t('agentcfg.gr.task'), tools: ['todo'] },
     { name: t('agentcfg.gr.subagent'), tools: ['delegate_task'] },
     { name: t('agentcfg.gr.documents'), tools: ['mineru_parse'] },
-    { name: 'XWiki', tools: ['wiki_search', 'wiki_get', 'wiki_create', 'wiki_update', 'wiki_delete', 'wiki_list_pages', 'wiki_list_spaces', 'wiki_upload_attachment', 'wiki_list_attachments'] },
+    { name: 'XWiki', tools: ['wiki_read', 'wiki_write'] },
 ];
 
 // ── 工具：从后端 /api/tools 动态加载 + 按分组渲染勾选 ──
@@ -326,6 +326,16 @@ function loadAgentConfigFromLocal() {
                 state.settings.subagentNudge = 0; state.settings.subagentWarn = 0; state.settings.subagentAbort = 86400;
                 saveAgentConfigToLocal();
                 try { setUserSetting('ai-settings', JSON.stringify(state.settings)); } catch (e) { /* ignore */ }
+            }
+            // XWiki 工具上线（2026-10-21）：旧存档里没有 wiki_read/wiki_write 的，一次性补进已启用列表。
+            // 用 wikiRev 守卫，只补一次；之后用户取消勾选就保持取消，不再强塞。
+            if (parsed.wikiRev !== 1) {
+                const et = new Set(state.agentConfig.enabledTools || []);
+                et.add('wiki_read');
+                et.add('wiki_write');
+                state.agentConfig.enabledTools = Array.from(et);
+                state.agentConfig.wikiRev = 1;
+                saveAgentConfigToLocal();
             }
         }
     } catch (e) { /* ignore */ }

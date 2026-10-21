@@ -44,7 +44,7 @@
 
             // 智能体配置
             agentConfig: {
-                enabledTools: ['graph_query', 'shared_search', 'shared_upload', 'web_search', 'web_extract', 'skill_list', 'skill_view', 'skill_write', 'read_file', 'write_file', 'list_files', 'list_outputs', 'search_files', 'find_files', 'edit_file', 'run_code', 'terminal', 'crossref_lookup', 'arxiv_search', 'semantic_scholar_search', 'gh_repo_info', 'gh_list_dir', 'gh_read_file', 'gh_search_repos', 'gh_search_code', 'gh_download_tarball', 'search_history', 'conversation_notes', 'todo', 'delegate_task', 'mineru_parse'],   // 默认全开（用户 2026-09-28：除访问权限外一律放开）
+                enabledTools: ['graph_query', 'shared_search', 'shared_upload', 'web_search', 'web_extract', 'skill_list', 'skill_view', 'skill_write', 'read_file', 'write_file', 'list_files', 'list_outputs', 'search_files', 'find_files', 'edit_file', 'run_code', 'terminal', 'crossref_lookup', 'arxiv_search', 'semantic_scholar_search', 'gh_repo_info', 'gh_list_dir', 'gh_read_file', 'gh_search_repos', 'gh_search_code', 'gh_download_tarball', 'search_history', 'conversation_notes', 'todo', 'delegate_task', 'mineru_parse', 'wiki_read', 'wiki_write'],   // 默认全开（用户 2026-09-28：除访问权限外一律放开）
                 loadedSkills: ['self-modify', 'mineru-agent-parse', 'literature-translate', 'literature-contradiction', 'literature-search', 'code-search', 'document-entry'],
                 permissionMode: 'safe',
                 engine: 'custom',          // custom=裸API手写循环 / langchain=LangChain流式

@@ -77,7 +77,7 @@ async function reactAgentLoop(userQuestion, options /* {fileIds:[], note_refs:[]
     if (typeof sendBtn !== 'undefined' && sendBtn) { sendBtn.innerHTML = '⚡'; sendBtn.classList.add('stop'); sendBtn.title = t('gr.nudge'); }
     var _stopBtn = document.getElementById('agent-stop-btn'); if (_stopBtn) _stopBtn.hidden = false;
     if (typeof updateSendButtonState === 'function') updateSendButtonState();
-    const enabledTools = state.agentConfig?.enabledTools || ['graph_query', 'shared_search', 'search_history', 'conversation_notes', 'skill_view', 'web_search', 'web_extract', 'todo', 'delegate_task', 'mineru_parse', 'read_file', 'list_files', 'search_files', 'find_files', 'edit_file', 'crossref_lookup', 'arxiv_search', 'semantic_scholar_search', 'gh_search_code', 'gh_read_file', 'wiki_search', 'wiki_get', 'wiki_create', 'wiki_update', 'wiki_delete', 'wiki_list_pages', 'wiki_list_spaces', 'wiki_upload_attachment', 'wiki_list_attachments'];
+    const enabledTools = state.agentConfig?.enabledTools || ['graph_query', 'shared_search', 'search_history', 'conversation_notes', 'skill_view', 'web_search', 'web_extract', 'todo', 'delegate_task', 'mineru_parse', 'read_file', 'list_files', 'search_files', 'find_files', 'edit_file', 'crossref_lookup', 'arxiv_search', 'semantic_scholar_search', 'gh_search_code', 'gh_read_file', 'wiki_read', 'wiki_write'];
     const loadedSkills = state.agentConfig?.loadedSkills || ['self-modify'];
     const currentBranch = state.branches[state.currentBranchId];
     const modelId = state.currentModel;

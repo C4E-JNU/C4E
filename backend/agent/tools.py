@@ -25,15 +25,8 @@ from tools.vector_search import search_history as _search_history
 from tools.shared_hub import shared_upload as _shared_upload, shared_search as _shared_search, knowledge as _knowledge
 from tools.mineru_tools import parse_pdfs, load_token
 from tools.xwiki_tools import (
-    wiki_search as _wiki_search,
-    wiki_get as _wiki_get,
-    wiki_create as _wiki_create,
-    wiki_update as _wiki_update,
-    wiki_delete as _wiki_delete,
-    wiki_list_pages as _wiki_list_pages,
-    wiki_list_spaces as _wiki_list_spaces,
-    wiki_upload_attachment as _wiki_upload_attachment,
-    wiki_list_attachments as _wiki_list_attachments,
+    wiki_read as _wiki_read,
+    wiki_write as _wiki_write,
 )
 
 
@@ -175,49 +168,41 @@ class SharedSearchParams(BaseModel):
                                                            "再针对具体 group_id 拉明细 —— 这样最省 token，不要先拉全部再自己筛。**"))
 
 
-# ── XWiki 参数模型 ─────────────────────────────────
+# ── XWiki 参数模型（两个统一入口：读 / 写） ─────────
 
-class WikiSearchParams(BaseModel):
-    query: str = Field(description="搜索关键词，例如: 'Fenton 降解'")
-    limit: int = Field(default=10, description="返回结果数量 1-20")
+class WikiReadParams(BaseModel):
+    """XWiki 只读入口 —— 一个工具用 action 分发。"""
+    action: str = Field(
+        default="search",
+        description=("要做的只读操作：\n"
+                     "  search          —— 关键词检索标题/正文（默认；需 query）\n"
+                     "  get             —— 读某页完整正文（需 space、page）\n"
+                     "  list_spaces     —— 列出所有空间（可给 name 过滤）\n"
+                     "  list_pages      —— 列出某空间下所有页面（需 space）\n"
+                     "  list_attachments—— 列出某页的附件（需 space、page）"))
+    query: str = Field(default="", description="action=search 用：关键词。中文直接写，如 '分子对接'")
+    space: str = Field(default="", description="空间名，如 'Main'、'02. 新成员须知'")
+    page: str = Field(default="", description="页面名，如 'WebHome'、'AutodockVina步骤'")
+    limit: int = Field(default=10, description="返回条数：search 默认 10；list_pages 默认 10（内部上限 200）")
+    scope: str = Field(default="all", description="action=search 用：all=标题+正文（默认）/ title / content")
+    name: str = Field(default="", description="action=list_spaces 用：按名称片段过滤，如 '06' 或 'Software'")
 
-class WikiGetParams(BaseModel):
-    space: str = Field(description="空间名，例如: 'Main'")
-    page: str = Field(description="页面名，例如: 'WebHome'")
 
-class WikiCreateParams(BaseModel):
-    space: str = Field(description="空间名，例如: 'Main'")
-    page: str = Field(description="页面名（英文，不含空格），例如: 'FentonProtocol'")
-    content: str = Field(description="页面内容（XWiki 2.1 语法）")
-    title: str = Field(default="", description="页面显示标题（可选）")
-    parent: str = Field(default="", description="父页面（可选）")
-
-class WikiUpdateParams(BaseModel):
-    space: str = Field(description="空间名")
-    page: str = Field(description="页面名")
-    content: str = Field(description="新的页面内容")
-    title: str = Field(default="", description="新的显示标题（可选）")
-
-class WikiDeleteParams(BaseModel):
-    space: str = Field(description="空间名")
-    page: str = Field(description="页面名")
-
-class WikiListPagesParams(BaseModel):
-    space: str = Field(description="空间名")
-    limit: int = Field(default=50, description="返回页面数 1-200")
-
-class WikiListSpacesParams(BaseModel):
-    limit: int = Field(default=100, description="返回空间数 1-200")
-
-class WikiUploadAttachmentParams(BaseModel):
-    space: str = Field(description="空间名")
-    page: str = Field(description="页面名")
-    file_path: str = Field(description="本地文件路径（绝对路径或 workspace 相对路径）")
-    filename: str = Field(default="", description="在 wiki 上显示的文件名（可选，默认用原文件名）")
-
-class WikiListAttachmentsParams(BaseModel):
-    space: str = Field(description="空间名")
-    page: str = Field(description="页面名")
+class WikiWriteParams(BaseModel):
+    """XWiki 写入入口 —— 一个工具用 action 分发。"""
+    action: str = Field(
+        description=("要做的写操作：\n"
+                     "  create            —— 新建页面（需 space、page、content）\n"
+                     "  update            —— 覆盖已有页面正文（需 space、page、content）\n"
+                     "  delete            —— 删除页面（需 space、page；不可恢复）\n"
+                     "  upload_attachment —— 上传本地文件为附件（需 space、page、file_path）"))
+    space: str = Field(default="", description="空间名，如 'Main'")
+    page: str = Field(default="", description="页面名（英文、不含空格），如 'FentonProtocol'")
+    content: str = Field(default="", description="页面正文，用 XWiki 2.1 语法（不是 Markdown）")
+    title: str = Field(default="", description="页面显示标题（可选，默认用 page）")
+    parent: str = Field(default="", description="action=create 用：父页面全名（可选）")
+    file_path: str = Field(default="", description="action=upload_attachment 用：本地文件路径")
+    filename: str = Field(default="", description="action=upload_attachment 用：wiki 上显示的文件名（可选）")
 
 
 # ── 工具工厂函数 ─────────────────────────────────
@@ -1180,68 +1165,37 @@ tools_registry["gh_download_tarball"] = _make_async_tool(
     args_schema=GhTarballParams, func=_gh_tarball)
 
 
-# ── XWiki 工具 ─────────────────────────────────────
+# ── XWiki 工具（读 / 写 各一个，action 分发） ──────
 
-tools_registry["wiki_search"] = _make_async_tool(
-    name="wiki_search",
-    description=("在 XWiki 中搜索页面。\n\n"
-                 "WHEN: 用户问「wiki 里有没有 XX」「XWiki 上搜一下 XX」。\n"
-                 "HOW: query 填关键词，返回标题/空间/摘要列表。"),
-    args_schema=WikiSearchParams, func=_wiki_search)
+tools_registry["wiki_read"] = _make_async_tool(
+    name="wiki_read",
+    description=("读取组内 XWiki（团队知识库，155 个空间）—— 只读，一个工具用 action 分发。\n"
+                 "\n"
+                 "【action 取值】\n"
+                 "  search（默认） 关键词检索标题+正文，需 query；返回 space/page/title/snippet/url\n"
+                 "  get            读某页完整正文，需 space+page\n"
+                 "  list_spaces    列出所有空间（可给 name 过滤，如 name='06'）\n"
+                 "  list_pages     列出某空间下所有页面，需 space\n"
+                 "  list_attachments 列出某页附件，需 space+page\n"
+                 "\n"
+                 "【怎么用】用户说「wiki 里有没有 XX」→ search；确定要看某页 → get；\n"
+                 "不知道空间叫什么 → 先 list_spaces（或用 name 过滤）。\n"
+                 "空间名可以是中文（如 '02. 新成员须知'），照抄返回的 space 字段即可。\n"
+                 "检索是数据库全文匹配（非语义），关键词要具体；搜不到就换词，别重复同一次搜索。"),
+    args_schema=WikiReadParams, func=_wiki_read)
 
-tools_registry["wiki_get"] = _make_async_tool(
-    name="wiki_get",
-    description=("读取 XWiki 页面的完整内容。\n\n"
-                 "WHEN: 已知道空间名和页面名，需要看正文。\n"
-                 "HOW: space=空间名（如 Main），page=页面名（如 WebHome）。"),
-    args_schema=WikiGetParams, func=_wiki_get)
-
-tools_registry["wiki_create"] = _make_async_tool(
-    name="wiki_create",
-    description=("在 XWiki 中新建页面。\n\n"
-                 "WHEN: 用户说「写到 wiki」「在 XWiki 上建个页面」。\n"
-                 "HOW: space=空间名，page=页面名（英文无空格），content=XWiki 2.1 语法内容。\n"
-                 "注意: content 用 XWiki 2.1 语法，不是 Markdown。"),
-    args_schema=WikiCreateParams, func=_wiki_create)
-
-tools_registry["wiki_update"] = _make_async_tool(
-    name="wiki_update",
-    description=("更新 XWiki 页面内容。\n\n"
-                 "WHEN: 已存在的页面需要修改。\n"
-                 "HOW: 先 wiki_get 拿当前版本，再 wiki_update 提交新内容（自动处理版本冲突）。"),
-    args_schema=WikiUpdateParams, func=_wiki_update)
-
-tools_registry["wiki_delete"] = _make_async_tool(
-    name="wiki_delete",
-    description=("删除 XWiki 页面。\n\n"
-                 "WHEN: 用户明确要求删除 wiki 页面。\n"
-                 "注意: 删除后不可恢复，请确认后再执行。"),
-    args_schema=WikiDeleteParams, func=_wiki_delete)
-
-tools_registry["wiki_list_pages"] = _make_async_tool(
-    name="wiki_list_pages",
-    description=("列出 XWiki 某空间下的所有页面。\n\n"
-                 "WHEN: 用户问「Main 空间下有哪些页面」。\n"
-                 "HOW: space=空间名，limit=返回数量（默认50）。"),
-    args_schema=WikiListPagesParams, func=_wiki_list_pages)
-
-tools_registry["wiki_list_spaces"] = _make_async_tool(
-    name="wiki_list_spaces",
-    description=("列出 XWiki 中的所有空间。\n\n"
-                 "WHEN: 用户问「wiki 里有哪些空间/分类」。\n"
-                 "HOW: limit=返回数量（默认100）。"),
-    args_schema=WikiListSpacesParams, func=_wiki_list_spaces)
-
-tools_registry["wiki_upload_attachment"] = _make_async_tool(
-    name="wiki_upload_attachment",
-    description=("上传附件到 XWiki 页面。\n\n"
-                 "WHEN: 用户说「把这个文件传到 wiki」。\n"
-                 "HOW: space=空间名，page=页面名，file_path=本地文件路径。"),
-    args_schema=WikiUploadAttachmentParams, func=_wiki_upload_attachment)
-
-tools_registry["wiki_list_attachments"] = _make_async_tool(
-    name="wiki_list_attachments",
-    description=("列出 XWiki 页面的附件。\n\n"
-                 "WHEN: 用户问「这个页面有哪些附件」。\n"
-                 "HOW: space=空间名，page=页面名。"),
-    args_schema=WikiListAttachmentsParams, func=_wiki_list_attachments)
+tools_registry["wiki_write"] = _make_async_tool(
+    name="wiki_write",
+    description=("写入组内 XWiki —— 一个工具用 action 分发。\n"
+                 "\n"
+                 "【action 取值】\n"
+                 "  create            新建页面，需 space+page+content\n"
+                 "  update            覆盖已有页面正文，需 space+page+content（自动读版本号防冲突）\n"
+                 "  delete            删除页面，需 space+page（不可恢复）\n"
+                 "  upload_attachment 上传本地文件为附件，需 space+page+file_path\n"
+                 "\n"
+                 "【铁律】\n"
+                 "  ① content 必须是 XWiki 2.1 语法（= 标题 =、**粗体**、* 列表、{{code}}…），不要写 Markdown；\n"
+                 "  ② 改已有页面前先 wiki_read(action=get) 看现状，别盲覆盖；\n"
+                 "  ③ 删除前必须让用户确认页名。"),
+    args_schema=WikiWriteParams, func=_wiki_write)

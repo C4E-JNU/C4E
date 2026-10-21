@@ -256,3 +256,62 @@ async def wiki_list_attachments(space: str, page: str) -> str:
               "url": a.get("xwikiUrl", "")} for a in r.get("attachments", [])]
     return json.dumps({"space": space, "page": page, "count": len(items),
                        "attachments": items}, ensure_ascii=False, indent=2)
+
+
+# ── 统一入口（工具只暴露 read / write 两个，action 分发） ──
+
+_READ_ACTIONS = ("search", "get", "list_spaces", "list_pages", "list_attachments")
+_WRITE_ACTIONS = ("create", "update", "delete", "upload_attachment")
+
+
+async def wiki_read(action: str = "search", query: str = "", space: str = "",
+                    page: str = "", limit: int = 10, scope: str = "all",
+                    name: str = "") -> str:
+    """只读入口：search / get / list_spaces / list_pages / list_attachments"""
+    a = (action or "search").strip()
+    if a == "search":
+        if not query:
+            return json.dumps({"error": "action=search 需要 query"}, ensure_ascii=False)
+        return await wiki_search(query, limit, scope)
+    if a == "get":
+        if not space or not page:
+            return json.dumps({"error": "action=get 需要 space 和 page"}, ensure_ascii=False)
+        return await wiki_get(space, page)
+    if a == "list_spaces":
+        return await wiki_list_spaces(limit if limit and limit > 0 else 200, name)
+    if a == "list_pages":
+        if not space:
+            return json.dumps({"error": "action=list_pages 需要 space"}, ensure_ascii=False)
+        return await wiki_list_pages(space, limit if limit and limit > 0 else 50)
+    if a == "list_attachments":
+        if not space or not page:
+            return json.dumps({"error": "action=list_attachments 需要 space 和 page"}, ensure_ascii=False)
+        return await wiki_list_attachments(space, page)
+    return json.dumps({"error": f"未知 action: {a}；可用: {', '.join(_READ_ACTIONS)}"},
+                      ensure_ascii=False)
+
+
+async def wiki_write(action: str = "", space: str = "", page: str = "",
+                     content: str = "", title: str = "", parent: str = "",
+                     file_path: str = "", filename: str = "") -> str:
+    """写入入口：create / update / delete / upload_attachment"""
+    a = (action or "").strip()
+    if a == "create":
+        if not space or not page or not content:
+            return json.dumps({"error": "action=create 需要 space、page、content"}, ensure_ascii=False)
+        return await wiki_create(space, page, content, title, parent)
+    if a == "update":
+        if not space or not page or not content:
+            return json.dumps({"error": "action=update 需要 space、page、content"}, ensure_ascii=False)
+        return await wiki_update(space, page, content, title)
+    if a == "delete":
+        if not space or not page:
+            return json.dumps({"error": "action=delete 需要 space 和 page"}, ensure_ascii=False)
+        return await wiki_delete(space, page)
+    if a == "upload_attachment":
+        if not space or not page or not file_path:
+            return json.dumps({"error": "action=upload_attachment 需要 space、page、file_path"}, ensure_ascii=False)
+        return await wiki_upload_attachment(space, page, file_path, filename)
+    return json.dumps({"error": f"未知 action: {a}；可用: {', '.join(_WRITE_ACTIONS)}"},
+                      ensure_ascii=False)
+
