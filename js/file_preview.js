@@ -39,14 +39,6 @@
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;');
     }
-    function _openMode() {
-        try {
-            if (typeof state !== 'undefined' && state.settings && state.settings.fileOpenMode) {
-                return state.settings.fileOpenMode;
-            }
-        } catch (e) {}
-        return 'backend';
-    }
     function _isWinBackend() {
         return (window.C4EAI_PLATFORM || 'win32') === 'win32';
     }
@@ -66,6 +58,16 @@
     }
     function _authTok() {
         return (typeof window.getAuthToken === 'function') ? (window.getAuthToken() || '') : '';
+    }
+    // <img src>/<iframe src> 不能带 Authorization 头 → 云端（C4EAI_AUTH=1）必须把 token 放查询串。
+    // 后端只对 GET /api/file/* 认 ?token=（见 app.py 的鉴权中间件）。
+    function _tokQS() {
+        var tk = '';
+        try { tk = _authTok(); } catch (e) {}
+        return (tk && tk !== 'guest') ? ('?token=' + encodeURIComponent(tk)) : '';
+    }
+    function _fileUrl(fileId) {
+        return '/api/file/' + encodeURIComponent(fileId) + _tokQS();
     }
 
     // 返回 Promise<blob>：先本机，404 时经 hub 带 token 拉
@@ -296,14 +298,14 @@
                 _esc(_cur.name) + '"></div>';
             var _im = b.querySelector('img');
             _im.onerror = function () { _renderText('', t('fp.imgFail')); };
-            _im.src = '/api/file/' + encodeURIComponent(id);
+            _im.src = _fileUrl(id);
             return;
         }
         if (PDF_EXT.indexOf(ext) >= 0) {
             // 同上：交给浏览器自带 PDF 阅读器，不再经过 blob（大文件会卡）。
             b.innerHTML = '<iframe class="file-preview-frame"></iframe>';
             var _fr = b.querySelector('iframe');
-            _fr.src = '/api/file/' + encodeURIComponent(id);
+            _fr.src = _fileUrl(id);
             return;
         }
         if (OFFICE_EXT.indexOf(ext) >= 0) {
@@ -327,8 +329,15 @@
             });
             return;
         }
-        // 其它二进制：给提示 + 操作
-        _renderText('', t('fp.cantPreview').replace('{ext}', ext || t('fp.unknown')));
+        // 其它二进制：浏览器打不开 → 明确告知 + 直接给下载键（用户 2026-10-21 定）
+        var _b = _bodyEl();
+        _b.innerHTML = '<div class="file-preview-hint">' +
+            _esc(t('fp.cantPreview').replace('{ext}', ext || t('fp.unknown'))) + '</div>' +
+            '<div style="text-align:center;margin-top:12px;">' +
+            '<button type="button" class="file-preview-tg active" id="fp-bin-download">⬇️ ' +
+            _esc(t('fp.download')) + '</button></div>';
+        var _bd = document.getElementById('fp-bin-download');
+        if (_bd) _bd.addEventListener('click', function () { if (_cur.fileId) _download(_cur.fileId); });
     }
 
     /* ── 打开 / 关闭 ──────────────────────────────────── */
@@ -382,35 +391,19 @@
         });
     }
 
-    // 按设置派发：backend=本机默认应用, browser=新标签页, float=应用内浮窗
+    // 统一打开方式（2026-10-21 用户定）：
+    //   能浏览器预览的（图片/PDF/文本/Office 解析文本）→ 一律应用内浮窗；
+    //   不能预览的 → 浮窗里明确写「文件无法在浏览器内打开，请使用下载功能保存」并给下载键。
+    // 不再按设置里的三档派发：<img>/<iframe> 才是唯一稳的路（本机应用会跳出应用、切走注意力）。
     function openFileById(fileId, fileName) {
-        if (!fileId) return false;
-        var mode = _openMode();
-        if (mode === 'float') {
-            openFilePreviewFloat(fileId, fileName);
-        } else if (mode === 'browser') {
-            window.open('/api/file/' + encodeURIComponent(fileId), '_blank');
-        } else {
-            _openNative(fileId, fileName);
-        }
+        if (!fileId) { _toast(t('fp.noBackend')); return false; }
+        openFilePreviewFloat(fileId, fileName);
         return true;
     }
 
     window.openFilePreviewFloat = openFilePreviewFloat;
     window.closeFilePreviewFloat = closeFilePreviewFloat;
     window.openFileById = openFileById;
-    // 数据库页专用：浮窗能预览就浮窗，不能就下载（与"设置里的打开方式"无关）
-    window.openDbFile = function (fileId, fileName) {
-        if (!fileId) return false;
-        var ext = _extOf(fileName);
-        if (IMG_EXT.indexOf(ext) >= 0 || PDF_EXT.indexOf(ext) >= 0 ||
-            TEXT_EXT.indexOf(ext) >= 0 || OFFICE_EXT.indexOf(ext) >= 0) {
-            openFilePreviewFloat(fileId, fileName);
-        } else {
-            _cur.fileId = fileId; _cur.name = fileName || 'file';   // 供 _download 取文件名
-            _download(fileId);
-            _toast(t('fp.cantPreviewDownloaded').replace('{ext}', ext || t('fp.unknown')));
-        }
-        return true;
-    };
+    // 数据库/笔记/产出区：与 openFileById 同一条统一规则（保留别名，旧调用处不用改）
+    window.openDbFile = openFileById;
 })();

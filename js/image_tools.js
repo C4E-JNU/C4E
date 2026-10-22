@@ -150,7 +150,7 @@ var imageTools = (function () {
         stage.innerHTML = '';
         var im = document.createElement('img');
         im.id = 'img-ep-img';
-        im.src = url;
+        im.src = (typeof window.withFileToken === 'function') ? window.withFileToken(url) : url;
         im.style.cssText = 'max-width:100%;max-height:50vh;width:auto;height:auto;display:block;';
         stage.appendChild(im);
         state.img = im;

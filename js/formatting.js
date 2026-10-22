@@ -134,6 +134,7 @@
                     processedContent = processedContent.replace(/\!\[(.*?)\]\(([^)\s]+)(?:\s+=(?:(\d+))?(?:x(\d+))?)?\)/g, function (m, alt, url, w, h) {
                         var a = (alt || '').replace(/"/g, '&quot;');
                         var u = (url || '').replace(/"/g, '&quot;');
+                        if (typeof window.withFileToken === 'function') u = window.withFileToken(u);
                         // 构造内联样式：若指定宽度则以 px 限定，否则 max-width:100%（自适应）；高度可选（压扁才设，否则 auto 保原比例）
                         var wpx = w ? parseInt(w, 10) : 0;
                         var hpx = h ? parseInt(h, 10) : 0;
@@ -194,6 +195,11 @@
                     html = html.replace(/<img\s+([^>]*)>/gi, function (m, attrs) {
                         // 已带 class 的跳过（避免重复叠加）
                         if (/class\s*=/.test(attrs)) return m;
+                        // 云端开了鉴权：<img src> 不能带 Authorization，补 ?token=（否则 401 白图）
+                        attrs = attrs.replace(/src\s*=\s*["']([^"']+)["']/i, function (_m2, s2) {
+                            var t2 = (typeof window.withFileToken === 'function') ? window.withFileToken(s2) : s2;
+                            return 'src="' + t2 + '"';
+                        });
                         return '<img ' + attrs + ' class="msg-image" loading="lazy" onclick="openImagePreview(this.src)" style="max-width:100%;height:auto;border-radius:6px;cursor:zoom-in;margin:4px 0;">';
                     });
 

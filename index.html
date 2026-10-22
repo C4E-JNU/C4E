@@ -123,7 +123,7 @@
             <!-- 右侧字标：空间挤压（.tight）时收起只留 logo —— 溢出阶梯见 js/topbar.js -->
             <div class="header-brand" id="header-brand">
                 <span class="brand-name">C4EAI</span>
-                <span class="brand-sub" data-i18n="brand.sub">Environmental Computing Group · Jiangnan University</span>
+                <span class="brand-sub" data-i18n="brand.sub">Computing for Environment Group · Jiangnan University</span>
             </div>
             <!-- 桌面外壳（exe）窗口三键：浏览器无 .desktop-app 整块隐藏，字标自动右推 -->
             <div class="win-controls" id="win-controls">
@@ -459,14 +459,9 @@
                         <div class="setting-item">
                                                         <label class="setting-label">
                                                             <span data-i18n="ui.fileopen">File opening</span>
-                                                            <span class="setting-value" id="file-open-mode-value" data-i18n="ui.fileopen.backend">System app</span>
+                                                            <span class="setting-value" data-i18n="ui.fileopen.unified">Preview window</span>
                                                         </label>
-                                                        <div class="mode-seg" id="file-open-mode-group">
-                                                            <button type="button" class="mode-seg-btn" data-mode="backend" data-i18n="ui.fileopen.backend">System app</button>
-                                                            <button type="button" class="mode-seg-btn" data-mode="browser" data-i18n="ui.fileopen.browser">Browser tab</button>
-                                                            <button type="button" class="mode-seg-btn" data-mode="float" data-i18n="ui.fileopen.float">In-app window</button>
-                                                        </div>
-                                                        <div class="setting-desc" data-i18n="ui.fileopen.desc">System app: open with the OS default program · Browser tab: preview/download in a new tab · In-app window: floating preview without leaving the app.</div>
+                                                        <div class="setting-desc" data-i18n="ui.fileopen.unifiedDesc">Images, PDF, text and Office files open in an in-app floating window. Anything the browser cannot display shows a notice to use Download.</div>
                                                     </div>
                         <div class="setting-item">
                                                         <label class="setting-label">
@@ -844,7 +839,7 @@
 
 
     <!-- 脚本文件 (按依赖顺序) -->
-    <script src="js/i18n.js?v=1"></script>
+    <script src="js/i18n.js?v=5"></script>
     <script src="js/state.js?v=23"></script>
     <!-- 个人设置后端存储（必须在其它模块之前：hydrate 要把后端设置灌回缓存） -->
     <script src="js/user_settings.js?v=2"></script>
@@ -852,17 +847,17 @@
     <script src="js/events.js?v=1"></script>
     <script src="js/dom.js?v=11"></script>
     <script src="js/settings.js?v=12"></script>
-    <script src="js/image_tools.js?v=4"></script>
-    <script src="js/file_preview.js?v=13"></script>
-    <script src="js/auth.js?v=26"></script>
-    <script src="js/api.js?v=19"></script>
+    <script src="js/image_tools.js?v=5"></script>
+    <script src="js/file_preview.js?v=14"></script>
+    <script src="js/auth.js?v=27"></script>
+    <script src="js/api.js?v=20"></script>
     <script src="js/database.js?v=22"></script>
     <script src="js/sidebar.js?v=40"></script>
     <script src="js/branching.js?v=22"></script>
     <script src="js/provider.js?v=11"></script>
     <script src="js/messages.js?v=20"></script>
     <script src="js/editing.js?v=3"></script>
-    <script src="js/formatting.js?v=7"></script>
+    <script src="js/formatting.js?v=8"></script>
     <script src="js/tools.js?v=6"></script>
     <script src="js/graph_rag.js?v=27"></script>
     <script src="js/note_refs.js?v=3"></script>

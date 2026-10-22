@@ -34,6 +34,18 @@
     }
 
     window.getAuthToken = function () { return localStorage.getItem(TOKEN_KEY) || ''; };
+
+    // <img src>/<iframe src>/<a download> 不能设置 Authorization 头；
+    // 后端对 GET /api/file/* 接受 ?token=（见 app.py 鉴权中间件）。渲染文件 URL 时统一走这里。
+    window.withFileToken = function (url) {
+        try {
+            var u = String(url || '');
+            if (u.indexOf('/api/file/') !== 0 || u.indexOf('token=') !== -1) return u;
+            var tk = window.getAuthToken();
+            if (!tk || tk === 'guest') return u;
+            return u + (u.indexOf('?') === -1 ? '?' : '&') + 'token=' + encodeURIComponent(tk);
+        } catch (e) { return url; }
+    };
     window.getAuthUser = function () {
         try { return JSON.parse(localStorage.getItem(USER_KEY) || 'null'); } catch (e) { return null; }
     };

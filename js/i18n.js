@@ -112,10 +112,8 @@
   "ui.lang.en": "English",
   "ui.lang.zh": "中文",
   "ui.fileopen": "文件打开方式",
-  "ui.fileopen.backend": "后端打开",
-  "ui.fileopen.browser": "浏览器新标签",
-  "ui.fileopen.float": "应用内浮窗",
-  "ui.fileopen.desc": "后端打开=本机默认应用；浏览器新标签=新标签页预览/下载；应用内浮窗=页面内预览。",
+  "ui.fileopen.unified": "应用内浮窗预览",
+  "ui.fileopen.unifiedDesc": "图片、PDF、文本、Office 文件都在应用内浮窗打开；浏览器打不开的类型会提示「文件无法在浏览器内打开，请使用下载功能保存」。",
   "ui.xiaoe": "小e 桌宠",
   "ui.xiaoe.on": "已开启",
   "ui.xiaoe.desc": "云朵桌宠：点击聊天、双击敲打、拖动把玩、右键换天气；不保存任何记录。",
@@ -1095,17 +1093,7 @@
     "en": "Switch table skin globally",
     "zh": "全局切换表格皮肤"
   },
-  "files": [
-    "js/database.js",
-    "js/file_preview.js",
-    "js/auth.js",
-    "js/settings.js",
-    "js/user_settings.js",
-    "js/provider.js",
-    "js/agent_config.js",
-    "js/tools.js"
-  ],
-  "js": {
+
     "agentcfg.configured": {
       "en": "✅ Configured",
       "zh": "✅ 已配置"
@@ -1215,7 +1203,7 @@
       "zh": "调整等级"
     },
     "auth.brand": {
-      "en": "Jiangnan University<br>Environmental Computing Group",
+      "en": "Jiangnan University<br>Computing for Environment Group",
       "zh": "江南大学<br>环境计算组"
     },
     "auth.clickToLogin": {
@@ -1763,8 +1751,12 @@
       "zh": "0 个条目"
     },
     "fp.cantPreview": {
-      "en": "This type (.{ext}) cannot be previewed in the browser. Click 🖥️ above to open with the local default app, or ⬇️ to download.",
-      "zh": "该类型（.{ext}）无法在浏览器内预览。点上方 🖥️ 用本机默认应用打开，或点 ⬇️ 下载。"
+      "en": "This file (.{ext}) cannot be opened in the browser. Please use Download to save it.",
+      "zh": "该文件（.{ext}）无法在浏览器内打开，请使用下载功能保存。"
+    },
+    "fp.download": {
+      "en": "Download",
+      "zh": "下载"
     },
     "fp.cantPreviewDownloaded": {
       "en": "This type (.{ext}) cannot be previewed in the browser; it has been downloaded",
@@ -1954,7 +1946,7 @@
       "en": "Preparing image...",
       "zh": "正在准备图片..."
     }
-  },
+  ,
   "gr.neo4jNotConnected": {
     "en": "Neo4j not connected",
     "zh": "Neo4j 未连接"
@@ -1962,6 +1954,22 @@
   "gr.nudge": {
     "en": "Nudge for answer",
     "zh": "催促回答"
+  },
+  "gen.nudge": {
+    "en": "Quick answer",
+    "zh": "快速回答"
+  },
+  "gen.nudge.t": {
+    "en": "Nudge: ask it to answer now (nothing is lost)",
+    "zh": "催它马上出答案（不中断，已探索的内容都保留）"
+  },
+  "gen.stop": {
+    "en": "Stop",
+    "zh": "立即终止"
+  },
+  "gen.stop.t": {
+    "en": "Stop this run (finished progress is kept; ask a follow-up to resume)",
+    "zh": "立即终止本轮生成（已完成的部分保留，可继续追问让它接着跑）"
   },
   "gr.reasoningCollapsed": {
     "en": "🧠 Reasoning collapsed · tap to open",

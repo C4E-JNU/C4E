@@ -92,7 +92,12 @@ def _cur_user(request: Request) -> dict:
 async def auth_no_cache_middleware(request, call_next):
     # 账号鉴权：白名单外的所有 /api/* 必须携带有效 token（存量数据/会话缺失时 401，前端弹登录框）
     if _AUTH_ENABLED and request.url.path.startswith("/api/") and request.url.path not in _AUTH_PUBLIC:
-        user = _auth.user_by_token(_auth.extract_token(request.headers))
+        _tok = _auth.extract_token(request.headers)
+        # <img src>/<iframe src>/<a download> 无法设置请求头，只能把 token 放查询串。
+        # 仅对文件读取端点放开（GET /api/file/*），别处不认 ?token=。
+        if not _tok and request.method == "GET" and request.url.path.startswith("/api/file/"):
+            _tok = request.query_params.get("token", "")
+        user = _auth.user_by_token(_tok)
         if not user:
             return JSONResponse({"error": "未登录或会话已过期"}, status_code=401)
         request.state.user = user
