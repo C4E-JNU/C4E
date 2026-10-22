@@ -417,6 +417,42 @@ def _link_output_files(msgs: list, events: list, user: str) -> None:
                 and ("outputs/" in msg["content"] or "outputs\\" in msg["content"]):
             msg["content"] = _convert(msg["content"])
 
+    # ①-bis 裸文件名（模型只写 `disc.png`、表里写 disc.png，没带 outputs/ 前缀）→ 也换卡片。
+    # 2026-10-22 实测：模型输出「文件卡片（可点开预览 / 后端打开）：」后面 8 个空行，
+    # 占位符一个没落地，用户点无可点。判据不靠模型自觉：文件名在用户 outputs 目录里客观存在就成卡片。
+    try:
+        _out_dir0 = FT._user_outputs_dir(user)
+        _out_names = [fn for fn in _os.listdir(_out_dir0)
+                      if _os.path.isfile(_os.path.join(_out_dir0, fn))]
+    except Exception:
+        _out_names = []
+    _out_names.sort(key=len, reverse=True)      # 长名优先，避免 a.png 抢了 xxa.png
+
+    def _link_bare(content: str) -> str:
+        if not _out_names:
+            return content
+        # 代码块内不改（占位符在 ``` 里不会被渲染成卡片，改了反而毁代码）
+        parts = content.split("```")
+        for i in range(0, len(parts), 2):
+            seg = parts[i]
+            for fn in _out_names:
+                if _re.search(r"\{\{file:[0-9a-fA-F]+:" + _re.escape(fn) + r"\}\}", seg):
+                    continue                     # 已经是卡片
+                pat = _re.compile(r"(?<![\w./\\-])(?P<n>" + _re.escape(fn) + r")(?![\w./\\-])")
+                m = pat.search(seg)
+                if not m:
+                    continue
+                fid = _reg("outputs/" + fn, fn)
+                if not fid:
+                    continue
+                seg = seg[:m.start()] + "{{file:%s:%s}}" % (fid, fn) + seg[m.end():]
+            parts[i] = seg
+        return "```".join(parts)
+
+    for msg in msgs:
+        if msg.get("role") == "assistant" and isinstance(msg.get("content"), str):
+            msg["content"] = _link_bare(msg["content"])
+
     # ② 本轮新产出未提及 → 追加卡片（判据：mtime 落在 turn_start..turn_end 窗内 + 正文无该 file_id）
     def _epoch(ts) -> float:
         from datetime import datetime as _dt
