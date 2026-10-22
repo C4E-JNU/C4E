@@ -1779,12 +1779,12 @@
       "zh": "该文件没有可用文本，点 ⬇️ 下载查看。"
     },
     "fp.officeNoText": {
-      "en": "The browser cannot render .{ext} layout, and no parsed text exists on the backend. Use ⬇️ above to download, or click 🖥️ to open it locally with {app}.",
-      "zh": "浏览器无法直接渲染 .{ext} 排版，且后端没有该文件的解析文本。可用上方 ⬇️ 下载，或点 🖥️ 用本机 {app} 打开。"
+      "en": "This file (.{ext}) cannot be opened in the browser. Please use Download to save it.",
+      "zh": "该文件（.{ext}）无法在浏览器内打开，请使用下载功能保存。"
     },
     "fp.officeText": {
-      "en": "⚠️ The browser cannot render .{ext} layout; below is the plain text parsed by the backend (click 🖥️ to open the original file with a local app).",
-      "zh": "⚠️ 浏览器无法直接渲染 .{ext} 的排版，以下是后端解析出的纯文本内容（点 🖥️ 可用本机应用打开原文件）。"
+      "en": "⚠️ This file (.{ext}) cannot be shown in the browser — what follows is the plain text parsed by the backend. Use ⬇️ Download above to save the original.",
+      "zh": "⚠️ 该文件（.{ext}）无法在浏览器内显示原件，以下是后端解析出的纯文本；要看原件请用上方 ⬇️ 下载功能保存。"
     },
     "fp.openNativeFail": {
       "en": "Failed to open with the default app",

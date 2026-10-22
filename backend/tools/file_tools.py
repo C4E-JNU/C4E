@@ -922,11 +922,55 @@ _TEXT_READABLE_EXTS = {
 _TEXT_READABLE_MAX = 1024 * 1024  # 1 MB 上限：超此不回退，避免超大文件灌爆小窗与模型上下文
 
 
+def _parse_office_file(path: str) -> str:
+    """产出文件（未经上传解析）按需抽正文：xlsx/xls/docx/pptx。
+    2026-10-22：用户生成 Excel 点预览只看到「读取解析文本」→ 其实 text.txt 从未生成。"""
+    ext = os.path.splitext(path)[1].lower()
+    try:
+        if ext == ".xlsx":
+            import openpyxl
+            wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+            rows = []
+            for ws in wb.worksheets:
+                rows.append("[%s]" % ws.title)
+                for row in ws.iter_rows(values_only=True):
+                    if any(c not in (None, "") for c in row):
+                        rows.append("\t".join(str(c if c is not None else "") for c in row))
+            wb.close()
+            return "\n".join(rows)
+        if ext == ".xls":
+            import xlrd
+            wb = xlrd.open_workbook(path)
+            rows = []
+            for ws in wb.sheets():
+                rows.append("[%s]" % ws.name)
+                for r in range(ws.nrows):
+                    rows.append("\t".join(str(ws.cell_value(r, c)) for c in range(ws.ncols)))
+            return "\n".join(rows)
+        if ext == ".docx":
+            import docx
+            return "\n".join(p.text for p in docx.Document(path).paragraphs)
+        if ext == ".pptx":
+            from pptx import Presentation
+            prs = Presentation(path)
+            out = []
+            for i, slide in enumerate(prs.slides, 1):
+                out.append("[slide %d]" % i)
+                for sh in slide.shapes:
+                    if getattr(sh, "has_text_frame", False) and sh.text.strip():
+                        out.append(sh.text)
+            return "\n".join(out)
+    except Exception as e:
+        print("[office-parse] %s: %s" % (path, e))
+    return ""
+
+
 async def get_upload_text(file_id: str) -> str:
     """获取上传文件的完整文本内容（跨 pool/私人区/旧目录解析）
 
     优先读解析产物 text.txt；没有 text.txt 时（产出指针文件、未解析的纯文本附件）
-    回退直读原文件本体，仅限 _TEXT_READABLE_EXTS 且体积不超 _TEXT_READABLE_MAX。
+    回退直读原文件本体，仅限 _TEXT_READABLE_EXTS 且体积不超 _TEXT_READABLE_MAX；
+    Office 产出（xlsx/xls/docx/pptx）则按需解析并回写 text.txt 缓存。
     """
     d, _, orig = _resolve_upload(file_id)
     if not d:
@@ -943,6 +987,21 @@ async def get_upload_text(file_id: str) -> str:
                     return ""
                 with open(orig, "r", encoding="utf-8", errors="replace") as f:
                     return f.read()
+            except Exception:
+                return ""
+        if ext in ("xlsx", "xls", "docx", "pptx"):
+            try:
+                if os.path.getsize(orig) > 20 * 1024 * 1024:
+                    return ""
+                import asyncio as _aio
+                txt = await _aio.to_thread(_parse_office_file, orig)
+                if txt:
+                    try:
+                        with open(text_path, "w", encoding="utf-8") as f:
+                            f.write(txt)          # 缓存：下次直接读
+                    except Exception:
+                        pass
+                return txt
             except Exception:
                 return ""
     return ""

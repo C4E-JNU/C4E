@@ -91,24 +91,32 @@
     }
 
     // 文本解析回退：本机 /api/file/text → 404 时 hub 同端点
+    // 2026-10-22：加 20s 超时。之前 fetch 无超时，后端/hub 一挂就永远停在「从后台读取解析文本……」。
     function _fetchText(fileId, cb) {
-        fetch('/api/file/text', {
+        function _withTimeout(url, opts, ms) {
+            var ctl = (typeof AbortController === 'function') ? new AbortController() : null;
+            var timer = ctl ? setTimeout(function () { try { ctl.abort(); } catch (e) {} }, ms) : null;
+            if (ctl) opts.signal = ctl.signal;
+            return fetch(url, opts).then(function (r) { if (timer) clearTimeout(timer); return r; },
+                function (e) { if (timer) clearTimeout(timer); throw e; });
+        }
+        _withTimeout('/api/file/text', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ file_id: fileId })
-        }).then(function (r) {
+        }, 20000).then(function (r) {
             if (r.ok) return r.json();
             if (r.status !== 404) throw new Error('HTTP ' + r.status);
             return new Promise(function (resolve, reject) {
                 _hubBase(function (base) {
                     if (!base) { reject(new Error('not-local')); return; }
                     var tok = _authTok();
-                    fetch(base + '/api/file/text', {
+                    _withTimeout(base + '/api/file/text', {
                         method: 'POST',
                         headers: Object.assign({ 'Content-Type': 'application/json' },
                             (tok && tok !== 'guest' ? { 'Authorization': 'Bearer ' + tok } : {})),
                         body: JSON.stringify({ file_id: fileId })
-                    }).then(function (r2) { return r2.ok ? r2.json() : { text: '' }; }).then(resolve, reject);
+                    }, 20000).then(function (r2) { return r2.ok ? r2.json() : { text: '' }; }).then(resolve, reject);
                 });
             });
         }).then(function (d) { cb((d && d.text) || ''); })
@@ -248,6 +256,18 @@
         b.innerHTML = '<div class="file-preview-hint">' + _esc(msg || t('fp.loading')) + '</div>';
     }
 
+    // 浏览器打不开原件时的统一落地页：明确告知 + 下载键（用户 2026-10-22：解析文本也要先说明这一点）
+    function _renderUnpreviewable(ext, hint) {
+        var b = _bodyEl(); if (!b) return;
+        b.innerHTML = '<div class="file-preview-hint">' +
+            _esc(hint || t('fp.cantPreview').replace('{ext}', ext || t('fp.unknown'))) + '</div>' +
+            '<div style="text-align:center;margin-top:12px;">' +
+            '<button type="button" class="file-preview-tg active" id="fp-bin-download">⬇️ ' +
+            _esc(t('fp.download')) + '</button></div>';
+        var bd = document.getElementById('fp-bin-download');
+        if (bd) bd.addEventListener('click', function () { if (_cur.fileId) _download(_cur.fileId); });
+    }
+
     function _renderText(text, hint) {
         var b = _bodyEl(); if (!b) return;
         var head = hint ? '<div class="file-preview-note">' + _esc(hint) + '</div>' : '';
@@ -309,15 +329,22 @@
             return;
         }
         if (OFFICE_EXT.indexOf(ext) >= 0) {
+            // 打开即告知「原件显示不了」（用户 2026-10-22 定），解析文本只是附加信息；
+            // 解析失败/超时 → 直接走「请用下载保存」，不再无限转圈。
+            var _note = t('fp.officeText').replace('{ext}', ext);
             _renderLoading(t('fp.readingParsed'));
-            _fetchText(id, function (t) {
-                if (!t) {
-                    _renderText('', t('fp.officeNoText')
+            var _body0 = _bodyEl();
+            if (_body0) _body0.insertAdjacentHTML('afterbegin', '<div class="file-preview-note">' + _esc(_note) + '</div>');
+            var _myd = _cur.fileId;
+            _fetchText(id, function (txt) {
+                if (_cur.fileId !== _myd) return;          // 期间换了文件 → 丢弃旧结果
+                if (!txt) {
+                    _renderUnpreviewable(ext, t('fp.officeNoText')
                         .replace('{ext}', ext)
                         .replace('{app}', ['docx', 'doc', 'odt', 'rtf'].indexOf(ext) >= 0 ? 'Word' : (['xlsx', 'xls'].indexOf(ext) >= 0 ? 'Excel' : 'PowerPoint')));
                     return;
                 }
-                _renderText(t, t('fp.officeText').replace('{ext}', ext));
+                _renderText(txt, _note);
             });
             return;
         }
@@ -330,14 +357,7 @@
             return;
         }
         // 其它二进制：浏览器打不开 → 明确告知 + 直接给下载键（用户 2026-10-21 定）
-        var _b = _bodyEl();
-        _b.innerHTML = '<div class="file-preview-hint">' +
-            _esc(t('fp.cantPreview').replace('{ext}', ext || t('fp.unknown'))) + '</div>' +
-            '<div style="text-align:center;margin-top:12px;">' +
-            '<button type="button" class="file-preview-tg active" id="fp-bin-download">⬇️ ' +
-            _esc(t('fp.download')) + '</button></div>';
-        var _bd = document.getElementById('fp-bin-download');
-        if (_bd) _bd.addEventListener('click', function () { if (_cur.fileId) _download(_cur.fileId); });
+        _renderUnpreviewable(ext);
     }
 
     /* ── 打开 / 关闭 ──────────────────────────────────── */
