@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""test_contradiction_v1.py — 矛盾分类规范 v1 归一逻辑回归测试（零 token，改口径后必跑）
+"""test_contradiction_v1.py — contradiction_taxonomy v1 归一逻辑回归测试（零 token，改口径后必跑）
 
 用法：python scripts/test_contradiction_v1.py
 覆盖：历史旧 category（E1/E2/E3/E5/图文/表文/text-text/TT/字母级别/一致类/空）全量样本 + 载体归一变体。

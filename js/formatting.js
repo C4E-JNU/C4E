@@ -244,7 +244,7 @@
                 }, 2000);
                 showPassiveToast(t('msg.fmt.formulaCopied'));
             }).catch(err => {
-                console.error('复制失败:', err);
+                                console.error('Copy failed:', err);
                 showPassiveToast(t('msg.fmt.copyFailed'));
             });
         }

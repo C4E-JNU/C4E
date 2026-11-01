@@ -1,9 +1,9 @@
-"""image_splitter.py — 子图分割（固定 Python 脚本，非 LLM）
-根据工单中 needs_subfigure_split=true 的图，用白色间隙线检测算法分割成子图。
+"""image_splitter.py — subfigure splitting (a fixed Python script, not an LLM)
+For figures marked needs_subfigure_split=true in the work order, split them into subfigures using white-gap line detection.
 
-算法来源：子图分割.ipynb（横向白线 + 纵向白线递归切割，按 A/B/C 命名）
-输入：每篇文献目录下的 01_work_order.json + content_list.json
-输出：对需分割的图生成子图文件，保存到文献/images/split/<FigureX>/ 下
+Algorithm source: subfigure_split.ipynb (recursive cutting along horizontal then vertical white lines, named A/B/C)
+Input: 01_work_order.json + content_list.json in each paper directory
+Output: subfigure files for figures that need splitting, saved under paper/images/split/<FigureX>/
 """
 import os
 import re
@@ -14,7 +14,7 @@ from pathlib import Path
 from PIL import Image
 
 
-# ───────────────── 图像读取（兼容 Windows 长路径 / 中文路径） ─────────────────
+# ───────────────── image loading (tolerates Windows long paths / non-ASCII paths) ─────────────────
 
 def _long_path(path):
     path = str(path)
@@ -26,7 +26,7 @@ def _long_path(path):
 
 
 def safe_imread(img_path):
-    """安全读取图片（兼容中文/长路径）"""
+    """Safely read an image (tolerates non-ASCII and long paths)"""
     try:
         pil_img = Image.open(img_path)
         if pil_img.mode != 'RGB':
@@ -41,10 +41,10 @@ def safe_imread(img_path):
         return None
 
 
-# ───────────────── 白线检测 + 分割算法（复用 ipynb） ─────────────────
+# ───────────────── white-line detection + splitting algorithm (reused from the ipynb) ─────────────────
 
 def find_white_horizontal_lines(img_gray, threshold=250, min_white_ratio=0.99):
-    """找到完全横向贯穿的白色行"""
+    """Find rows that are entirely white across the full width"""
     h, w = img_gray.shape
     white_lines = []
     for y in range(h):
@@ -54,7 +54,7 @@ def find_white_horizontal_lines(img_gray, threshold=250, min_white_ratio=0.99):
 
 
 def group_consecutive_lines(lines, min_gap=3):
-    """将连续的白色行/列分组"""
+    """Group consecutive white rows/columns"""
     if not lines:
         return []
     groups = []
@@ -111,7 +111,7 @@ def merge_small_regions(regions, total_size, min_size_ratio=0.25):
 
 
 def split_horizontal_with_merge(img, img_gray, y_start, y_end, min_width_ratio=0.25):
-    """对横向片段纵向切割，合并太窄区域"""
+    """Cut a horizontal segment vertically, merging regions that are too narrow"""
     w = img_gray.shape[1]
     vertical_white = []
     for x in range(w):
@@ -154,14 +154,14 @@ def split_horizontal_with_merge(img, img_gray, y_start, y_end, min_width_ratio=0
 
 def split_figure(img_path, output_dir, figure_name,
                  min_height_ratio=0.25, min_width_ratio=0.25):
-    """先横向切割再纵向切割，按顺序命名 A/B/C... 返回保存的子图文件名列表"""
+    """Cut horizontally first, then vertically, naming pieces A/B/C in order; return the saved subfigure file names"""
     img = safe_imread(img_path)
     if img is None:
         return []
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     h, w = img_gray.shape
 
-    # 1. 横向切割
+    # 1. horizontal cut
     h_white = find_white_horizontal_lines(img_gray)
     if not h_white:
         h_cut_points = []
@@ -192,7 +192,7 @@ def split_figure(img_path, output_dir, figure_name,
         h_regions = [(0, h)]
     h_regions = merge_small_regions(h_regions, h, min_height_ratio)
 
-    # 2. 纵向切割
+    # 2. vertical cut
     all_subplots = []
     for y_start, y_end in h_regions:
         subplots = split_horizontal_with_merge(img, img_gray, y_start, y_end, min_width_ratio)
@@ -201,7 +201,7 @@ def split_figure(img_path, output_dir, figure_name,
     if len(all_subplots) <= 1:
         return []
 
-    # 3. 保存子图
+    # 3. save subfigures
     os.makedirs(output_dir, exist_ok=True)
     saved = []
     for idx, sub_img in enumerate(all_subplots):
@@ -211,8 +211,8 @@ def split_figure(img_path, output_dir, figure_name,
         label = chr(65 + idx)  # A, B, C...
         output_filename = f"{figure_name}{label}.jpg"
         output_path = os.path.join(output_dir, output_filename)
-        # 同轮内 label（A/B/C...）唯一不会重名；跨轮重跑直接覆盖旧子图
-        # （不能改用 _1/_2 后缀：下游按文件名末字母 A/B/C 匹配子图号，后缀会破坏映射）
+        # Labels (A/B/C...) are unique within one round, so names never collide; a rerun overwrites the old subfigures
+        # (do not switch to _1/_2 suffixes: downstream matches the subfigure letter from the last character of the file name, which a suffix would break)
         try:
             cv2.imencode('.jpg', sub_img)[1].tofile(output_path)
             saved.append(os.path.basename(output_path))
@@ -221,7 +221,7 @@ def split_figure(img_path, output_dir, figure_name,
     return saved
 
 
-# ───────────────── 工单定位：figure_id → 实际图片 ─────────────────
+# ───────────────── work-order lookup: figure_id → actual image ─────────────────
 
 def normalize_figure_id(fid: str) -> str:
     """'Fig. 1' / 'Figure 1' / 'Fig.1' → 'Figure 1'"""
@@ -232,7 +232,7 @@ def normalize_figure_id(fid: str) -> str:
 
 
 def load_content_list(paper_dir: Path):
-    """读取 content_list.json，建立 {图号: img_path} 映射"""
+    """Read content_list.json and build a {figure number: img_path} mapping"""
     for f in paper_dir.glob('*_content_list.json'):
         try:
             data = json.loads(f.read_text(encoding='utf-8'))
@@ -249,27 +249,27 @@ def load_content_list(paper_dir: Path):
 
 
 def find_image_for_figure(paper_dir: Path, figure_id: str, content_map: dict):
-    """根据工单 figure_id 定位实际图片文件路径
-    （content_list img_path / images/FigureN 子目录，workflow 优先回退文献目录）"""
+    """Locate the actual image file path from the work order figure_id
+    (content_list img_path / the images/FigureN subdirectory, preferring the workflow copy and falling back to the paper directory)"""
     norm = normalize_figure_id(figure_id)
     if norm in content_map:
         p = paper_dir / content_map[norm]
         if p.exists():
             return p
-        # content_list 的 img_path 可能是旧路径（images/xxx.jpg），实际图在 FigureN 子目录
+        # content_list's img_path may be stale (images/xxx.jpg) while the actual image lives in the FigureN subdirectory
         basename = Path(content_map[norm]).name
         for base in [paper_dir / 'C4EAI AGENTICWORKFLOW', paper_dir]:
             for fig_dir in [base / 'images' / norm.replace(' ', ''), base / 'images' / norm]:
                 cand = fig_dir / basename
                 if cand.exists():
                     return cand
-    # 兜底：在 images/ 目录找文件名含 FigureN 的（workflow 优先回退文献目录）
+    # fallback: under images/, find a file name containing FigureN (preferring the workflow copy, falling back to the paper directory)
     for base in [paper_dir / 'C4EAI AGENTICWORKFLOW', paper_dir]:
         for ext in ['*.jpg', '*.png', '*.jpeg']:
             for p in (base / 'images').glob(ext):
                 if norm.lower().replace(' ', '') in p.stem.lower().replace(' ', ''):
                     return p
-        # 在 images/FigureN 子目录找
+        # look inside the images/FigureN subdirectory
         for sub in (base / 'images').glob('*'):
             if sub.is_dir() and norm.lower().replace(' ', '') in sub.name.lower().replace(' ', ''):
                 for ext in ['*.jpg', '*.png', '*.jpeg']:
@@ -278,19 +278,19 @@ def find_image_for_figure(paper_dir: Path, figure_id: str, content_map: dict):
     return None
 
 
-# ───────────────── 主入口 ─────────────────
+# ───────────────── main entry ─────────────────
 
 def split_work_order(paper_dir: Path, work_order=None, log=print):
-    """按工单分割所有 needs_subfigure_split=true 的图。
-    分割数应与工单 total_subfigures 一致，不符则标记分割失败（调用方降级为整图处理）。
-    产出（02_image_match.json 由调用方写；分割子图写入 workflow 的 images/split/）。"""
+    """Split every figure with needs_subfigure_split=true according to the work order.
+    The split count should match the work order's total_subfigures; otherwise the split is marked as failed (the caller falls back to whole-figure processing).
+    Products (02_image_match.json is written by the caller; split subfigures go to the workflow's images/split/)."""
     wf_dir = paper_dir / "C4EAI AGENTICWORKFLOW"
     if work_order is None:
         wo_path = wf_dir / '01_work_order.json'
         if not wo_path.exists():
             wo_path = paper_dir / '01_work_order.json'
         if not wo_path.exists():
-            log("⚠️ 无工单文件")
+            log("! no work-order file")
             return []
         work_order = json.loads(wo_path.read_text(encoding='utf-8'))
 
@@ -304,11 +304,11 @@ def split_work_order(paper_dir: Path, work_order=None, log=print):
             continue
         img_path = find_image_for_figure(paper_dir, fid, content_map)
         if img_path is None:
-            log(f"⚠️ {fid}: 找不到图片")
+            log(f"! {fid}: image not found")
             continue
         out_dir = wf_dir / 'images' / 'split' / normalize_figure_id(fid).replace(' ', '')
         saved = split_figure(str(img_path), str(out_dir), normalize_figure_id(fid).replace(' ', ''))
-        # 校验：分割出的子图数应与工单标注的总子图数一致
+        # Check: the number of split subfigures should match the total recorded in the work order
         expected = task.get('total_subfigures') or len(subs)
         split_ok = (len(saved) == expected)
         results.append({
@@ -320,14 +320,14 @@ def split_work_order(paper_dir: Path, work_order=None, log=print):
             'needs_xy_count': len([s for s in subs if s.get('needs_xy_extraction')]),
         })
         if split_ok:
-            log(f"✅ {fid}: 分割出 {len(saved)} 个子图（与标注的 {expected} 一致）")
+            log(f"OK {fid}: split into {len(saved)} subfigures (matches the recorded {expected})")
         else:
-            log(f"⚠️ {fid}: 分割出 {len(saved)} 个，但工单标注 {expected} 个，判定分割失败，降级为整图处理")
+            log(f"! {fid}: split into {len(saved)} but the work order records {expected}; treating the split as failed and falling back to whole-figure processing")
     return results
 
 
 def split_single_paper(paper_dir: Path, log=print):
-    """对单个文献目录执行子图分割"""
+    """Run subfigure splitting for a single paper directory"""
     return split_work_order(Path(paper_dir), log=log)
 
 
@@ -337,4 +337,4 @@ if __name__ == '__main__':
     if target:
         split_single_paper(Path(target))
     else:
-        print("用法: python image_splitter.py <文献目录路径>")
+        print("Usage: python image_splitter.py <paper directory path>")

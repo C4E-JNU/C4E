@@ -65,7 +65,7 @@
 
               // 1. PDF 由【后端】处理（/api/file/upload 用 fitz 提取），不在前端用 pdfjs 解析
               if (extension === 'pdf') {
-                  return '[PDF 文件：文本由后端 file_id 注入，前端不解析]';
+                                    return "[PDF file: text is injected by the backend via file_id and is not parsed here]";
               }
 
               // 2. Word (.docx) 文件解析
@@ -75,7 +75,7 @@
                       const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
                       return result.value;
                   } catch (e) {
-                      throw new Error('Word 文档解析失败：' + e.message);
+                                            throw new Error("Failed to parse Word document: " + e.message);
                   }
               }
 
@@ -94,9 +94,9 @@
                           const texts = xml.getElementsByTagNameNS(ns, 't');
                           text += Array.from(texts).map(el => el.textContent).join(' ') + '\n';
                       }
-                      return text.trim() || '[PPT 未能提取到文本内容]';
+                                            return text.trim() || "[No text could be extracted from the PPT]";
                   } catch (e) {
-                      throw new Error('PPT 解析失败：' + e.message);
+                                            throw new Error("Failed to parse PPT: " + e.message);
                   }
               }
 
@@ -106,7 +106,7 @@
                       const arrayBuffer = await file.arrayBuffer();
                       const zip = await JSZip.loadAsync(arrayBuffer);
                       const contentFile = zip.file('content.xml');
-                      if (!contentFile) return '[ODT 文件格式异常]';
+                                            if (!contentFile) return "[Malformed ODT file]";
                       const content = await contentFile.async('string');
                       const parser = new DOMParser();
                       const xml = parser.parseFromString(content, 'text/xml');
@@ -116,9 +116,9 @@
                       for (const el of paragraphs) {
                           result += el.textContent + '\n';
                       }
-                      return result.trim() || '[ODT 未能提取到文本内容]';
+                                            return result.trim() || "[No text could be extracted from the ODT]";
                   } catch (e) {
-                      throw new Error('ODT 解析失败：' + e.message);
+                                            throw new Error("Failed to parse ODT: " + e.message);
                   }
               }
 
@@ -132,21 +132,21 @@
               //    图片随消息只带 file_id，智能体按需调 read_image(file_id, mode) 自行决定
               //    base64 还是 OCR（用户 2026-09-22 定：上传一律走 read_file 系列工具）。
               if (imageExtensions.includes('.' + extension)) {
-                  return '[图片文件：正文由智能体按 file_id 调用 read_image 获取]';
+                                    return "[Image file: the agent fetches the body via read_image with the file_id]";
               }
 
               // 7. Excel 文件 - 尝试读取为文本
               if (extension === 'xlsx' || extension === 'xls') {
                   // .xlsx 是 ZIP 压缩格式，无法直接读取
                   // 提示用户转换为 CSV 或文本格式
-                  return '[Excel 文件无法直接读取，请将文件转换为 .csv 或 .txt 格式后再上传]';
+                                    return "[Excel files cannot be read directly; convert to .csv or .txt and upload again]";
               }
 
               // 8. 文本类文件解析 (默认)
               return new Promise((resolve, reject) => {
                   const reader = new FileReader();
                   reader.onload = (e) => resolve(e.target.result);
-                  reader.onerror = (e) => reject(new Error('文件读取失败'));
+                                    reader.onerror = (e) => reject(new Error("File read failed"));
                   reader.readAsText(file);
               });
           }

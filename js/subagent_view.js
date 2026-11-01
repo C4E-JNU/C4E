@@ -89,23 +89,23 @@
     }
 
     function _stepHtml(st) {
-        var t = st.type || '';
-        if (t === 'thinking') {
+        var stType = st.type || '';
+        if (stType === 'thinking') {
             return '<div style="margin:.4rem 0;"><div style="font-weight:600;color:var(--primary);">🧠 ' + t('sub.thinking') + '</div>' +
                    '<div style="white-space:pre-wrap;background:var(--light,#f6f8fa);border-radius:6px;padding:.4rem .6rem;margin-top:.2rem;">' +
                    _esc(st.text || '') + '</div></div>';
         }
-        if (t === 'tool_call') {
+        if (stType === 'tool_call') {
             return '<div style="margin:.4rem 0;"><div style="font-weight:600;">🔧 ' + t('sub.call') + _esc(st.name || '') + '</div>' +
                    '<pre style="white-space:pre-wrap;background:var(--light,#f6f8fa);border-radius:6px;padding:.4rem .6rem;margin:.2rem 0 0;">' +
                    _esc(st.input || '') + '</pre></div>';
         }
-        if (t === 'tool_result') {
+        if (stType === 'tool_result') {
             return '<div style="margin:.4rem 0;"><div style="font-weight:600;">👁️ ' + _esc(st.name || '') + t('sub.resultSuffix') + '</div>' +
                    '<pre style="white-space:pre-wrap;max-height:220px;overflow:auto;background:var(--light,#f6f8fa);border-radius:6px;padding:.4rem .6rem;margin:.2rem 0 0;">' +
                    _esc(st.content || '') + '</pre></div>';
         }
-        if (t === 'notice') {
+        if (stType === 'notice') {
             return '<div style="margin:.4rem 0;color:var(--gray);">⚠️ ' + _esc(st.text || '') + '</div>';
         }
         return '';

@@ -72,7 +72,7 @@ function initDatabase() {
             try {
                 await uploadDocument(f);
             } catch (err) {
-                console.warn('数据库上传失败:', f.name, err);
+                                console.warn('Database upload failed:', f.name, err);
                 if (typeof showToast === 'function') showToast(t('db.uploadFailed') + f.name, 'error');
             }
         }
@@ -638,7 +638,7 @@ async function refreshDocumentList() {
             });
         });
     } catch (e) {
-        console.error('加载数据库条目失败:', e);
+                console.error('Failed to load database entries:', e);
         container.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--error);">' + t('db.loadFail') + '</div>';
     }
 }
@@ -715,11 +715,11 @@ async function dbEditEntry(id) {
         titleValue: n.title || '',
         value: n.content || '',
         onSave: function (newContent, newTitle) {
-            var t = (newTitle !== null && newTitle !== undefined && newTitle !== '') ? newTitle : t('db.unnamed');
+            var _title = (newTitle !== null && newTitle !== undefined && newTitle !== '') ? newTitle : t('db.unnamed');
             fetch('/api/notes', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ note_id: id, title: t, content: newContent, branch_id: DB_BRANCH })
+                body: JSON.stringify({ note_id: id, title: _title, content: newContent, branch_id: DB_BRANCH })
             }).then(function (r) { return r.json(); }).then(function (d) {
                 if (d.status === 'ok') { showToast(t('db.entryUpdated'), 'success'); refreshDocumentList(); }
                 else showToast(t('db.updateFailPlain'), 'error');
@@ -740,11 +740,11 @@ function dbAddEntry(folderId) {
         titleValue: '',
         value: '',
         onSave: function (newContent, newTitle) {
-            var t = (newTitle !== null && newTitle !== undefined && newTitle !== '') ? newTitle : t('db.unnamed');
+            var _title = (newTitle !== null && newTitle !== undefined && newTitle !== '') ? newTitle : t('db.unnamed');
             fetch('/api/notes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: t, content: newContent, branch_id: DB_BRANCH,
+                body: JSON.stringify({ title: _title, content: newContent, branch_id: DB_BRANCH,
                                       kind: 'note', folder_id: _gid })
             }).then(function (r) { return r.json(); }).then(function (d) {
                 if (d.status === 'ok') {

@@ -1,8 +1,8 @@
-// ==================== 引用给智能体（笔记 / 数据库条目） ====================
-// 效果与"对话附件"一致：点条目卡片上的 📌 → 作为待发引用出现在输入区上方芯片栏 →
-// 发送时随请求带给后端（后端把全文+scope+id 注入当轮上下文，智能体可用 conversation_notes 工具
-// 按 scope+id 直接增删改查该条目）。本地笔记 scope='notes'，云端数据库条目 scope='database'。
-
+// ==================== Reference to the agent (notes / database entries) ====================
+// Same effect as a chat attachment: click 📌 on an entry card -> it appears as a pending reference chip
+// above the input -> sent with the request (the backend injects full text + scope + id into the turn
+// context; the agent can read/write it via the conversation_notes tool by scope+id).
+// Local notes use scope="notes"; cloud database entries use scope="database".
 (function () {
     function _state() {
         if (typeof state === 'undefined') return null;
@@ -13,7 +13,7 @@
     function _bar() {
         var bar = document.getElementById('pending-refs-bar');
         if (bar) return bar;
-        // 挂在输入区上方（现代输入条之前）
+        // Mount above the input area (before the modern input bar)
         var anchor = document.querySelector('.modern-input-bar');
         if (!anchor || !anchor.parentNode) return null;
         bar = document.createElement('div');
@@ -57,7 +57,7 @@
             .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    // 加引用：{id, scope, title, content}
+    // Add a reference: {id, scope, title, content}
     function addNoteRef(ref) {
         var s = _state();
         if (!s) return;
@@ -72,7 +72,7 @@
         if (typeof showPassiveToast === 'function') showPassiveToast(t('msg.refAdded').replace('{title}', ref.title || ref.id));
     }
 
-    // 取走并清空（发送时调用）
+    // Take and clear (called on send)
     function takeNoteRefs() {
         var s = _state();
         if (!s) return [];
@@ -82,7 +82,7 @@
         return out;
     }
 
-    // 只看不清（发送前读取，避免校验失败时丢引用）
+    // Read without clearing (so a validation failure does not lose references)
     function peekNoteRefs() {
         var s = _state();
         return s ? s.pendingNoteRefs.slice() : [];
@@ -90,7 +90,7 @@
 
     function clearNoteRefs() { var s = _state(); if (s) { s.pendingNoteRefs = []; renderRefsBar(); } }
 
-    // 从笔记面板缓存里找一条本地笔记
+    // Find a local note in the notes panel cache
     function refLocalNote(noteId) {
         var notes = (typeof _currentNotes !== 'undefined' && _currentNotes) ? _currentNotes : [];
         var n = notes.find(function (x) { return x.id === noteId; });
@@ -98,7 +98,7 @@
         addNoteRef({ id: n.id, scope: 'notes', title: n.title || t('edit.noteUntitled'), content: n.content || '' });
     }
 
-    // 从数据库条目缓存里找一条（js/database.js 的 _dbEntries）
+    // Find a database entry (js/database.js _dbEntries)
     function refDbEntry(entryId) {
         var arr = (typeof _dbEntries !== 'undefined' && _dbEntries) ? _dbEntries : [];
         var n = arr.find(function (x) { return x.id === entryId; });

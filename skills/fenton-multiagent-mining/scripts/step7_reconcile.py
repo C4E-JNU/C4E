@@ -1,22 +1,22 @@
 # -*- coding: utf-8 -*-
-"""step7_reconcile.py — 步骤七 对账门（清点数 ↔ 填充数 / 字段名 / fill_stats / 曲线归宿）
+"""step7_reconcile.py — the Step 7 reconciliation gate (inventory count ↔ filled count / field names / fill_stats / curve homes)
 
-用法：
-  python step7_reconcile.py <论文夹 或 批次根>
-产物：
-  单篇 → <论文夹>/datamining/07_reconciliation.json
-  批次 → <批次根>/_ledgers/07_reconciliation.json
+Usage:
+  python step7_reconcile.py <paper folder or corpus root>
+Products:
+  single paper → <paper folder>/datamining/07_reconciliation.json
+  multiple papers → <corpus root>/_ledgers/07_reconciliation.json
 
-六项校验（逐篇）：
-  ① counts      05_node_inventory 清点数 == 06_schema 填充数（催化剂 / 实验 / 变量扫描组）
-  ② field_names properties 内键名必须在字段清单内（催化剂 45 / 实验 41 + stability 6）
-  ③ fill_stats  from_text + from_image + from_errata + blank == total_fields
-  ④ pollutant   pollutant_name 必须单值（并列多污染物 = 拆分失败，必须重填）
-  ⑤ curves      04_verified_image_data 里每条 curve 在 schema 中有归宿（反向多出的也报）
-  ⑥ levels      变量 levels[] 每项须同时有 level_value 与 metric_name/metric_value（塞了水平却
-                不给对应指标 = FAIL）；曲线 level_value 须与所在水平一致；levels 项数须 >=
-                05_node_inventory 的 declared_levels 数（少 = 漏水平 FAIL，多 = WARN）。
-                旧结构（变量无 levels）跳过本项，保证历史数据仍可对账。
+Six checks (per paper):
+  ① counts      05_node_inventory inventory count == 06_schema filled count (catalysts / experiments / variable sweep groups)
+  ② field_names property key names must be in the field list (catalysts 45 / experiments 41 + stability 6)
+  ③ fill_stats  from_text + from_image + from_errata + blank == total field count
+  ④ pollutant   pollutant_name must be a single value (co-listed pollutants = split failure, must be refilled)
+  ⑤ curves      every curve in 04_verified_image_data has a home in the schema (extra reverse ones are reported too)
+  ⑥ levels      every variable levels[] item must carry both level_value and metric_name/metric_value (a level without
+                its indicator = FAIL); the curve's level_value must match the level it sits in; the number of levels items must be >=
+                the declared_levels count in 05_node_inventory (fewer = missing level, FAIL; more = WARN).
+                The legacy structure (variables without levels) skips this item, so historical data still reconciles.
 """
 import json
 import os
@@ -50,23 +50,23 @@ EXPERIMENT_FIELDS = [
 STABILITY_FIELDS = ["cycle_count", "initial_efficiency", "final_efficiency",
                     "efficiency_retention", "metal_leaching_conc", "structure_after_rxn"]
 
-# 并列污染物特征符（命中即视为「一实验一污染物」被违反）
-MULTI_POLLUTANT = ["、", "和", " + ", "+", " respectively", "respectively", "混合", " and "]
-# 模板自带的收纳键：允许出现在 properties 内，不计入 45/41 字段数
+# co-listed-pollutant markers (a hit means "one pollutant per experiment" was violated; legacy Chinese separators kept for old data)
+MULTI_POLLUTANT = [",", " and ", " + ", "+", " respectively", "respectively", "mixture"]
+# template-native container keys: allowed inside properties and not counted toward the 45/41 fields
 EXTRA_ALLOWED = {"other"}
-# 曲线容器键（与 schema_fill 模板曲线绑定表同一口径）
+# curve container keys (the same caliber as the schema_fill template curve binding table)
 CURVE_KEY_RE = re.compile(r"(profiles|curves)$", re.I)
 REF_RE = re.compile(r"^(fig(?:ure)?\.?\s*s?\d+)([a-z])?$", re.I)
 
 
-# ────────────────────────── 基础工具 ──────────────────────────
+# ────────────────────────── basic helpers ──────────────────────────
 def wf_of(paper):
     wf = os.path.join(paper, "datamining")
     return wf if os.path.isdir(wf) else paper
 
 
 def papers_of(root):
-    """单篇（root 自身是论文夹）或批次（root 下若干论文夹）自适应。"""
+    """Auto-adapt: one paper (root itself is a paper folder) or several (paper folders under root)."""
     root = os.path.abspath(root)
     if os.path.isdir(os.path.join(root, "datamining")) or os.path.exists(
             os.path.join(root, "00_full_cleaned.md")):
@@ -113,12 +113,12 @@ def split_ref(ref, sub=""):
     return str(ref or "").strip(), norm_sub(sub)
 
 
-# ────────────────────────── 校验 ──────────────────────────
+# ────────────────────────── checks ──────────────────────────
 def schema_curve_index(schema):
-    """递归收集 schema 中所有曲线容器的 (fig, sub, label)；另统计缺 points 的条数。
+    """Recursively collect the (fig, sub, label) of every curve container in the schema; also count entries missing points.
 
-    覆盖 `degradation_profiles` 及自定义键（`quenching_degradation_profiles`、
-    `other.control_curves`、`system_control_profiles` …）——与 schema_fill 模板曲线容器同一口径。
+    Covers `degradation_profiles` plus custom keys (`quenching_degradation_profiles`,
+    `other.control_curves`, `system_control_profiles` …) — the same caliber as the schema_fill template curve containers.
     """
     seen, empty, total = set(), 0, 0
 
@@ -156,7 +156,7 @@ def schema_curve_index(schema):
 
 
 def verified_curve_index(verified):
-    """收集 04_verified_image_data 里所有 curve 的 (fig, sub, label)。"""
+    """Collect the (fig, sub, label) of every curve in 04_verified_image_data."""
     seen = set()
     for rec in verified or []:
         if not isinstance(rec, dict):
@@ -169,6 +169,44 @@ def verified_curve_index(verified):
     return seen
 
 
+def collect_inv_vars(inv):
+    """Tolerate both variable-registration formats in the 05 node inventory:
+    new — variables nested inside the experiment node's variables[] (preferred; ownership is locked by the nesting);
+    legacy — top-level flat variables[] carrying exp_id (fallback; all 767 historical papers use this form).
+    Flattened uniformly to [{exp_id, variable_parameter, declared_levels, ...}] for counting and declared_levels reconciliation."""
+    nested = []
+    for ex in (inv.get("experiments", []) or []):
+        if not isinstance(ex, dict):
+            continue
+        for iv in (ex.get("variables", []) or []):
+            if isinstance(iv, dict):
+                iv = dict(iv)
+                # tolerate both keys: experiment_id (new) / exp_id (legacy)
+                iv.setdefault("exp_id", ex.get("experiment_id") or ex.get("exp_id"))
+                nested.append(iv)
+    if nested:
+        return nested
+    return [iv for iv in (inv.get("variables", []) or []) if isinstance(iv, dict)]
+
+
+def iter_sch_exps(sch):
+    """Tolerate three formats of 06 experiment nodes (top-level experiments finalized 2026-10-23):
+    new — top-level experiments[] (experiments do not nest catalysts; ownership comes from each node's catalyst_id);
+    intermediate — top-level variable_experiments[] (the 2026-10-23 daytime key name, fallback);
+    legacy — catalysts[].experiments[] (historical fallback). Files that coexist are unioned."""
+    for e in (sch.get("experiments") or []):
+        if isinstance(e, dict):
+            yield e
+    for e in (sch.get("variable_experiments") or []):
+        if isinstance(e, dict):
+            yield e
+    for c in (sch.get("catalysts") or []):
+        if isinstance(c, dict):
+            for e in (c.get("experiments") or []):
+                if isinstance(e, dict):
+                    yield e
+
+
 def check(paper):
     wf = wf_of(paper)
     inv = load_json(os.path.join(wf, "05_node_inventory.json"))
@@ -176,42 +214,45 @@ def check(paper):
     if inv is None or sch is None:
         return None
     name = os.path.basename(os.path.normpath(paper))
+    inv_vars = collect_inv_vars(inv)
     inv_c, inv_e, inv_v = (len(inv.get("catalysts", []) or []),
                            len(inv.get("experiments", []) or []),
-                           len(inv.get("variables", []) or []))
+                           len(inv_vars))
     sch_c = len(sch.get("catalysts", []) or [])
-    sch_e = sum(len(c.get("experiments", []) or []) for c in sch.get("catalysts", []) or [])
-    sch_v = sum(len(e.get("variable_experiments", []) or [])
-                for c in sch.get("catalysts", []) or [] for e in c.get("experiments", []) or [])
+    sch_exps = list(iter_sch_exps(sch))
+    sch_e = len(sch_exps)
+    sch_v = sum(len(e.get("variable_experiments", []) or []) for e in sch_exps)
 
     fails = []
     warns = []
 
-    # ① 计数（少 = 填充缺口，FAIL；多 = 步骤六清点可能漏登，WARN 待复核）
-    for label, a, b in (("催化剂", inv_c, sch_c), ("实验", inv_e, sch_e), ("变量", inv_v, sch_v)):
+    # ① counts (fewer = fill gap, FAIL; more = Step 6 inventory may have missed one, WARN pending review)
+    for label, a, b in (("catalysts", inv_c, sch_c), ("experiments", inv_e, sch_e), ("variables", inv_v, sch_v)):
         if b < a:
-            fails.append(f"count:{label}缺 {a - b}（清单 {a} → 填充 {b}）")
+            fails.append(f"count:{label} short by {a - b} (inventory {a} → filled {b})")
         elif b > a:
-            warns.append(f"{label}多 {b - a}（清点 {a} → 填充 {b}，步骤六可能漏登记，请复核 05）")
+            warns.append(f"{label} over by {b - a} (inventory {a} → filled {b}; Step 6 may have missed a registration, review 05)")
 
-    # ② 字段名（含顶层允许键）
+    # ② field names (including the keys allowed at top level)
     bad_keys = []
     for c in sch.get("catalysts", []) or []:
         props = c.get("properties") or {}
         for k in props:
-            if k not in CATALYST_FIELDS:
-                bad_keys.append(f"催化剂.{k}")
-        for e in c.get("experiments", []) or []:
-            for k in (e.get("properties") or {}):
-                if k not in EXPERIMENT_FIELDS and k not in EXTRA_ALLOWED:
-                    bad_keys.append(f"实验.{k}")
-            for k in (e.get("stability") or {}):
-                if k not in STABILITY_FIELDS:
-                    bad_keys.append(f"stability.{k}")
+            # curve container keys (*_profiles / *_curves, e.g. degradation_profiles) are template-native and
+            # do not count toward the 45/41 fields; they are checked separately by item ⑤, so only allow them here and never flag them
+            if k not in CATALYST_FIELDS and not CURVE_KEY_RE.search(k):
+                bad_keys.append(f"catalyst.{k}")
+    for e in sch_exps:
+        for k in (e.get("properties") or {}):
+            if k not in EXPERIMENT_FIELDS and k not in EXTRA_ALLOWED and not CURVE_KEY_RE.search(k):
+                bad_keys.append(f"experiment.{k}")
+        for k in (e.get("stability") or {}):
+            if k not in STABILITY_FIELDS:
+                bad_keys.append(f"stability.{k}")
     if bad_keys:
-        fails.append("字段名非法: " + ", ".join(sorted(set(bad_keys))[:12]))
+        fails.append("illegal field names: " + ", ".join(sorted(set(bad_keys))[:12]))
 
-    # ③ fill_stats（只累加四项口径键；子智能体附带的 total_fields 等仅作说明，不计入求和）
+    # ③ fill_stats (sum only the four caliber keys; extras such as total_fields supplied by subagents are informational)
     FS_KEYS = ("from_text", "from_image", "from_errata", "blank")
     total_fields = len(CATALYST_FIELDS) * sch_c + (len(EXPERIMENT_FIELDS) + len(STABILITY_FIELDS)) * sch_e
     fs = sch.get("fill_stats") or {}
@@ -219,24 +260,23 @@ def check(paper):
     if fs:
         lack = [k for k in FS_KEYS if k not in fs]
         if lack:
-            fails.append("fill_stats 缺项: " + ", ".join(lack))
+            fails.append("fill_stats missing keys: " + ", ".join(lack))
         fs_sum = sum(fs.get(k, 0) for k in FS_KEYS if isinstance(fs.get(k), (int, float)))
         if fs_sum != total_fields:
-            fails.append(f"fill_stats 四项和 {fs_sum} ≠ 总字段数 {total_fields}")
+            fails.append(f"fill_stats sums to {fs_sum} ≠ total field count {total_fields}")
     else:
-        fails.append("fill_stats 缺失")
+        fails.append("fill_stats absent")
 
-    # ④ 污染物单值
+    # ④ single pollutant value
     multi = []
-    for c in sch.get("catalysts", []) or []:
-        for e in c.get("experiments", []) or []:
-            pn = e.get("pollutant_name") or (e.get("properties") or {}).get("pollutant_name") or ""
-            if pn and any(t in str(pn) for t in MULTI_POLLUTANT):
-                multi.append(str(pn)[:40])
+    for e in sch_exps:
+        pn = e.get("pollutant_name") or (e.get("properties") or {}).get("pollutant_name") or ""
+        if pn and any(t in str(pn) for t in MULTI_POLLUTANT):
+            multi.append(str(pn)[:40])
     if multi:
-        fails.append("一实验一污染物被违反: " + " | ".join(multi[:5]))
+        fails.append("one pollutant per experiment violated: " + " | ".join(multi[:5]))
 
-    # ⑤ 曲线归宿
+    # ⑤ curve homes
     curve_stat = None
     verified = load_json(os.path.join(wf, "04_verified_image_data.json"), default=None)
     if verified is not None:
@@ -248,84 +288,83 @@ def check(paper):
                       "lost": ["/".join(x) for x in lost], "extra": ["/".join(x) for x in extra],
                       "no_points": empty_pts}
         if lost:
-            fails.append(f"曲线未落位 {len(lost)} 条: " + "; ".join("/".join(x) for x in lost[:6]))
+            fails.append(f"{len(lost)} curves have no home: " + "; ".join("/".join(x) for x in lost[:6]))
         if empty_pts:
-            fails.append(f"曲线缺 points {empty_pts} 条（子智能体漏复制，重派补读 04）")
+            fails.append(f"{empty_pts} curves are missing points (the subagent failed to copy them; re-dispatch to read 04)")
 
-    # ⑥ 变量水平（v2）：levels[] 每项须同时有 level_value 与指标；曲线 level_value 与所在项一致；
-    #    levels 项数 >= 步骤六登记的 declared_levels 数（少 = 漏水平）
+    # ⑥ variable levels (v2): every levels[] item must carry level_value and an indicator; the curve level_value must match its item;
+    #    the number of levels items >= the declared_levels count registered in Step 6 (fewer = missing level)
     lvl_stat = {"groups": 0, "with_levels": 0, "levels": 0, "declared": 0,
                 "missing_level_value": [], "missing_metric": [], "curve_mismatch": [],
                 "declared_gap": [], "beyond_declared": []}
     inv_decl = {}
-    for iv in (inv.get("variables", []) or []):
+    for iv in inv_vars:
         if isinstance(iv, dict) and iv.get("declared_levels"):
             inv_decl.setdefault((str(iv.get("exp_id") or "").lower(),
                                  str(iv.get("variable_parameter") or "").lower()), []).append(iv)
-    for c in sch.get("catalysts", []) or []:
-        for ei, e in enumerate(c.get("experiments", []) or []):
-            if not isinstance(e, dict):
+    for ei, e in enumerate(sch_exps):
+        if not isinstance(e, dict):
+            continue
+        ekey = f"E{ei + 1}".lower()
+        for vi, v in enumerate(e.get("variable_experiments", []) or []):
+            if not isinstance(v, dict):
                 continue
-            ekey = f"E{ei + 1}".lower()
-            for vi, v in enumerate(e.get("variable_experiments", []) or []):
-                if not isinstance(v, dict):
+            lvl_stat["groups"] += 1
+            vpar = str(v.get("variable_parameter") or "")
+            levels = v.get("levels")
+            if not isinstance(levels, list) or not levels:
+                # legacy structure (no levels): require at least metric_value / new_value, otherwise flag it
+                if not (v.get("metric_value") or v.get("new_value")):
+                    lvl_stat["missing_metric"].append(
+                        f"V{vi + 1}:{vpar or '-'} (no levels and no indicator value)")
+                continue
+            lvl_stat["with_levels"] += 1
+            for li, lv in enumerate(levels):
+                if not isinstance(lv, dict):
+                    lvl_stat["missing_level_value"].append(f"V{vi + 1}.L{li + 1}")
                     continue
-                lvl_stat["groups"] += 1
-                vpar = str(v.get("variable_parameter") or "")
-                levels = v.get("levels")
-                if not isinstance(levels, list) or not levels:
-                    # 旧结构（无 levels）：至少要有 metric_value / new_value，否则提示
-                    if not (v.get("metric_value") or v.get("new_value")):
-                        lvl_stat["missing_metric"].append(
-                            f"V{vi + 1}:{vpar or '-'}（无 levels 且无指标值）")
+                lvl_stat["levels"] += 1
+                lp = f"V{vi + 1}.L{li + 1}"
+                if lv.get("level_value") in (None, ""):
+                    lvl_stat["missing_level_value"].append(lp)
+                if lv.get("metric_value") in (None, "") and lv.get("metric_name") in (None, ""):
+                    lvl_stat["missing_metric"].append(f"{lp} (level {lv.get('level_value')})")
+                dps = lv.get("degradation_profiles")
+                dps = dps if isinstance(dps, list) else ([dps] if isinstance(dps, dict) else [])
+                for q in dps:
+                    if not isinstance(q, dict):
+                        continue
+                    ql = q.get("level_value")
+                    if ql in (None, ""):
+                        continue
+                    if str(ql).strip() != str(lv.get("level_value")).strip():
+                        lvl_stat["curve_mismatch"].append(
+                            f"{lp}: curve level_value={ql} ≠ item level_value={lv.get('level_value')}")
+            # declared_levels reconciliation (key = experiment index + parameter name; a mismatch is not reported, to avoid false alarms)
+            for iv in inv_decl.get((ekey, vpar.lower()), []) or []:
+                dl = iv.get("declared_levels")
+                if not isinstance(dl, list):
                     continue
-                lvl_stat["with_levels"] += 1
-                for li, lv in enumerate(levels):
-                    if not isinstance(lv, dict):
-                        lvl_stat["missing_level_value"].append(f"V{vi + 1}.L{li + 1}")
-                        continue
-                    lvl_stat["levels"] += 1
-                    lp = f"V{vi + 1}.L{li + 1}"
-                    if lv.get("level_value") in (None, ""):
-                        lvl_stat["missing_level_value"].append(lp)
-                    if lv.get("metric_value") in (None, "") and lv.get("metric_name") in (None, ""):
-                        lvl_stat["missing_metric"].append(f"{lp}（水平 {lv.get('level_value')}）")
-                    dps = lv.get("degradation_profiles")
-                    dps = dps if isinstance(dps, list) else ([dps] if isinstance(dps, dict) else [])
-                    for q in dps:
-                        if not isinstance(q, dict):
-                            continue
-                        ql = q.get("level_value")
-                        if ql in (None, ""):
-                            continue
-                        if str(ql).strip() != str(lv.get("level_value")).strip():
-                            lvl_stat["curve_mismatch"].append(
-                                f"{lp}: 曲线 level_value={ql} ≠ 项 level_value={lv.get('level_value')}")
-                # declared_levels 对账（key = 实验序号 + 参数名，匹配不上则不报警，避免误伤）
-                for iv in inv_decl.get((ekey, vpar.lower()), []) or []:
-                    dl = iv.get("declared_levels")
-                    if not isinstance(dl, list):
-                        continue
-                    lvl_stat["declared"] += len(dl)
-                    if len(levels) < len(dl):
-                        lvl_stat["declared_gap"].append(
-                            f"{vpar}: 声明 {len(dl)} 个水平 {dl}，schema 只有 {len(levels)} 项")
-                    elif len(levels) > len(dl):
-                        lvl_stat["beyond_declared"].append(
-                            f"{vpar}: schema {len(levels)} 项 > 声明 {len(dl)} 个")
+                lvl_stat["declared"] += len(dl)
+                if len(levels) < len(dl):
+                    lvl_stat["declared_gap"].append(
+                        f"{vpar}: declared {len(dl)} levels {dl} but the schema has only {len(levels)} items")
+                elif len(levels) > len(dl):
+                    lvl_stat["beyond_declared"].append(
+                        f"{vpar}: schema has {len(levels)} items > the {len(dl)} declared")
     if lvl_stat["missing_level_value"]:
-        fails.append("变量水平缺 level_value %d 处: %s" % (
+        fails.append("variable levels missing level_value in %d places: %s" % (
             len(lvl_stat["missing_level_value"]), ", ".join(lvl_stat["missing_level_value"][:5])))
     if lvl_stat["missing_metric"]:
-        fails.append("变量水平缺对应指标 %d 处（塞了水平却没给指标）: %s" % (
+        fails.append("variable levels missing the corresponding indicator in %d places (a level without its indicator): %s" % (
             len(lvl_stat["missing_metric"]), ", ".join(lvl_stat["missing_metric"][:5])))
     if lvl_stat["curve_mismatch"]:
-        fails.append("曲线 level_value 与所在水平不一致 %d 处: %s" % (
+        fails.append("curve level_value disagrees with its level in %d places: %s" % (
             len(lvl_stat["curve_mismatch"]), "; ".join(lvl_stat["curve_mismatch"][:3])))
     if lvl_stat["declared_gap"]:
-        fails.append("声明水平数 > schema 水平数（漏水平）: " + "; ".join(lvl_stat["declared_gap"][:3]))
+        fails.append("declared level count > schema level count (missing levels): " + "; ".join(lvl_stat["declared_gap"][:3]))
     if lvl_stat["beyond_declared"]:
-        warns.append("schema 水平数 > 声明水平数（待复核）: " + "; ".join(lvl_stat["beyond_declared"][:3]))
+        warns.append("schema level count > declared level count (pending review): " + "; ".join(lvl_stat["beyond_declared"][:3]))
 
     return {"paper": name, "counts": {"catalysts": [inv_c, sch_c], "experiments": [inv_e, sch_e],
                                       "variables": [inv_v, sch_v]},
@@ -337,13 +376,13 @@ def check(paper):
 def main(root):
     papers = papers_of(root)
     if not papers:
-        print(f"[warn] 未在 {root} 下找到论文夹（缺 datamining/ 或 00_full_cleaned.md）")
+        print(f"[warn] no paper folder found under {root} (missing datamining/ or 00_full_cleaned.md)")
         return 1
     recs = []
     for p in papers:
         r = check(p)
         if r is None:
-            print(f"{os.path.basename(os.path.normpath(p))[:42]:44s} 跳过（缺 05/06 产物）")
+            print(f"{os.path.basename(os.path.normpath(p))[:42]:44s} skipped (missing 05/06 products)")
             continue
         recs.append(r)
         c, e, v = (r["counts"]["catalysts"], r["counts"]["experiments"], r["counts"]["variables"])
@@ -360,9 +399,9 @@ def main(root):
     with open(out, "w", encoding="utf-8") as f:
         json.dump({"root": os.path.abspath(root), "papers": len(recs), "records": recs}, f,
                   ensure_ascii=False, indent=1)
-    print(f"=== 对账 {sum(1 for r in recs if r['pass'])}/{len(recs)} PASS → {out}")
+    print(f"=== reconciliation {sum(1 for r in recs if r['pass'])}/{len(recs)} PASS → {out}")
     if any(not r["pass"] for r in recs):
-        print("FAIL 篇目：按 missing 逐条补齐（缺字段→补填；曲线缺 points/缺轴单位→重派子智能体读 04 补齐）后重跑本脚本")
+        print("FAILED papers: fix each item under missing (missing fields → fill; curves missing points/axis units → re-dispatch the subagent to read 04) and rerun this script")
     return 0 if all(r["pass"] for r in recs) else 1
 
 

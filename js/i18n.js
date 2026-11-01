@@ -1,8 +1,8 @@
 // -*- coding: utf-8 -*-
-/* C4EAI i18n（2026-10-14）：默认 English，可切 中文。
-   HTML 的 en 文案即源（元素带 data-i18n / data-i18n-ph / data-i18n-title 键），
-   本文件只存 zh 对照 + JS 动态文案的双语（JS 无 HTML 兜底，故 en/zh 都要）。
-   首次应用时把 en 原文缓存进 dataset，双语往返切换可还原。 */
+/* C4EAI i18n (2026-10-14): English by default; Chinese can be selected.
+   The English copy in HTML is the source (data-i18n / data-i18n-ph / data-i18n-title keys);
+   this file stores only the zh table plus bilingual dynamic JS strings (JS has no HTML fallback).
+   On first apply the English source is cached in dataset, so switching back and forth restores it. */
 (function () {
     var LS_KEY = 'c4eai-lang';
     var lang = 'en';

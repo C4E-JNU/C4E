@@ -1,10 +1,10 @@
         function renderMessages() {
-            // 手机端顶栏标题（方案 A：☰ + 当前对话标题 + ⋯）
+            // Mobile top-bar title (option A: hamburger + current conversation title + ...)
             if (window.__topbarSyncTitle) window.__topbarSyncTitle();
             const currentBranch = state.currentBranchId ? state.branches[state.currentBranchId] : null;
 
-            // ★ 滚动锚点：整树重渲染会把容器 scrollTop 归零（弹回第一条消息）。
-            //   记录当前最上方可见消息及其偏移，渲染后恢复；贴底时走 scrollToBottomIfFollowing。
+            // Scroll anchor: a full re-render resets container scrollTop (jumping back to the first message).
+            // Record the topmost visible message and its offset, restore after render; stay pinned when following the bottom.
             var _anchorId = '', _anchorOff = 0;
             (function () {
                 var top = messagesContainer.scrollTop;
@@ -20,10 +20,10 @@
 
             messagesContainer.innerHTML = '';
 
-            updateReasoningRail();   // 清空后先让浮动键隐藏，渲染完再按实际情况显示
+            updateReasoningRail();   // Hide the floating button while empty, then show it again after rendering
 
-            // 无当前对话（null 或指向不存在的对话）→ 对话区留空，不崩
-            // （2026-10-03 用户要求：删掉对话区空态引导卡与其按钮，不要这个功能）
+            // No current conversation (null or a missing conversation) -> leave the chat area empty, do not crash
+            // (2026-10-03 user request: removed the empty-state guidance card and its buttons)
             if (!currentBranch) {
                 return;
             }
@@ -122,7 +122,7 @@
                     try {
                         const raw = typeof message.toolResult === 'string' ? message.toolResult : JSON.stringify(message.toolResult);
                         const parsed = JSON.parse(raw);
-                        // 如果是 JSON，格式化显示
+                        // If JSON, pretty-print it
                         if (parsed.data && Array.isArray(parsed.data)) {
                             resultPreview = t('ui.returnedN').replace('{n}', parsed.count || parsed.data.length);
                         } else if (parsed.content) {
@@ -136,19 +136,19 @@
                         resultPreview = String(message.toolResult || '').substring(0, 200);
                     }
                     obsEl.innerHTML = `
-                        <div class="agent-step-header">👁️ Step ${step}/${total} · 观察结果</div>
+                        <div class="agent-step-header">👁️ Step ${step}/${total} · Observation</div>
                         <div class="obs-content">${escHtml(resultPreview)}</div>
                     `;
                     messagesContainer.appendChild(obsEl);
                 } else if (message.type === 'read_skill') {
-                    // 阅读技能/文档
+                    // Reading a skill/document
                     const step = message.step || '?';
                     const total = message.totalSteps || '?';
                     const skillEl = document.createElement('div');
                     skillEl.className = 'message read-skill';
                     skillEl.dataset.id = message.id;
                     const toolName = message.toolName || 'skill_view';
-                    // 显示读的是什么技能/文件
+                    // Show which skill/file is being read
                     let inputInfo = '';
                     try {
                         const params = JSON.parse(message.toolInput || '{}');
@@ -156,42 +156,42 @@
                         const filePath = params.file_path || 'SKILL.md';
                         inputInfo = filePath === 'SKILL.md' ? name : `${name} / ${filePath}`;
                     } catch(e) { inputInfo = message.toolName; }
-                    // 结果预览（截取摘要）
+                    // Result preview (truncated summary)
                     let resultPreview = '';
                     try {
                         const parsed = JSON.parse(message.toolResult || '{}');
                         const content = parsed.content || '';
-                        // 取前 200 字作为摘要
+                        // Take the first 200 characters as the summary
                         const firstLines = content.split('\n').filter(l => l.trim()).slice(0, 3).join('\n');
                         resultPreview = firstLines.substring(0, 200) + (firstLines.length > 200 ? '...' : '');
                     } catch(e) { /* ignore */ }
                     skillEl.innerHTML = `
-                        <div class="agent-step-header">📖 Step ${step}/${total} · 阅读: ${inputInfo}</div>
+                        <div class="agent-step-header">📖 Step ${step}/${total} · Reading: ${inputInfo}</div>
                         ${resultPreview ? `<div class="skill-preview">${escHtml(resultPreview)}</div>` : ''}
                     `;
                     messagesContainer.appendChild(skillEl);
                 } else {
                     const messageEl = createMessageElement(message);
                     messagesContainer.appendChild(messageEl);
-                    // 历史消息渲染后触发一次绘图
+                    // Draw charts once after rendering history messages
                     setTimeout(renderMermaidDiagrams, 100);
                 }
             });
 
-            // 批量渲染图表
+            // Render charts in bulk
             setTimeout(renderMermaidDiagrams, 100);
 
-            // 用户翻着历史时被后端覆盖刷新 → 回到原来读的位置，而不是第一条
+            // If the backend overwrote the view while the user was reading history, restore the position
             if (state.userHasScrolledUp && _anchorId) {
                 var _ae = messagesContainer.querySelector('[data-id="' + _anchorId + '"]');
                 if (_ae) messagesContainer.scrollTop = _ae.offsetTop - _anchorOff;
             }
             scrollToBottomIfFollowing();
             updateHistoryList();
-            updateReasoningRail();   // 渲染完按实际有无思考块决定显示/文案
+            updateReasoningRail();   // Update after rendering based on whether a thinking block exists
         }
 
-        // ==================== 设置面板（模态：左分类 / 右内容） ====================
+        // ==================== Settings panel (modal: categories left, content right) ====================
         function _settingsShowPane(paneId) {
             document.querySelectorAll('#settings-panel .settings-pane').forEach(p => {
                 p.classList.toggle('active', p.id === paneId);
@@ -223,7 +223,7 @@
             const cur = document.querySelector('#settings-nav .settings-nav-item.active') ||
                         document.querySelector('#settings-nav .settings-nav-item');
             if (cur && cur.dataset.pane) _settingsShowPane(cur.dataset.pane);
-            // 打开即回填智能体/连接与服务两个分类（state → UI）
+            // Prefill the agent and connection categories on open (state -> UI)
             if (typeof window.loadAgentConfigPanes === 'function') window.loadAgentConfigPanes();
             settingsBtn.classList.add('settings-clicked');
             setTimeout(() => { settingsBtn.classList.remove('settings-clicked'); }, 450);
@@ -234,10 +234,10 @@
             settingsBtn.classList.remove('settings-clicked');
             if (settingsOverlay) settingsOverlay.classList.remove('active');
         }
-        // ==================== UI更新 ====================
+        // ==================== UI updates ====================
         function updateUI() {
             updateModelStatus();
-            updateChatModelSelector(); // 更新聊天区模型选择器
+            updateChatModelSelector(); // Update the chat-area model selector
 
             const activatedModels = Object.keys(state.apiKeys).filter(
                 modelId => state.apiKeys[modelId]
@@ -250,9 +250,9 @@
             updateTokenDisplay();
         }
 
-        // ==================== 新文件附件功能 (Gemini风格) ====================
+        // ==================== File attachment feature (Gemini style) ====================
         function initFileAttachments() {
-            // 附件按钮点击 - 切换上传面板
+            // Attachment button: toggle the upload panel
             attachmentBtn.addEventListener('click', () => {
                 if (expandedMessageArea.classList.contains('active')) {
                     collapseExpandMode();
@@ -260,7 +260,7 @@
                 toggleUploadPanel();
             });
 
-            // 展开按钮点击 - 切换展开消息区域
+            // Expand button: toggle the expanded message area
             expandBtn.addEventListener('click', () => {
                 if (expandedMessageArea.classList.contains('active')) {
                     collapseExpandMode();
@@ -270,7 +270,7 @@
                     }
                     expandedMessageArea.classList.add('active');
                     expandBtn.classList.add('active');
-                    // 展开时把主输入框里已有的内容带进来（否则「小框打字 → 点展开」大框是空的）
+                    // Copy existing content from the main input when expanding
                     expandedTextarea.value = messageInput.value;
                     expandedTextarea.selectionStart = expandedTextarea.selectionEnd = expandedTextarea.value.length;
                     if (typeof updateSendButtonState === 'function') updateSendButtonState();
@@ -278,17 +278,17 @@
                 }
             });
 
-            // 关闭面板按钮
+            // Close panel button
             closeUploadPanel.addEventListener('click', () => {
                 hideUploadPanel();
             });
 
-            // 拖拽区域点击 - 打开文件选择
+            // Drop-zone click: open the file picker
             uploadDropZone.addEventListener('click', () => {
                 fileAttachmentInput.click();
             });
 
-            // 拖拽事件
+            // Drag events
             uploadDropZone.addEventListener('dragover', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -310,14 +310,14 @@
                 handleMultipleFiles(files);
             });
 
-            // 文件输入变化
+            // File input change
             fileAttachmentInput.addEventListener('change', (e) => {
                 const files = Array.from(e.target.files);
                 handleMultipleFiles(files);
-                e.target.value = ''; // 清空以允许重复选择同一文件
+                e.target.value = ''; // Clear so the same file can be selected again
             });
 
-            // 全局拖拽到面板
+            // Drag anywhere onto the panel
             fileUploadPanel.addEventListener('dragover', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -341,7 +341,7 @@
                 handleMultipleFiles(files);
             });
 
-            // 支持从剪贴板粘贴文件到输入框
+            // Support pasting files from the clipboard into the input
             messageInput.addEventListener('paste', (e) => {
                 const items = (e.clipboardData || e.originalEvent.clipboardData).items;
                 const files = [];
@@ -354,7 +354,7 @@
                 }
 
                 if (files.length > 0) {
-                    // 如果有文件，阻止默认粘贴行为（防止粘贴文件名等）
+                    // If files are present, block the default paste behavior (avoid pasting file names)
                     e.preventDefault();
                     handleMultipleFiles(files);
                     showUploadPanel();
@@ -362,23 +362,23 @@
                 }
             });
 
-            // 展开模式：文本同步
-            // 主输入框变化 → 同步到展开框
+            // Expanded mode: text sync
+            // Main input change -> sync to the expanded box
             messageInput.addEventListener('input', () => {
-                // 无条件镜像：展开框始终跟随主输入框。
-                // （原来只在展开框 active 时同步，导致「小框输入→点展开」丢内容）
+                // Mirror unconditionally: the expanded box always follows the main input.
+                // (Previously synced only while active, so typing then expanding lost content.)
                 if (expandedTextarea.value !== messageInput.value) {
                     expandedTextarea.value = messageInput.value;
                 }
             });
 
-            // 展开框变化 → 同步到主输入框
+            // Expanded box change -> sync to the main input
             expandedTextarea.addEventListener('input', () => {
                 messageInput.value = expandedTextarea.value;
                 updateSendButtonState();
             });
 
-            // 展开框：Enter发送，Shift+Enter换行
+            // Expanded box: Enter sends, Shift+Enter inserts a newline
             expandedTextarea.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
@@ -386,7 +386,7 @@
                 }
             });
 
-            // 初始化全局皮肤
+            // Initialize the global skin
             const savedTheme = localStorage.getItem('ragagent-theme') || 'default';
             setGlobalTheme(savedTheme);
         }

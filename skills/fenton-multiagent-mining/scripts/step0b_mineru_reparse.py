@@ -1,23 +1,23 @@
 # -*- coding: utf-8 -*-
-"""step0b_mineru_reparse.py — 步骤一前置补齐：MinerU 缺失产物重解析
+"""step0b_mineru_reparse.py — Step 1 prerequisite completion: re-parse missing MinerU products
 
-场景：论文文件夹缺 MinerU 产物（images/ 散图、full.md、*_content_list.json）时，
-自动调用 MinerU v4 批量接口重新解析该篇的 *_origin.pdf，并把缺失内容补齐到论文文件夹。
+Scenario: when a paper folder lacks MinerU products (images/ loose figures, full.md, *_content_list.json),
+automatically call the MinerU v4 batch interface to re-parse that paper's *_origin.pdf and complete the missing content in the paper folder.
 
-补齐策略（保真优先，不覆盖已有文件）：
-  - 已有 full.md + *_content_list.json 但缺 images/：
-      重解析得到新 content_list，按 (page_idx, 页内顺序) 建立 旧hash→新hash 映射，
-      把新图重命名为旧文件名后复制进 images/（保证与旧 full.md 引用一致）。
-      若新解析哈希与旧哈希完全一致（解析确定性强），直接复制。
-      某旧 hash 找不到对应新图 → 打印 WARN（后续步骤该图会走整图兜底）。
-  - 缺 full.md 或缺 *_content_list.json：整套采用新解析产物（full.md/content_list/layout/images），
-      已有的 _origin.pdf、ground_truth_tree.json 等不动。
+Completion policy (fidelity first, never overwrite existing files):
+  - full.md + *_content_list.json exist but images/ is missing:
+      re-parse to obtain a new content_list, build an old hash→new hash mapping by (page_idx, in-page order),
+      rename the new images to the old file names and copy them into images/ (so references in the old full.md stay valid).
+      If the new parse hashes are identical to the old ones (parsing is highly deterministic), copy directly.
+      When an old hash has no matching new image → print WARN (later steps fall back to whole-figure handling for it).
+  - full.md or *_content_list.json missing: adopt the whole new parse (full.md/content_list/layout/images),
+      leaving the existing _origin.pdf, ground_truth_tree.json and similar untouched.
 
-Token 来源（依次尝试）：
-  1. 环境变量 MINERU_TOKEN / MINERU_API_KEY
-  2. C4EAI 项目配置 backend/workspace/mineru_config.json（自动探测常见安装位置）
+Token sources (tried in order):
+  1. environment variables MINERU_TOKEN / MINERU_API_KEY
+  2. the C4EAI project configuration backend/workspace/mineru_config.json (common install locations are probed automatically)
 
-用法：python step0b_mineru_reparse.py <论文文件夹或批次目录>
+Usage: python step0b_mineru_reparse.py <paper folder or multi-paper directory>
 """
 import json
 import os
@@ -36,7 +36,7 @@ MAX_POLL = 90
 POLL_INTERVAL = 10
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-# 本脚本位于 <项目根>/skills/<技能名>/scripts/，上溯三级即项目根
+# This script lives at <project root>/skills/<skill name>/scripts/; three levels up is the project root
 _PROJ_ROOT = os.path.abspath(os.path.join(_SCRIPT_DIR, "..", "..", ".."))
 
 _C4EAI_CANDIDATES = [
@@ -62,8 +62,8 @@ def load_token():
 
 
 def _pdfs_in(d):
-    """目录内 PDF：优先 *_origin.pdf，退化为任意 .pdf（V7 修正：原版只认 *_origin.pdf，
-    而大量语料用的是裸 origin.pdf，导致整批被判为「未找到论文文件夹」）"""
+    """A PDF inside the directory: prefer *_origin.pdf, falling back to any .pdf (V7 fix: the original accepted only *_origin.pdf,
+    whereas much of the corpus uses a bare origin.pdf, so everything was reported as "no paper folder found")"""
     files = sorted(os.listdir(d))
     exact = [f for f in files if f.endswith("_origin.pdf")]
     if exact:
@@ -72,8 +72,8 @@ def _pdfs_in(d):
 
 
 def normalize_input(root):
-    """用户给裸 PDF 时：在同级建同名文件夹并【复制】进去（原件不动），返回该文件夹。
-    文件夹/批次目录原样返回。"""
+    """When the user supplies a bare PDF: create a same-named sibling folder and 【copy】 the file into it (the original stays untouched); return that folder.
+    Folders and multi-paper directories are returned unchanged."""
     if not (os.path.isfile(root) and root.lower().endswith(".pdf")):
         return root
     stem = os.path.splitext(os.path.basename(root))[0]
@@ -84,12 +84,12 @@ def normalize_input(root):
     dst = os.path.join(d, os.path.basename(root))
     if not os.path.exists(dst):
         shutil.copy2(root, dst)
-    print(f"输入为 PDF → 工作夹 {d}（原件未移动）")
+    print(f"Input is a PDF → working folder {d} (the original was not moved)")
     return d
 
 
 def papers_in(root):
-    """单篇文件夹（含 PDF）或批次目录（遍历子文件夹）"""
+    """A single paper folder (containing a PDF) or a multi-paper directory (walk subfolders)"""
     def is_paper(d):
         return any(os.path.isfile(os.path.join(d, f)) for f in _pdfs_in(d))
     if is_paper(root):
@@ -99,7 +99,7 @@ def papers_in(root):
 
 
 def check_missing(paper):
-    """返回缺失清单"""
+    """Return the missing-product list"""
     missing = []
     if not os.path.exists(os.path.join(paper, "full.md")):
         missing.append("full.md")
@@ -118,7 +118,7 @@ def find_origin_pdf(paper):
 
 
 def mineru_parse_pdf(pdf_path, token, workdir):
-    """上传单个 PDF → 轮询 → 下载 zip → 解压到 workdir，返回解压目录或抛异常"""
+    """Upload one PDF → poll → download the zip → extract into workdir; return the extraction directory or raise"""
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     name = os.path.basename(pdf_path)
     data = {"enable_formula": True, "language": "ch", "enable_table": True,
@@ -126,13 +126,13 @@ def mineru_parse_pdf(pdf_path, token, workdir):
     res = requests.post(FILE_URLS_ENDPOINT, headers=headers, json=data, timeout=30)
     rj = res.json()
     if res.status_code != 200 or rj.get("code") != 0:
-        raise RuntimeError(f"申请上传URL失败: {rj}")
+        raise RuntimeError(f"failed to request an upload URL: {rj}")
     batch_id = rj["data"]["batch_id"]
     url = rj["data"]["file_urls"][0]
     with open(pdf_path, "rb") as f:
         r = requests.put(url, data=f, timeout=300)
     if r.status_code != 200:
-        raise RuntimeError(f"上传失败 PUT {r.status_code}")
+        raise RuntimeError(f"upload failed PUT {r.status_code}")
 
     result_url = f"{RESULTS_ENDPOINT}/{batch_id}"
     fr = None
@@ -147,9 +147,9 @@ def mineru_parse_pdf(pdf_path, token, workdir):
         except Exception:
             pass
     if fr is None:
-        raise RuntimeError("轮询超时")
+        raise RuntimeError("polling timed out")
     if fr.get("state") != "done" or not fr.get("full_zip_url"):
-        raise RuntimeError(f"解析失败: {fr.get('err_msg')}")
+        raise RuntimeError(f"parsing failed: {fr.get('err_msg')}")
     zpath = os.path.join(workdir, "result.zip")
     r = requests.get(fr["full_zip_url"], timeout=300)
     with open(zpath, "wb") as fz:
@@ -166,16 +166,16 @@ def load_image_blocks(cl_path):
 
 
 def resolve_bbox_scale(paper, cl_path):
-    """确定 content_list bbox 坐标系。
-    旧版 MinerU content_list 的 bbox 是 1000x1000 归一化坐标（与 layout.json 图像块
-    按 (x/1000*W, y/1000*H) 换算后完全吻合）；新版是 PDF 点距坐标。
-    用 layout.json 的图像块 bbox 做基准自动判别，无 layout 时按坐标范围推断。"""
+    """Determine the coordinate system of content_list bboxes.
+    Legacy MinerU content_list bboxes are 1000x1000 normalized coordinates (matching the layout.json image blocks exactly
+    after converting with (x/1000*W, y/1000*H)); the new version uses PDF point coordinates.
+    Decide automatically using the layout.json image-block bboxes as the reference, falling back to the coordinate range when no layout exists."""
     import fitz
     cl_path = os.path.join(paper, cl_path) if not os.path.isabs(cl_path) else cl_path
     blocks = load_image_blocks(cl_path)
     if not blocks:
         return 1.0, (1.0, 1.0)
-    # layout 页面尺寸
+    # layout page size
     page_size = {}
     lay = os.path.join(paper, "layout.json")
     if os.path.exists(lay):
@@ -193,7 +193,7 @@ def resolve_bbox_scale(paper, cl_path):
                 page_size.setdefault(i, [pg.rect.width, pg.rect.height])
         except Exception:
             pass
-    # 假设 H1：bbox 已是页面点距坐标 → 全部块应落在页面内
+    # hypothesis H1: bbox is already in page points → every block should fall inside the page
     def in_page(scale_x, scale_y):
         ok = 0
         for b in blocks:
@@ -205,21 +205,21 @@ def resolve_bbox_scale(paper, cl_path):
                 ok += 1
         return ok / max(1, len([b for b in blocks if page_size.get(b.get("page_idx"))]))
     if in_page(1.0, 1.0) > 0.9:
-        return 1.0, (1.0, 1.0)  # 点距坐标
-    return 1000.0, (1000.0, 1000.0)  # 归一化坐标
+        return 1.0, (1.0, 1.0)  # point coordinates
+    return 1000.0, (1000.0, 1000.0)  # normalized coordinates
 
 
 def merge_images_from_pdf(paper):
-    """用旧 content_list 的 bbox 从 origin PDF 裁剪重建 images/（零错配，确定性）"""
+    """Rebuild images/ by cropping from the origin PDF using the old content_list bboxes (zero misassignment, deterministic)"""
     import fitz
     cl = [f for f in os.listdir(paper) if f.endswith("_content_list.json")][0]
     blocks = load_image_blocks(os.path.join(paper, cl))
     norm, (sx, sy) = resolve_bbox_scale(paper, cl)
     pdf_path = find_origin_pdf(paper)
     pdf = fitz.open(pdf_path)
-    # 页面实际尺寸（bbox 换算基准）
+    # actual page size (the basis for converting bboxes)
     page_dims = {i: (pg.rect.width, pg.rect.height) for i, pg in enumerate(pdf)}
-    # 若 layout page_size 与 PDF 尺寸不同，以 layout 为准（部分 PDF 有 CropBox 差异）
+    # if the layout page_size differs from the PDF size, prefer layout (some PDFs have CropBox differences)
     lay = os.path.join(paper, "layout.json")
     if os.path.exists(lay):
         try:
@@ -241,7 +241,7 @@ def merge_images_from_pdf(paper):
             continue
         pidx = b.get("page_idx", 0)
         if pidx >= len(pdf):
-            skipped.append((h, f"页码 {pidx} 越界"))
+            skipped.append((h, f"page index {pidx} out of range"))
             continue
         W, H = page_dims.get(pidx, (pdf[pidx].rect.width, pdf[pidx].rect.height))
         x0, y0, x1, y1 = b["bbox"]
@@ -250,7 +250,7 @@ def merge_images_from_pdf(paper):
             y0, y1 = y0 / sy * H, y1 / sy * H
         clip = fitz.Rect(x0, y0, x1, y1)
         if clip.is_empty or clip.width < 5 or clip.height < 5:
-            skipped.append((h, "bbox 无效"))
+            skipped.append((h, "invalid bbox"))
             continue
         pix = pdf[pidx].get_pixmap(clip=clip, dpi=200)
         pix.save(dst)
@@ -262,36 +262,36 @@ def main(root):
     root = normalize_input(root)
     papers = papers_in(root)
     if not papers:
-        print("未找到含 *_origin.pdf 的论文文件夹")
+        print("No paper folder containing *_origin.pdf was found")
         return
-    token = None          # 延迟加载：只有真需要调 MinerU 时才要 token
+    token = None          # lazily loaded: a token is needed only when MinerU must actually be called
     any_missing = False
     for paper in papers:
         name = os.path.basename(os.path.normpath(paper))[:44]
         missing = check_missing(paper)
         if not missing:
-            print(f"{name:46s} 产物齐全，跳过")
+            print(f"{name:46s} products complete, skipped")
             continue
         any_missing = True
-        # 有 full.md + content_list 时：无需 MinerU 重解析，直接用旧 content_list 的
-        # bbox 从 origin PDF 裁剪重建 images/（确定性零错配；旧版 bbox 为 1000 归一化坐标）
+        # With full.md + content_list present, no MinerU re-parse is needed: rebuild images/ by cropping from the
+        # origin PDF using the old content_list bboxes (deterministic, zero misassignment; legacy bboxes are 1000-normalized)
         if "images" in missing and "full.md" not in missing and "content_list" not in missing:
             rebuilt, skipped, total = merge_images_from_pdf(paper)
-            print(f"  从 PDF 裁剪重建 images/ {rebuilt}/{total}，跳过 {len(skipped)} {skipped[:3] if skipped else ''}")
+            print(f"  rebuilt images/ by cropping from the PDF {rebuilt}/{total}, skipped {len(skipped)} {skipped[:3] if skipped else ''}")
         else:
             if token is None:
                 token = load_token()
             if not token:
-                print(f"{name:46s} 缺 {missing}，需 MinerU 重解析，但未找到 token"
-                      f"（环境变量 MINERU_TOKEN / C4EAI 配置 workspace/mineru_config.json）→ 跳过本篇")
+                print(f"{name:46s} missing {missing}; MinerU re-parse required but no token was found"
+                      f" (environment variable MINERU_TOKEN / C4EAI config workspace/mineru_config.json) → skipping this paper")
                 continue
             pdf = find_origin_pdf(paper)
-            print(f"{name:46s} 缺失 {missing}，重解析 {os.path.basename(pdf)} ...")
+            print(f"{name:46s} missing {missing}; re-parsing {os.path.basename(pdf)} ...")
             with tempfile.TemporaryDirectory(prefix="mineru_reparse_") as td:
                 new_dir = mineru_parse_pdf(pdf, token, td)
                 need_full = "full.md" in missing
                 need_cl = "content_list" in missing
-                # 整套缺失 → 直接采用新产物
+                # a whole-set gap → adopt the new products directly
                 if need_full:
                     shutil.copy2(os.path.join(new_dir, "full.md"), os.path.join(paper, "full.md"))
                 if need_cl:
@@ -300,11 +300,11 @@ def main(root):
                             shutil.copy2(os.path.join(new_dir, f), os.path.join(paper, f))
                             break
                 if need_full:
-                    # 整套采用时 layout 也一并补
+                    # when adopting the whole set, complete layout as well
                     lf = [f for f in os.listdir(new_dir) if f == "layout.json"]
                     if lf and not os.path.exists(os.path.join(paper, "layout.json")):
                         shutil.copy2(os.path.join(new_dir, "layout.json"), os.path.join(paper, "layout.json"))
-                    # 新产物整套 images 直接复制
+                    # the new whole images set is copied directly
                     nimg = os.path.join(new_dir, "images")
                     if os.path.isdir(nimg):
                         dimg = os.path.join(paper, "images")
@@ -313,16 +313,16 @@ def main(root):
                             dst = os.path.join(dimg, f)
                             if not os.path.exists(dst):
                                 shutil.copy2(os.path.join(nimg, f), dst)
-        # 复核
+        # re-check
         still = check_missing(paper)
-        print(f"  复核：{'仍缺 ' + str(still) if still else '补齐完成 OK'}")
+        print(f"  re-check: {'still missing ' + str(still) if still else 'complete OK'}")
     if not any_missing:
-        print("所有论文产物齐全，无需重解析")
+        print("All papers have complete products; no re-parsing needed")
 
 
 if __name__ == "__main__":
     root = sys.argv[1] if len(sys.argv) > 1 else None
     if not root:
-        print("用法：python step0b_mineru_reparse.py <论文文件夹或批次目录>")
+        print("Usage: python step0b_mineru_reparse.py <paper folder or multi-paper directory>")
         sys.exit(1)
     main(root)

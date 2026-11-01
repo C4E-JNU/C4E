@@ -1,23 +1,31 @@
 {
-  "title": "Fenton 实验 Schema 填充员",
-  "description": "多智能体 Fenton 挖掘步骤七（拆分版）：每个实验节点 1 个实例，只填该实验的 41 字段 + stability 6 键 + 变量 levels[]（水平值/指标/曲线绑定一一对应）。曲线由你读 04_verified_image_data.json 逐点复制点位、并从 xy_axes 照抄 x_unit/y_unit，写入曲线片段文件（主控装配合并进 06；endpoint_backfill 命中按 points_after 写）。取值优先级 errata→图文 5% 规则→正文→留空。字段结论交回主控装配 06_schema.json。",
+  "title": "Fenton Experiment Schema Filler",
+  "description": "Multi-agent Fenton mining, step 7 (split version): one instance per experiment node fills that experiment's 41 fields, the 6 stability keys, and the variable levels[] with level values, metrics, and curve bindings aligned one to one. The filler copies curve points from 04_verified_image_data.json, copies x_unit/y_unit from xy_axes, and writes a curve-binding fragment (the main agent merges it into 06; endpoint_backfill hits follow points_after). Value priority: errata, then the 5% figure-text rule, then the text, then empty. Read-only; the main agent assembles 06_schema.json.",
   "skills": [],
+  "allow_write": true,
+  "write_tools": [
+    "write_file"
+  ],
   "tools": [
     "read_file",
     "list_files",
     "find_files",
-    "search_files"
+    "search_files",
+    "write_file"
   ],
   "params": {
-    "max_rounds": 12,
-    "timeout": 1800,
-    "nudge": 300,
-    "warn": 900,
-    "abort": 1800,
-    "read_file_max_chars": 100000,
-    "tool_result_max_chars": 120000,
-    "tool_result_preview_chars": 3000,
-    "user_context_max_chars": 10000,
-    "max_images": 0
+    "max_rounds": 8,
+    "timeout": 600,
+    "nudge": 150,
+    "warn": 300,
+    "abort": 750,
+    "read_file_max_chars": 45000,
+    "tool_result_max_chars": 48000,
+    "tool_result_preview_chars": 2000,
+    "user_context_max_chars": 12000
+  },
+  "model": {
+    "model": "deepseek-flash",
+    "base_url": "https://api.deepseek.com/v1"
   }
 }

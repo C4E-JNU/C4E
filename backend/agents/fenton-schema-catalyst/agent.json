@@ -1,23 +1,31 @@
 {
-  "title": "Fenton 催化剂 Schema 填充员",
-  "description": "多智能体 Fenton 挖掘步骤七（拆分版）：每篇 1 个实例，只填 metadata 块 + 全部催化剂节点的 45 字段（表征数据，无曲线无变量）。每个字段直接产 {value, unit, raw} 三元组（value 纯数字、unit 规范单位、raw 原文保真），内含填好的 few-shot 全例。取值优先级 errata→图文 5% 规则→正文→留空。只读不写，结论交回主控装配 06_schema.json。",
+  "title": "Fenton Catalyst Schema Filler",
+  "description": "Multi-agent Fenton mining, step 7 (split version): one instance per paper fills the metadata block plus the 45 fields of every catalyst node (characterization data, no curves or variables). Every field is produced directly as a {value, unit, raw} triple (value numeric, unit canonical, raw faithful to the source), with a complete worked few-shot example. Value priority: errata, then the 5% figure-text rule, then the text, then empty. Read-only; the main agent assembles 06_schema.json.",
   "skills": [],
+  "allow_write": true,
+  "write_tools": [
+    "write_file"
+  ],
   "tools": [
     "read_file",
     "list_files",
     "find_files",
-    "search_files"
+    "search_files",
+    "write_file"
   ],
   "params": {
     "max_rounds": 12,
-    "timeout": 1800,
-    "nudge": 300,
-    "warn": 900,
-    "abort": 1800,
-    "read_file_max_chars": 100000,
-    "tool_result_max_chars": 120000,
-    "tool_result_preview_chars": 3000,
-    "user_context_max_chars": 10000,
-    "max_images": 0
+    "timeout": 600,
+    "nudge": 150,
+    "warn": 300,
+    "abort": 750,
+    "read_file_max_chars": 45000,
+    "tool_result_max_chars": 48000,
+    "tool_result_preview_chars": 2000,
+    "user_context_max_chars": 12000
+  },
+  "model": {
+    "model": "deepseek-flash",
+    "base_url": "https://api.deepseek.com/v1"
   }
 }

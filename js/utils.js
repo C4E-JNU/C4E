@@ -1,4 +1,4 @@
-        // 暴露函数给全局作用域
+        // Expose helpers to the global scope
         window.editMessage = editMessage;
         window.saveMessageEdit = saveMessageEdit;
         window.cancelMessageEdit = cancelMessageEdit;

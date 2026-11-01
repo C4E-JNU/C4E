@@ -8,7 +8,7 @@
     update_from_response(usage)（用 API 真实用量校准，不靠字符估算）
   · Claude Code 的 microcompact 三条纪律：
       ① 只清「模型之后能自己重新取回」的工具结果（白名单限定，技能正文/用户消息不清）
-      ② 保留最近 N 条（keep_recent），且保底至少留 1 条——清光了模型就没有工作上下文
+      ② 按 token 预算保留最近工具结果（keep_recent_tokens），且保底至少留 1 条——清光了模型就没有工作上下文
       ③ **只原地替换 content，绝不删除消息**：删一条 tool 消息会留下孤儿 tool_call，
          协议层直接报错，比上下文爆更糟
 
@@ -111,34 +111,126 @@ def _brief_args(tc: dict) -> str:
         return ""
 
 
-def prune_tool_results_only(messages: list, keep_recent: int = 6, whitelist=None) -> int:
-    """把**白名单内、且超出最近 keep_recent 条**的 tool 消息内容换成占位符（原地，不删消息）。
+def _prunable_slots(messages: list, whitelist=None):
+    """列出当前可清理的工具结果槽位，按消息顺序（早→晚）。
 
-    返回被清理的条数。keep_recent 保底 1（清光了模型就没有工作上下文）。
+    每个槽位为 (index, tool_name, brief_args, tokens)。已经清过的不再重复计入。
     """
     wl = PRUNABLE_TOOLS if whitelist is None else set(whitelist)
-    keep_recent = max(1, int(keep_recent))
-    tool_idx = [i for i, m in enumerate(messages if isinstance(messages, list) else [])
-                if isinstance(m, dict) and m.get("role") == "tool"]
-    if len(tool_idx) <= keep_recent:
-        return 0
-    # 工具名靠 tool_call_id 回查对应的 assistant.tool_calls
     name_by_id = {}
     for m in messages:
         if isinstance(m, dict) and m.get("role") == "assistant":
             for tc in (m.get("tool_calls") or []):
-                name_by_id[tc.get("id")] = (_brief_args(tc), ((tc.get("function") or {}).get("name") or "?"))
-    cleared = 0
-    for i in tool_idx[:-keep_recent]:
-        m = messages[i]
-        cid = m.get("tool_call_id")
-        brief, name = name_by_id.get(cid, ("", "?"))
+                name_by_id[tc.get("id")] = (
+                    _brief_args(tc),
+                    ((tc.get("function") or {}).get("name") or "?"),
+                )
+    slots = []
+    for i, m in enumerate(messages if isinstance(messages, list) else []):
+        if not isinstance(m, dict) or m.get("role") != "tool":
+            continue
+        brief, name = name_by_id.get(m.get("tool_call_id"), ("", "?"))
         if name not in wl:
             continue
         if m.get("content") == PLACEHOLDER.format(name=name, brief=brief):
-            continue                                     # 已经是占位符，别重复计数
-        m["content"] = PLACEHOLDER.format(name=name, brief=brief)
+            continue
+        slots.append((i, name, brief, estimate_tokens([m])))
+    return slots
+
+
+def _protected_tail(messages: list, keep_recent_tokens: int, whitelist=None) -> set:
+    """从最新工具结果往回累计 token，返回必须保留的可清理槽位下标。
+
+    预算口径是 token，不是条数，且把不可清理的工具结果（如技能正文）也计入占用：
+    它们不能清，但会挤占最近结果的保留空间。无论预算多小，至少保留最新一条可清理结果，
+    否则模型在收尾时会失去当前工作上下文。
+    """
+    wl = PRUNABLE_TOOLS if whitelist is None else set(whitelist)
+    keep_recent_tokens = max(1, int(keep_recent_tokens))
+    name_by_id = {}
+    for m in messages:
+        if isinstance(m, dict) and m.get("role") == "assistant":
+            for tc in (m.get("tool_calls") or []):
+                name_by_id[tc.get("id")] = ((tc.get("function") or {}).get("name") or "?")
+
+    prunable_idx = []
+    for i, m in enumerate(messages if isinstance(messages, list) else []):
+        if not isinstance(m, dict) or m.get("role") != "tool":
+            continue
+        name = name_by_id.get(m.get("tool_call_id"), "?")
+        if name in wl:
+            prunable_idx.append(i)
+    protected = {prunable_idx[-1]} if prunable_idx else set()
+
+    kept = 0
+    kept_count = 0
+    for i in range(len(messages) - 1, -1, -1):
+        m = messages[i]
+        if not isinstance(m, dict) or m.get("role") != "tool":
+            continue
+        tok = estimate_tokens([m])
+        if kept_count > 0 and kept + tok > keep_recent_tokens:
+            break
+        name = name_by_id.get(m.get("tool_call_id"), "?")
+        if name in wl:
+            protected.add(i)
+        kept += tok
+        kept_count += 1
+    return protected
+
+
+def prune_tool_results_only(messages: list, keep_recent_tokens: int = 24000, whitelist=None) -> int:
+    """把最近 token 预算之外的可重取工具结果换成占位符（原地，不删消息）。
+
+    仅用于上下文已溢出、需要尽量腾空间的场景：从最早的可清理结果开始，
+    清掉所有落在 keep_recent_tokens 预算之外的结果；最新一条始终保留。
+    返回被清理的条数。
+    """
+    slots = _prunable_slots(messages, whitelist)
+    if not slots:
+        return 0
+    protected = _protected_tail(messages, keep_recent_tokens, whitelist)
+    cleared = 0
+    for idx, name, brief, _tok in slots:
+        if idx in protected:
+            continue
+        messages[idx]["content"] = PLACEHOLDER.format(name=name, brief=brief)
         cleared += 1
+    return cleared
+
+
+def prune_tool_results_to_target(messages: list, target_tokens: int,
+                                 keep_recent_tokens: int = 24000, whitelist=None) -> int:
+    """按 token 目标清理：只清到估算总量回落到 target_tokens 为止。
+
+    两个关键点：
+      · **先清最早的结果**，而不是按“保留最近 N 条”一刀切；
+      · 总量未超过目标时不做任何清理——达到工具循环上限不等于必须清上下文。
+
+    keep_recent_tokens 是最近结果的 token 保留预算（下限保护），不是条数。
+    返回被清理的条数。
+    """
+    slots = _prunable_slots(messages, whitelist)
+    if not slots:
+        return 0
+    target_tokens = max(1, int(target_tokens))
+    total = estimate_tokens(messages)
+    if total <= target_tokens:
+        return 0
+    protected = _protected_tail(messages, keep_recent_tokens, whitelist)
+    cleared = 0
+    for idx, name, brief, tok in slots:          # 早 → 晚
+        if idx in protected:
+            continue
+        placeholder = PLACEHOLDER.format(name=name, brief=brief)
+        saved = tok - estimate_tokens([{"role": "tool", "content": placeholder}])
+        if saved <= 0:
+            continue
+        messages[idx]["content"] = placeholder
+        total -= saved
+        cleared += 1
+        if total <= target_tokens:
+            break
     return cleared
 
 
@@ -172,12 +264,13 @@ class ContextBudget:
     """
 
     def __init__(self, window_tokens: int = 262144, max_output_tokens: int = 8192,
-                 threshold_percent: float = 0.75, keep_recent: int = 6,
+                 threshold_percent: float = 0.75, keep_recent_tokens: int | None = None,
                  trigger_override: int = 0):
         self.window_tokens = int(window_tokens)
         self.max_output_tokens = int(max_output_tokens)
         self.threshold_percent = float(threshold_percent)
-        self.keep_recent = int(keep_recent)
+        _krt = int(keep_recent_tokens or 0)
+        self.keep_recent_tokens = _krt if _krt > 0 else max(8000, int(self.window_tokens * 0.25))
         self.trigger_override = max(0, int(trigger_override or 0))   # 前端显式设定的触发线；0 = 自动
         self.last_prompt_tokens = 0        # 来自 API usage
         self.messages_since_real_usage = 0
@@ -241,5 +334,6 @@ class ContextBudget:
     def status(self) -> dict:
         return {"window": self.window_tokens, "trigger": self.trigger_tokens,
                 "last_prompt_tokens": self.last_prompt_tokens,
+                "keep_recent_tokens": self.keep_recent_tokens,
                 "consecutive_failures": self.consecutive_failures,
                 "pruned_total": self.pruned_total}

@@ -1,20 +1,22 @@
 # -*- coding: utf-8 -*-
-"""build_report.py — 生成数据挖掘总结报告工作簿（总览 / 分篇成绩 / 全部矛盾条目 / 失分清单 / 互证收益）
+"""build_report.py — build the data-mining summary workbook (overview / per-paper scores / all contradictions / loss list / verification gain)
 
-用法：
-  python build_report.py <输入目录> [输出.xlsx]
-输入目录下需要两个文件（缺则报错退出）：
-  全局成绩汇总.json  [{batch, paper, P, R, F1, TP, FP, FN, universe, gt, exempt}, …]
-  全部矛盾条目.json  [{批次, 文献, 图号/位置, 字段, 严重度, 载体来源, 跨文献, 正文值, 图值/冲突值, 裁决/采纳值, …}, …]
-    —— 由 step5b_arbitrate_merge.py 产出（步骤 5B 裁决后）
-可选（有则多一张「互证收益」表）：
-  *_互证收益汇总.json  step4c_errata.py 产出的批次级互证收益（C / e / R / Δ）
-输出：默认写到 <输入目录>/全库数据挖掘总结报告.xlsx（可用第二个参数覆盖）。
+Usage:
+  python build_report.py <input directory> [output.xlsx]
+The input directory must contain two files (missing → error exit):
+  global_score_summary.json  [{batch, paper, P, R, F1, TP, FP, FN, universe, gt, exempt}, …]
+  all_contradiction_entries.json  [{group, paper, figure_location, field, severity, evidence_source, cross_paper,
+                                    text_value, conflict_value, adopted_value, …}, …]
+    — produced by step5b_arbitrate_merge.py (after the Step 5B adjudication)
+Optional (adds a "Verification gain" sheet):
+  *_verification_gain_summary.json  cross-paper verification gain (C / e / R / Δ) produced by step4c_errata.py
+Output: by default <input directory>/corpus_datamining_summary.xlsx (override with the second argument).
 
-矛盾口径（2026-10-06 起，唯一来源 references/矛盾分类规范.md）：
-  严重度 = A 数值偏差 / B 条件错位 / C 命名编号 / D 结论被自身数据否定 / E 其他（无法归类，兼待裁决兜底）
-  + cross_paper（跨文献互斥） / caliber_variance（口径差，不算矛盾）两个布尔标记；
-  旧的 category（E1/E2/E3/E5/图文/表文/text-text/字母级别）已废弃。
+Contradiction caliber (since 2026-10-06, single source references/contradiction_taxonomy.md):
+  severity = A numerical deviation / B condition or attribution mismatch / C naming or numbering / D conclusion refuted by own data / E other (unclassifiable, also the pending fallback)
+  + two booleans: cross_paper (cross-paper exclusion) / caliber_variance (caliber difference, not a contradiction);
+  the legacy category (E1/E2/E3/E5/figure-text/table-text/text-text/letter levels) is deprecated.
+Legacy filenames and Chinese keys are still accepted so historical reports keep working.
 """
 import json
 import os
@@ -26,10 +28,10 @@ try:
     from openpyxl.styles import Alignment, Font, PatternFill
     from openpyxl.utils import get_column_letter
 except ImportError:                                    # pragma: no cover
-    print("[error] 缺 openpyxl：uv pip install openpyxl")
+    print("[error] openpyxl is missing: uv pip install openpyxl")
     sys.exit(2)
 
-# ── 内联样式（professional 风格）────────────────────────────
+# ── inline styles (professional look) ────────────────────────
 FONT_CJK = "Microsoft YaHei"
 PRIMARY = "1F4E79"
 HEADER_TEXT = "FFFFFF"
@@ -68,27 +70,43 @@ def write_table(ws, title, headers, rows, widths=None, note=None):
     ws.freeze_panes = ws.cell(row=hr + 1, column=2).coordinate
 
 
+def _first(d, *keys, default=""):
+    """Read the first present key (tolerates the legacy Chinese keys)."""
+    for k in keys:
+        if k in d and d[k] not in (None, ""):
+            return d[k]
+    return default
+
+
+def _find(src, canonical, legacy):
+    for name in (canonical, legacy):
+        p = os.path.join(src, name)
+        if os.path.exists(p):
+            return p
+    return os.path.join(src, canonical)
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
         return 2
     src = os.path.abspath(sys.argv[1])
-    score_p = os.path.join(src, "全局成绩汇总.json")
-    cts_p = os.path.join(src, "全部矛盾条目.json")
+    score_p = _find(src, "global_score_summary.json", "全局成绩汇总.json")
+    cts_p = _find(src, "all_contradiction_entries.json", "全部矛盾条目.json")
     for p in (score_p, cts_p):
         if not os.path.exists(p):
-            print(f"[error] 缺输入文件：{p}")
+            print(f"[error] missing input file: {p}")
             return 1
-    out = sys.argv[2] if len(sys.argv) > 2 else os.path.join(src, "全库数据挖掘总结报告.xlsx")
+    out = sys.argv[2] if len(sys.argv) > 2 else os.path.join(src, "corpus_datamining_summary.xlsx")
     score = json.load(open(score_p, encoding="utf-8"))
     cts = json.load(open(cts_p, encoding="utf-8"))
 
     wb = Workbook()
     wb.properties.creator = "C4EAI"
 
-    # ── Sheet1 总览 ──────────────────────────────
+    # ── Sheet 1: overview ────────────────────────
     ws = wb.active
-    ws.title = "总览"
+    ws.title = "Overview"
     ok = [r for r in score
           if r.get("universe") and abs((r.get("TP") or 0) + (r.get("FP") or 0)
                                        + (r.get("FN") or 0) - r["universe"]) <= 2]
@@ -100,16 +118,16 @@ def main():
     F1 = 2 * P * R / (P + R) if P + R else 0
     f1s = sorted(r["F1"] for r in score if r.get("F1") is not None)
     batches = sorted({r.get("batch") for r in score if r.get("batch")})
-    sev = Counter(c.get("严重度") or "E" for c in cts)   # unknown 已退场 → 兜底 E（其他/无法归类）
-    cross_n = sum(1 for c in cts if c.get("跨文献"))
-    cal_n = sum(1 for c in cts if c.get("口径差"))
-    # 互证收益（步骤五 step4c 的批次汇总，可选）
+    sev = Counter(_first(c, "severity", "严重度", default="E") or "E" for c in cts)   # unknown retired → fallback E (other/unclassifiable)
+    cross_n = sum(1 for c in cts if _first(c, "cross_paper", "跨文献", default=False))
+    cal_n = sum(1 for c in cts if _first(c, "caliber_variance", "口径差", default=False))
+    # verification gain (Step 5 step4c summary, optional)
     gains = []
-    for fn in sorted(os.listdir(src)):
-        if fn.endswith("互证收益汇总.json"):
-            g = json.load(open(os.path.join(src, fn), encoding="utf-8"))
+    for fname in sorted(os.listdir(src)):
+        if fname.endswith("verification_gain_summary.json") or fname.endswith("互证收益汇总.json"):
+            g = json.load(open(os.path.join(src, fname), encoding="utf-8"))
             if isinstance(g, dict) and "N" in g:
-                g["_file"] = fn.replace("_互证收益汇总.json", "")
+                g["_file"] = fname.replace("_verification_gain_summary.json", "").replace("_互证收益汇总.json", "")
                 gains.append(g)
     gN = sum(g.get("N") or 0 for g in gains)
     gchk = sum(g.get("checked") or 0 for g in gains)
@@ -119,77 +137,81 @@ def main():
     gR = round(gf / ge, 4) if ge else None
     gD = round(gf / gN, 4) if gN else None
     overview = [
-        ("流水线", "非均相 Fenton 文献数据挖掘（MinerU 产物 → 08_paper_report）", ""),
-        ("批次 / 文献", f"{len(batches)} 批 / {len(score)} 篇", "来自 全局成绩汇总.json"),
-        ("标量字段 精确率 P", round(P, 4), f"提错（FP）合计 {fp} 条"),
-        ("标量字段 召回率 R", round(R, 4), f"漏提（FN）合计 {fn} 条"),
-        ("标量字段 F1", round(F1, 4), "恒等式校验通过子集统计"),
-        ("F1 分布", (f"min {f1s[0]:.3f} / 中位 {f1s[len(f1s) // 2]:.3f} / max {f1s[-1]:.3f}"
-                     if f1s else "无"),
-         "含 GT 评估的篇目"),
-        ("F1<0.95 篇数", sum(1 for f in f1s if f < 0.95), "主要为覆盖缺口（归档缺图/表格漏扫）"),
-        ("矛盾条目总数", len(cts), "候选矛盾（严重度 A/B/C/D/E；E=其他·无法归类，含待裁决），已去重合并"),
-        ("矛盾严重度分布", " / ".join(f"{k} {v}" for k, v in sorted(sev.items())) or "无",
-         "A 数值偏差 / B 条件错位 / C 命名编号 / D 结论被自身数据否定 / E 其他（无法归类）"),
-        ("跨文献矛盾 / 口径差", f"{cross_n} 条 / {cal_n} 条",
-         "跨文献=两已发表来源互斥；口径差不算矛盾，仅标注解释"),
-        ("互证覆盖率 C", gC, "= checked / N，互证实际比对到的记录比例"),
-        ("互证查出自身错误 e", ge, "Q1 我方读图错 + Q2 我方读文/读表错"),
-        ("互证纠错率 R", gR, "= fixed / e，查出的错误中已修正写回的比例"),
-        ("互证准确率提升 Δ", gD, "= fixed / N，互证把提取准确率抬高的比例"),
+        ("Pipeline", "Heterogeneous Fenton literature data mining (MinerU products → 08_paper_report)", ""),
+        ("Groups / papers", f"{len(batches)} groups / {len(score)} papers", "from global_score_summary.json"),
+        ("Scalar-field precision P", round(P, 4), f"wrong extractions (FP) total {fp}"),
+        ("Scalar-field recall R", round(R, 4), f"missed extractions (FN) total {fn}"),
+        ("Scalar-field F1", round(F1, 4), "computed over the subset that passes the identity check"),
+        ("F1 distribution", (f"min {f1s[0]:.3f} / median {f1s[len(f1s) // 2]:.3f} / max {f1s[-1]:.3f}"
+                             if f1s else "none"),
+         "papers with a ground-truth evaluation"),
+        ("Papers with F1<0.95", sum(1 for f in f1s if f < 0.95), "mainly coverage gaps (missing figures in the archive / unscanned tables)"),
+        ("Contradiction entries", len(cts), "candidate contradictions (severity A/B/C/D/E; E = other · unclassifiable, including pending), deduplicated and merged"),
+        ("Severity distribution", " / ".join(f"{k} {v}" for k, v in sorted(sev.items())) or "none",
+         "A numerical deviation / B condition mismatch / C naming and numbering / D conclusion refuted by own data / E other (unclassifiable)"),
+        ("Cross-paper / caliber difference", f"{cross_n} / {cal_n}",
+         "cross-paper = two published sources disagree; caliber differences are not contradictions, only annotated"),
+        ("Verification coverage C", gC, "= checked / N, the share of records actually compared by verification"),
+        ("Verification-found own errors e", ge, "Q1 our figure misreads + Q2 our text/table misreads"),
+        ("Verification correction rate R", gR, "= fixed / e, the share of found errors corrected and written back"),
+        ("Verification accuracy gain Δ", gD, "= fixed / N, the accuracy lift contributed by verification"),
     ]
-    write_table(ws, "非均相 Fenton 文献数据挖掘 — 全库总结总览",
-                ["项目", "数值", "说明"], overview, [26, 70, 60],
-                note="统计口径：gt_evaluation.json 各篇评分宇宙（GT 标注 − 豁免）；恒等式：宇宙 = TP+FP+FN。")
+    write_table(ws, "Heterogeneous Fenton literature data mining — corpus summary",
+                ["Item", "Value", "Note"], overview, [30, 70, 66],
+                note="Caliber: the per-paper scoring universe in gt_evaluation.json (GT labels − exemptions); identity: universe = TP+FP+FN.")
 
-    # ── Sheet2 分篇成绩 ───────────────────────────
-    ws2 = wb.create_sheet("分篇成绩")
+    # ── Sheet 2: per-paper scores ────────────────
+    ws2 = wb.create_sheet("Per-paper scores")
     rows2 = [[r.get("batch"), str(r.get("paper", ""))[:60], r.get("P"), r.get("R"), r.get("F1"),
               r.get("TP"), r.get("FP"), r.get("FN"), r.get("universe"), r.get("gt"), r.get("exempt")]
              for r in sorted(score, key=lambda x: (x.get("F1") is None, x.get("F1") or 0))]
-    write_table(ws2, "分篇 GT 评估成绩（按 F1 升序）",
-                ["批次", "文献", "P", "R", "F1", "TP", "FP", "FN", "评分宇宙", "GT标注", "豁免"],
-                rows2, [8, 55, 8, 8, 8, 7, 7, 7, 9, 9, 8],
-                note=f"共 {len(rows2)} 篇有量化成绩。")
+    write_table(ws2, "Per-paper ground-truth scores (ascending F1)",
+                ["Group", "Paper", "P", "R", "F1", "TP", "FP", "FN", "Score universe", "GT labels", "Exempt"],
+                rows2, [9, 55, 8, 8, 8, 7, 7, 7, 11, 10, 8],
+                note=f"{len(rows2)} papers carry a quantitative score.")
 
-    # ── Sheet3 全部矛盾条目 ───────────────────────
-    ws3 = wb.create_sheet("全部矛盾条目")
-    rows3 = [[c.get("批次"), c.get("文献"), c.get("图号/位置"), c.get("字段"),
-              c.get("严重度"), c.get("载体来源"), "是" if c.get("跨文献") else "",
-              c.get("正文值"), c.get("图值/冲突值"), c.get("裁决/采纳值"), c.get("置信度"),
-              c.get("正文引文"), c.get("理由")] for c in cts]
-    write_table(ws3, f"全库矛盾条目清单（{len(cts)} 条，逐条列出）",
-                ["批次", "文献", "图号/位置", "字段", "严重度", "载体来源", "跨文献",
-                 "正文值", "图值/冲突值", "裁决/采纳值", "置信度", "正文引文", "裁决理由"],
-                rows3, [7, 30, 16, 26, 8, 16, 7, 12, 12, 14, 10, 55, 55],
-                note="严重度：A=数值偏差、B=条件/归属错位、C=命名编号计数错、D=结论被自身数据否定、"
-                     "E=其他（无法归类，含待裁决，需人工）。载体来源（text-vs-figure / text-vs-table / text-vs-text）"
-                     "只用于回溯定位，不作分类。口径差（矿化率 vs 去除率等）不算矛盾，见 跨文献矛盾对.json。")
+    # ── Sheet 3: all contradictions ──────────────
+    ws3 = wb.create_sheet("All contradictions")
+    rows3 = [[_first(c, "group", "分组", "批次"), _first(c, "paper", "文献"),
+              _first(c, "figure_location", "图号/位置"), _first(c, "field", "字段"),
+              _first(c, "severity", "严重度"), _first(c, "evidence_source", "载体来源"),
+              "yes" if _first(c, "cross_paper", "跨文献", default=False) else "",
+              _first(c, "text_value", "正文值"), _first(c, "conflict_value", "图值/冲突值"),
+              _first(c, "adopted_value", "裁决/采纳值"), _first(c, "confidence", "置信度"),
+              _first(c, "text_quote", "正文引文"), _first(c, "reason", "理由")] for c in cts]
+    write_table(ws3, f"All contradiction entries ({len(cts)}, listed individually)",
+                ["Group", "Paper", "Figure/location", "Field", "Severity", "Evidence source", "Cross-paper",
+                 "Text value", "Conflicting value", "Adopted value", "Confidence", "Text quote", "Reason"],
+                rows3, [7, 30, 16, 26, 8, 18, 9, 12, 14, 14, 10, 55, 55],
+                note="Severity: A numerical deviation, B condition/attribution mismatch, C naming/numbering/count error, "
+                     "D conclusion refuted by own data, E other (unclassifiable, including pending, needs a human). "
+                     "The evidence source (text-vs-figure / text-vs-table / text-vs-text) is used only for traceability, never as a class. "
+                     "Caliber differences (mineralization vs. removal, etc.) are not contradictions; see cross_paper_contradiction_pairs.json.")
 
-    # ── Sheet4 失分与低分清单 ─────────────────────
-    ws4 = wb.create_sheet("失分与低分清单")
+    # ── Sheet 4: losses and low scores ───────────
+    ws4 = wb.create_sheet("Loss list")
     low = [r for r in score if r.get("F1") is not None and r["F1"] < 0.95]
     rows4 = [[r.get("batch"), str(r.get("paper", ""))[:60], r.get("F1"), r.get("FP") or 0,
               r.get("FN") or 0, r.get("universe")] for r in sorted(low, key=lambda x: x["F1"])]
-    write_table(ws4, f"F1 < 0.95 的篇目（{len(low)} 篇）",
-                ["批次", "文献", "F1", "FP", "FN", "评分宇宙"], rows4, [8, 55, 8, 7, 7, 9],
-                note="失分模式：① 设计矩阵非最优水平漏读；② 归档缺图致整块缺失；③ 对照组漏记；④ 文献自身矛盾计分。")
+    write_table(ws4, f"Papers with F1 < 0.95 ({len(low)})",
+                ["Group", "Paper", "F1", "FP", "FN", "Score universe"], rows4, [9, 55, 8, 7, 7, 11],
+                note="Loss patterns: (1) a non-optimal level of the design matrix is unread; (2) a missing figure removes a whole block; (3) the control group is not recorded; (4) the paper's own contradiction costs points.")
 
-    # ── Sheet5 互证收益（步骤五 step4c 的批次汇总）──
+    # ── Sheet 5: verification gain (the step4c summary from Step 5) ──
     if gains:
-        ws5 = wb.create_sheet("互证收益")
+        ws5 = wb.create_sheet("Verification gain")
         rows5 = [[g.get("_file"), g.get("papers"), g.get("N"), g.get("checked"),
                   g.get("Q1"), g.get("Q2"), g.get("Q3"), g.get("Q4"),
                   g.get("e"), g.get("fixed"), g.get("C"), g.get("R"), g.get("delta")]
                  for g in gains]
-        write_table(ws5, f"图文/表文互证收益（{len(gains)} 批）",
-                    ["批次", "篇数", "记录数 N", "已比对 checked", "Q1 读图错", "Q2 读文错",
-                     "Q3 口径差", "Q4 一致", "e=Q1+Q2", "fixed 已修正",
-                     "覆盖率 C", "纠错率 R", "准确率提升 Δ"],
-                    rows5, [10, 7, 10, 13, 10, 10, 10, 10, 10, 11, 10, 10, 12],
-                    note="C=checked/N（互证覆盖率）；e=Q1+Q2（互证查出的我方提取错误数）；"
-                         "R=fixed/e（纠错率）；Δ=fixed/N（互证把提取准确率抬高的比例，即这一步的价值）。"
-                         "Q3 口径差、Q4 一致都不计入矛盾库。")
+        write_table(ws5, f"Figure/table vs. text verification gain ({len(gains)} groups)",
+                    ["Group", "Papers", "Records N", "Compared checked", "Q1 figure misreads", "Q2 text misreads",
+                     "Q3 caliber differences", "Q4 consistent", "e=Q1+Q2", "fixed",
+                     "Coverage C", "Correction rate R", "Accuracy gain Δ"],
+                    rows5, [10, 7, 10, 14, 14, 14, 15, 12, 10, 8, 10, 13, 13],
+                    note="C=checked/N (verification coverage); e=Q1+Q2 (our own extraction errors found by verification); "
+                         "R=fixed/e (correction rate); Δ=fixed/N (the accuracy lift contributed by verification, i.e. the value of this step). "
+                         "Q3 caliber differences and Q4 agreement never enter the contradiction store.")
 
     wb.save(out)
     print("saved", out)

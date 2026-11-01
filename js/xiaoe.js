@@ -618,7 +618,7 @@
                     if (l) l.textContent = cb.checked ? t('xe.on') : t('xe.off');
                 });
             }
-        } catch (e) { console.warn('小e 启动失败:', e); }
+                } catch (e) { console.warn('Failed to start xiaoe:', e); }
     }
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', _boot);

@@ -1,16 +1,16 @@
-"""Paper Preprocessor — 文献预处理（固定 Python 代码，无 LLM 调用）。
+"""Paper Preprocessor — literature preprocessing (fixed Python code, no LLM calls).
 
-功能（对应 S1.4 图像匹配 + S1.5 冗余清洗 两个 ipynb，但【不包含解压】）：
-1. 图像匹配：读取文献文件夹内的 minerU JSON 索引（排除 layout.json），
-   把 images/ 下零散的图片匹配到对应图表编号（Figure1/Figure2/Table1/unknown_xx），
-   为每个图表建子文件夹并复制图片 + 生成 .txt 描述文件。
-2. 全文清洗：读 full.md，截取 # References 之前的内容，写 full_cleaned.md。
-   （若未找到 References 标题，则复制全文。）
+Functions (corresponding to the two notebooks S1.4 image matching + S1.5 redundancy cleaning, but 【excluding extraction】):
+1. Image matching: read the MinerU JSON index inside the paper folder (excluding layout.json),
+   match the loose images under images/ to their figure/table numbers (Figure1/Figure2/Table1/unknown_xx),
+   create a subfolder per figure/table, copy the images and generate a .txt description file.
+2. Full-text cleaning: read full.md, take everything before the '# References' heading, and write full_cleaned.md.
+   (If no References heading is found, copy the whole text.)
 
-约定：
-- 已存在的文件【直接覆盖】。
-- 输入：一篇文献文件夹路径（已由用户提前解压好）。
-- 输出：images/<FigureN>/..., full_cleaned.md。
+Conventions:
+- Existing files are 【overwritten】.
+- Input: the path of one paper folder (already extracted by the user).
+- Output: images/<FigureN>/..., full_cleaned.md.
 """
 import os
 import re
@@ -28,10 +28,10 @@ IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".gif", ".bmp")
 
 
 # ─────────────────────────────────────────────
-# 图像匹配（来自 解压缩与图像匹配工作.ipynb cell 1）
+# image matching (from decompress_and_match.ipynb cell 1)
 # ─────────────────────────────────────────────
 def find_json_file(folder):
-    """查找文件夹中的 JSON 文件（排除 layout.json）"""
+    """Find the JSON file in the folder (excluding layout.json)"""
     for file in os.listdir(folder):
         if file.endswith(".json") and file != "layout.json":
             return os.path.join(folder, file)
@@ -47,7 +47,7 @@ def load_json_data(json_path):
 
 
 def create_image_index(json_data):
-    """创建 图片文件名 -> 对应字典 的索引"""
+    """Build a file-name → entry index"""
     image_index = {}
     if not isinstance(json_data, list):
         return image_index
@@ -63,7 +63,7 @@ def create_image_index(json_data):
 
 
 def extract_number(caption_text, elem_type):
-    """从 caption 中提取图表编号"""
+    """Extract the figure/table number from the caption"""
     if isinstance(caption_text, list):
         caption = caption_text[0] if caption_text else ""
     else:
@@ -82,7 +82,7 @@ def extract_number(caption_text, elem_type):
 
 
 def html_table_to_text(html_str):
-    """将 HTML 表格转换为文本表格"""
+    """Convert an HTML table into a text table"""
     if not html_str:
         return ""
     if not _HAS_BS4:
@@ -125,14 +125,14 @@ def safe_get_footnote(item, elem_type):
     return []
 
 
-# ── full.md 图注锚点（子图归并的可靠依据）──────────────────
+# ── full.md caption anchors (the reliable basis for grouping subfigures) ──────────────────
 _MD_IMG = re.compile(r"images/([0-9A-Za-z._\-]+?\.(?:jpg|jpeg|png|gif|bmp))", re.I)
 _FIGCAP = re.compile(r"^\s*(?:fig\.?|figure|slika|sl\.?)\s*((?:[Ss]?)\d+[a-z]?)\b", re.I)
 _TABCAP = re.compile(r"^\s*(?:table|tabela|tablica|tab\.?)\s*((?:[Ss]?)\d+[a-z]?)\b", re.I)
 
 
 def _panel_letter(caption):
-    """子图 caption 是否为单字母标号 (a)/a/a. 之类。"""
+    """Whether a subfigure caption is a single-letter label such as (a)/a/a."""
     if not caption:
         return None
     m = re.fullmatch(r"\s*[\(\[]?\s*([A-Za-z])\s*[\)\].:：]?\s*", str(caption))
@@ -140,7 +140,7 @@ def _panel_letter(caption):
 
 
 def _find_content_list(folder):
-    """稳健选 *_content_list.json（排除 _v2/_model/layout，避免按目录序取错）。"""
+    """Robustly choose *_content_list.json (excluding _v2/_model/layout, so the wrong file is not taken by directory order)."""
     cands = sorted(Path(folder).glob("*.json"))
 
     def score(p):
@@ -155,8 +155,8 @@ def _find_content_list(folder):
 
 
 def _parse_md_groups(md_path, exclude_files):
-    """扫 full.md：连续的 images/<hash> 归到其后最近的 Fig./Table N 图注 → 该图的子图集合。
-    返回 groups=[{kind, token, caption, files:[fname...]}] 与 consumed 集合。"""
+    """Scan full.md: consecutive images/<hash> entries are assigned to the nearest following Fig./Table N caption → the subfigure set of that figure.
+    Returns groups=[{kind, token, caption, files:[fname...]}] and the consumed set."""
     try:
         lines = open(_lp(md_path), "r", encoding="utf-8").read().splitlines()
     except Exception:
@@ -188,7 +188,7 @@ def _parse_md_groups(md_path, exclude_files):
 
 
 def _merge_panels(folder, files, out_path):
-    """把同一逻辑图的多张子图按 md 顺序纵向拼接为一张整图（PIL），失败返回 None。"""
+    """Stitch the subfigures of one logical figure vertically in md order into a single image (PIL); return None on failure."""
     try:
         from PIL import Image
         imgs = [Image.open(_lp(os.path.join(str(folder), f))) for f in files]
@@ -206,19 +206,19 @@ def _merge_panels(folder, files, out_path):
 
 
 def process_image_match(folder_path, output_dir=None):
-    """按【逻辑图号】把散图归档：一张多子图(Fig.2 的 a/b/c…)归到同一个 Figure2/，
-    每个 FigureN/ 里放该图全部子图 jpg + 一份 FigureN.txt(完整英文图注 + 各子图字母/页码)。
-    依据 = full.md 里"子图块 → 紧随其后的 Fig./Table N 图注"，content_list 只补字母标号/页码/表格正文。
-    output_dir 指定时编排到 output_dir/images（如 workflow 的 datamining/images）。"""
+    """Archive loose images by 【logical figure number】: a multi-panel figure (Fig.2 a/b/c…) goes into one Figure2/,
+    each FigureN/ holding all its subfigure jpgs plus one FigureN.txt (full English caption + each subfigure's letter/page).
+    Basis = "subfigure blocks → the immediately following Fig./Table N caption" in full.md; content_list only supplies letter labels/page numbers/table bodies.
+    When output_dir is given, everything is organized into output_dir/images (e.g. the workflow's datamining/images)."""
     folder = Path(folder_path)
     images_dir = folder / "images"
     if not images_dir.is_dir():
-        return {"ok": False, "reason": "images 文件夹不存在", "processed": 0, "total": 0,
+        return {"ok": False, "reason": "images folder does not exist", "processed": 0, "total": 0,
                 "indexed": 0, "stats": {"table": 0, "figure": 0, "other": 0, "unknown": 0}}
 
     image_files = [f for f in os.listdir(images_dir) if f.lower().endswith(IMAGE_EXTS)]
 
-    # content_list 索引（补字母标号/页码/表格正文/类型）
+    # content_list index (supplies letter labels/page numbers/table bodies/types)
     json_path = _find_content_list(folder_path)
     json_data = load_json_data(json_path) if json_path else None
     image_index = create_image_index(json_data) if json_data else {}
@@ -231,7 +231,7 @@ def process_image_match(folder_path, output_dir=None):
     target_images = (Path(output_dir) / "images") if output_dir else images_dir
     os.makedirs(_lp(str(target_images)), exist_ok=True)
 
-    # 主：按 full.md 图注归并子图
+    # primary: group subfigures by the full.md captions
     md_path = folder / "full.md"
     if not md_path.exists():
         mds = sorted(folder.glob("*.md")); md_path = mds[0] if mds else None
@@ -249,11 +249,11 @@ def process_image_match(folder_path, output_dir=None):
     def copy_into(folder_name, img_file):
         nonlocal processed
         if not os.path.exists(os.path.join(str(images_dir), img_file)):
-            return  # md 引用的图在 images/ 缺失（MinerU 二次解析名漂移）：跳过，留待工单标【待补图】
+            return  # an image referenced by md is missing under images/ (name drift after MinerU re-parsing): skip and let the work order mark [figure pending]
         _make_image_folder(str(images_dir), img_file, target_images, folder_name, txt_content=None)
         processed += 1
 
-    # 1) 逻辑图（含多子图）
+    # 1) logical figures (including multi-panel ones)
     for g in groups:
         fname = new_folder("Figure" if g["kind"] == "Figure" else "Table", g["token"])
         if g["kind"] == "Figure":
@@ -267,20 +267,20 @@ def process_image_match(folder_path, output_dir=None):
             copied_before = processed
             copy_into(fname, f)
             if processed == copied_before:
-                continue  # 图缺失未复制：不留 panel 行
+                continue  # image missing and not copied: no panel line left behind
             panel_lines.append(f"  [{letter or '-'}] {f}  page={it.get('page_idx', '')}")
         if not panel_lines:
             used.discard(fname)
-            continue  # 组内图全部缺失：不建空目录
-        txt = [g["caption"], "", f"{g['kind']} {g['token']}：{len(g['files'])} 个子图", "-" * 40] + panel_lines
+            continue  # every image in the group is missing: do not create an empty directory
+        txt = [g["caption"], "", f"{g['kind']} {g['token']}: {len(g['files'])} subfigures", "-" * 40] + panel_lines
         with open(_lp(os.path.join(str(target_images), fname, fname + ".txt")), "w", encoding="utf-8") as tf:
             tf.write("\n".join(txt) + "\n")
-        # 多子图 → 生成纵向拼接整图 FigureN_full.jpg（供分割/整图兜底使用）
+        # multiple subfigures → generate a vertically stitched whole figure FigureN_full.jpg (for splitting / whole-figure fallback)
         if len(g["files"]) > 1:
             if _merge_panels(target_images, g["files"], os.path.join(str(target_images), fname, fname + "_full.jpg")):
                 panel_lines.append(f"  [merged] {fname}_full.jpg")
 
-    # 2) 表：content_list 里 type=table 且 md 未收留的（表正文转文本写进 TableN.txt）
+    # 2) tables: type=table entries in content_list that md did not claim (the table body is converted to text into TableN.txt)
     if isinstance(json_data, list):
         tseq = 0
         for it in json_data:
@@ -307,7 +307,7 @@ def process_image_match(folder_path, output_dir=None):
             with open(_lp(os.path.join(str(target_images), fname, fname + ".txt")), "w", encoding="utf-8") as tf:
                 tf.write("\n".join(lines) + "\n")
 
-    # 3) 剩余未归档散图 → unknown_，不污染正图号
+    # 3) remaining unarchived loose images → unknown_, so real figure numbers stay clean
     assigned = set()
     for g in groups:
         assigned.update(g["files"])
@@ -321,7 +321,7 @@ def process_image_match(folder_path, output_dir=None):
         cap = safe_get_caption(it, it.get("type", "unknown")) if it else ""
         with open(_lp(os.path.join(str(target_images), fname, fname + ".txt")), "w", encoding="utf-8") as tf:
             tf.write(f"Original image: {f}\nType: {it.get('type','unknown') if it else 'unknown'}\n"
-                     f"Note: 未被任何 Fig./Table 图注归并（疑似未识别子图/装饰图）。"
+                     f"Note: not grouped under any Fig./Table caption (probably an unrecognized subfigure or decoration)."
                      + (f"\nCaption: {cap}" if cap else "") + "\n")
 
     stats = {"table": n_tab, "figure": n_fig, "other": 0, "unknown": n_unk}
@@ -330,24 +330,24 @@ def process_image_match(folder_path, output_dir=None):
 
 
 def _lp(s):
-    """Windows 长路径前缀（>160 字符或中文深路径时加 \\\\?\\，避免 WinError 3/Errno 2）。
-    shutil.copy2/open/makedirs 对普通 str 的长路径/中文路径会报 No such file，需 \\\\?\\ 前缀。"""
+    """Windows long-path prefix (add the extended-length prefix when the path exceeds 160 characters or is deeply nested, avoiding WinError 3/Errno 2).
+    shutil.copy2/open/makedirs raise No such file for ordinary str long/non-ASCII paths, so the extended-length prefix is required."""
     p = str(s)
     if os.name == "nt" and len(p) > 160 and not p.startswith("\\\\?\\"):
-        # \\?\ 扩展长度前缀要求全反斜杠的绝对路径；正斜杠会导致 WinError 2/3
+        # the extended-length prefix requires an all-backslash absolute path; forward slashes cause WinError 2/3
         p = p.replace("/", "\\")
         return "\\\\?\\" + p
     return p
 
 
 def _make_image_folder(images_dir, img_file, target_images, folder_name, txt_content=None, note=None):
-    """建子文件夹并复制图片 + 写 txt 描述（覆盖已存在）。
-    输入图从 images_dir 复制，目标子文件夹建在 target_images 下。"""
+    """Create the subfolder, copy the images and write the txt description (overwriting existing files).
+    Source images are copied from images_dir, and the target subfolder is created under target_images."""
     target_dir = os.path.join(str(target_images), folder_name)
     os.makedirs(_lp(target_dir), exist_ok=True)
     img_src = os.path.join(images_dir, img_file)
     img_dst = os.path.join(target_dir, img_file)
-    shutil.copy2(_lp(img_src), _lp(img_dst))  # 覆盖
+    shutil.copy2(_lp(img_src), _lp(img_dst))  # overwrite
     txt_path = os.path.join(target_dir, f"{folder_name}.txt")
     content = txt_content if txt_content is not None else (note or "")
     with open(_lp(txt_path), "w", encoding="utf-8") as txt:
@@ -355,17 +355,17 @@ def _make_image_folder(images_dir, img_file, target_images, folder_name, txt_con
 
 
 # ─────────────────────────────────────────────
-# 全文清洗（来自 冗余清洗.ipynb）
+# full-text cleaning (from redundancy_cleaning.ipynb)
 # ─────────────────────────────────────────────
 _REF_PATTERN = re.compile(r"^#+\s+references?.*$", re.IGNORECASE | re.MULTILINE)
 
 
 def clean_full_md(folder_path, output_dir=None):
-    """读 full.md，截取 References 之前写 full_cleaned.md（覆盖）。
-    output_dir 缺省时写到文献目录；指定时（如 workflow 目录）写到该目录。"""
+    """Read full.md, cut before References and write full_cleaned.md (overwrite).
+    When output_dir is omitted it is written to the paper directory; when given (e.g. a workflow directory) it is written there."""
     source_path = os.path.join(folder_path, "full.md")
     if not os.path.exists(source_path):
-        return {"ok": False, "reason": "无 full.md"}
+        return {"ok": False, "reason": "no full.md"}
     try:
         with open(_lp(source_path), "r", encoding="utf-8") as f:
             content = f.read()
@@ -385,11 +385,11 @@ def clean_full_md(folder_path, output_dir=None):
 
 
 # ─────────────────────────────────────────────
-# 统一入口
+# unified entry
 # ─────────────────────────────────────────────
 def preprocess_paper(folder_path, output_dir=None):
-    """对单篇文献文件夹执行完整预处理（图像匹配 + 全文清洗）。
-    output_dir 缺省 = 文献目录；指定时（如 workflow 目录）产出编排到 output_dir。"""
+    """Run the complete preprocessing for one paper folder (image matching + full-text cleaning).
+    output_dir defaults to the paper directory; when given (e.g. a workflow directory) products are organized into output_dir."""
     img = process_image_match(folder_path, output_dir)
     clean = clean_full_md(folder_path, output_dir)
     return {

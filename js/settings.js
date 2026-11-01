@@ -15,14 +15,14 @@
                 models: []
             },
             'alibaba': {
-                id: 'alibaba', name: '阿里云百炼',
+                                id: 'alibaba', name: 'Alibaba Cloud Bailian',
                 defaultEndpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
                 apiKeyHeader: 'Authorization', apiKeyPrefix: 'Bearer ',
                 desc: t('prov.desc.alibaba'),
                 models: []
             },
             'glm': {
-                id: 'glm', name: '智谱 GLM',
+                                id: 'glm', name: 'Zhipu GLM',
                 defaultEndpoint: 'https://open.bigmodel.cn/api/paas/v4',
                 apiKeyHeader: 'Authorization', apiKeyPrefix: 'Bearer ',
                 desc: t('prov.desc.glm'),
@@ -47,16 +47,16 @@
                 models: []
             },
             'qwen-local': {
-                id: 'qwen-local', name: '本地千问', hidden: true, type: 'openai',
+                                id: 'qwen-local', name: 'Local Qwen', hidden: true, type: 'openai',
                 defaultEndpoint: 'http://<HUB-IP>:8080/v1',
                 apiKeyHeader: 'Authorization', apiKeyPrefix: 'Bearer ',
                 desc: t('prov.desc.qwenLocal'),
                 models: [
-                    { id: 'qwen3-local', name: 'Qwen3.6 35B（本地）', desc: t('prov.desc.qwenLocalModel'), modelParam: 'Qwen3.6-35B-A3B-Q4_K_M.gguf', enableReasoning: false }
+                                        { id: 'qwen3-local', name: 'Qwen3.6 35B (local)', desc: t('prov.desc.qwenLocalModel'), modelParam: 'Qwen3.6-35B-A3B-Q4_K_M.gguf', enableReasoning: false }
                 ]
             },
             'kimi': {
-                id: 'kimi', name: 'Kimi（月之暗面）',
+                                id: 'kimi', name: 'Kimi (Moonshot)',
                 defaultEndpoint: 'https://api.moonshot.cn/v1',
                 apiKeyHeader: 'Authorization', apiKeyPrefix: 'Bearer ',
                 desc: t('prov.desc.kimi'),

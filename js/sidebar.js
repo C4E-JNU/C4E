@@ -519,7 +519,7 @@
                     }
                 })
                 .catch(function(err) {
-                    console.error('加载笔记失败:', err);
+                                        console.error('Failed to load notes:', err);
                     notesListEl.innerHTML = '<div style="padding:1rem;color:var(--error);">' + t('sb.loadNotesFail') + '</div>';
                 });
         }
@@ -592,7 +592,7 @@
                 }
             })
             .catch(function(err) {
-                console.error('添加笔记失败:', err);
+                                console.error('Failed to add note:', err);
                 showToast(t('sb.addNoteFail'), 'error');
             });
         }
@@ -611,7 +611,7 @@
                 }
             })
             .catch(function(err) {
-                console.error('删除笔记失败:', err);
+                                console.error('Failed to delete note:', err);
                 showToast(t('sb.delNoteFail'), 'error');
             });
         }
@@ -633,7 +633,7 @@
                 }
             })
             .catch(function(err) {
-                console.error('移动笔记失败:', err);
+                                console.error('Failed to move note:', err);
                 showToast(t('sb.moveNoteFail'), 'error');
             });
         }
@@ -679,12 +679,12 @@
                     if (bodyEl) { bodyEl.innerHTML = formatMessage(originalContent, true, 'note'); }
                 },
                 onSave: function (newContent, newTitle) {
-                    var t = (newTitle !== null && newTitle !== undefined && newTitle !== '') ? newTitle : t('edit.noteUntitled');
+                    var _title = (newTitle !== null && newTitle !== undefined && newTitle !== '') ? newTitle : t('edit.noteUntitled');
                     var c = newContent;
                     fetch(BACKEND_API_URL + '/api/notes', {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ note_id: noteId, title: t, content: c })
+                        body: JSON.stringify({ note_id: noteId, title: _title, content: c })
                     })
                     .then(r => r.json())
                     .then(function(data) {
@@ -700,7 +700,7 @@
                         }
                     })
                     .catch(function(err) {
-                        console.error('更新笔记失败:', err);
+                                                console.error('Failed to update note:', err);
                         showToast(t('sb.updateNoteFail'), 'error');
                     });
                 }
@@ -1166,7 +1166,7 @@
                     });
                     historyList.querySelectorAll('.group-notes-slot').forEach(function (slot) {
                         const _c = _counts[slot.dataset.branchId] || 0;
-                        slot.textContent = '';   // 在途 fetch 可能重复回调，先清空再插，保证每槽最多一个按钮
+                                                slot.textContent = '';   // In-flight callbacks may repeat: clear before inserting so each slot holds one button
                         if (!_c) return;
                         const _btn = document.createElement('button');
                         _btn.className = 'group-notes-btn';
@@ -1179,7 +1179,7 @@
                         slot.appendChild(_btn);
                     });
                 })
-                .catch(function (err) { console.error('加载笔记计数失败:', err); });
+                                .catch(function (err) { console.error('Failed to load note counts:', err); });
         }
 
         // ==================== 工作区域收起状态（按工作区 id 持久化） ====================

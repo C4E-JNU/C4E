@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
-"""step2c_verify_packages.py — 打包自检：把每个包的 image.jpg 反查回归档面板，输出对照表。
+"""step2c_verify_packages.py — packaging self-check: trace each pack's image.jpg back to an archived panel and print a mapping table.
 
-为什么需要：打包正确性原来只靠人工抽查，「c 拿成 d 的图」这类错配查不出来。
-本脚本纯本地（读 txt 清单 + 算 md5），**不读图、不调大模型、零 token**。
+Why this exists: packaging correctness used to rely on manual spot checks, and misassignments such as "panel c took panel d's image" were undetectable.
+This script is purely local (reads the txt manifests + computes md5): **it never reads images, never calls an LLM, and costs zero tokens**.
 
-校验四条：
-  ① 包完整    image.jpg 与 task.json 都在，task.json 可解析；
-  ② 图未损坏  包内 image.jpg 的 md5 == task.json.image_file 的 md5；
-  ③ 序号一致  图在 FigureN.txt 有序清单中的序号 == task.json.panel_index；
-  ④ 无漏无重  该图归档的面板块至多被用一次；有面板级包时，未用块明确列出（工单未收录属正常）。
+Four checks:
+  ① Pack complete   image.jpg and task.json both present, and task.json parses;
+  ② Image intact    the md5 of the pack's image.jpg == the md5 of task.json.image_file;
+  ③ Index match     the image's index in the ordered FigureN.txt list == task.json.panel_index;
+  ④ No loss, no reuse  each archived panel block of that figure is used at most once; when panel-level packs exist, unused blocks are listed explicitly (not being included by the work order is normal).
 
-用法：python step2c_verify_packages.py <论文夹|批次目录>
+Usage: python step2c_verify_packages.py <paper folder|multi-paper directory>
 """
 import hashlib
 import json
@@ -28,9 +28,9 @@ def md5(path, chunk=1 << 20):
 
 
 def read_panels(txt):
-    """FigureN.txt → (有序面板文件名列表, merged 整图文件名)。
+    """FigureN.txt → (ordered list of panel file names, merged whole-figure file name).
 
-    行格式由 step0c 产出：`[i] <hash>.jpg  page=N  bbox=(…)`；多块时另有 `[merged] FigureN_full.jpg`。
+    Line format is produced by step0c: `[i] <hash>.jpg  page=N  bbox=(…)`; with multiple blocks there is also `[merged] FigureN_full.jpg`.
     """
     panels, merged = [], None
     if not os.path.exists(txt):
@@ -47,7 +47,7 @@ def read_panels(txt):
 
 
 def paper_dirs(root):
-    """输入可为论文夹或批次目录 → 返回含 02b_tasks 的论文夹列表。"""
+    """Input may be a paper folder or a multi-paper directory → return the paper folders that contain 02b_tasks."""
     def has(p):
         return os.path.isdir(os.path.join(p, "datamining", "02b_tasks")) or \
                os.path.isdir(os.path.join(p, "02b_tasks"))
@@ -63,7 +63,7 @@ def paper_dirs(root):
 
 
 def figure_dir(img_root, fid):
-    """figure_id（Figure7 / Fig.7）→ 归档目录 images/Figure7。"""
+    """figure_id (Figure7 / Fig.7) → archive directory images/Figure7."""
     num = re.sub(r"\D", "", fid or "")
     if not num or not os.path.isdir(img_root):
         return None
@@ -88,19 +88,19 @@ def check_paper(paper):
                 if os.path.isdir(os.path.join(d, t)):
                     pkgs.append((mode, t, os.path.join(d, t)))
 
-    print(f"\n=== {os.path.basename(os.path.normpath(paper))} — 包 {len(pkgs)} 个 ===")
-    print(f"{'包':<5}{'mode':<7}{'图':<10}{'子图':<16}{'panel_idx':<11}{'包内图 → 归档位置':<34}判定")
+    print(f"\n=== {os.path.basename(os.path.normpath(paper))} — {len(pkgs)} packs ===")
+    print(f"{'pack':<5}{'mode':<7}{'figure':<10}{'subfigure':<16}{'panel_idx':<11}{'pack image → archive position':<34}verdict")
     rows, bad, used_panel, seen_fig = [], [], {}, {}
 
     for mode, t, pkg in pkgs:
         tp = os.path.join(pkg, "task.json")
         if not os.path.exists(tp):
-            bad.append(f"{t} 缺 task.json")
+            bad.append(f"{t} missing task.json")
             continue
         try:
             tj = json.load(open(tp, encoding="utf-8"))
         except Exception as e:
-            bad.append(f"{t} task.json 解析失败：{e}")
+            bad.append(f"{t} task.json failed to parse: {e}")
             continue
 
         fid = tj.get("figure_id", "")
@@ -112,47 +112,47 @@ def check_paper(paper):
         seen_fig.setdefault(fid, (fd, len(panels)))
 
         if not os.path.exists(img):
-            bad.append(f"{t} 缺 image.jpg（no_image 任务不应打包）")
+            bad.append(f"{t} missing image.jpg (a no_image task must not be packed)")
             print(f"{t:<5}{mode:<7}{fid:<10}{sids:<10}{str(pi or '-'):<11}{'—':<34}NO_IMAGE")
             continue
 
         h = md5(img)
         src = tj.get("image_file", "") or ""
         src_base = os.path.basename(src)
-        # 打包会把超限图重编码压缩（md5 必变），故权威身份是 task.json 记的**来源指纹**；
-        # 旧包无指纹时回退按文件名/md5 比。
+        # Packing re-encodes oversized images (which always changes the md5), so the authoritative identity is the **source fingerprint** recorded in task.json;
+        # when an old pack has no fingerprint, fall back to comparing file name / md5.
         src_md5 = tj.get("image_source_md5", "") or ""
         src_name = tj.get("image_source_name", "") or ""
         by_src = (lambda f: bool(src_md5) and os.path.exists(f) and md5(f) == src_md5)
-        zip_tag = "（重编码）" if tj.get("image_resized") else ""
+        zip_tag = " (re-encoded)" if tj.get("image_resized") else ""
 
         kind, arch_idx = "", None
-        for i, fn in enumerate(panels, 1):                      # ① 面板级：名字/md5/来源指纹命中
+        for i, fn in enumerate(panels, 1):                      # ① panel level: name/md5/source fingerprint match
             fp = os.path.join(fd, fn) if fd else ""
             if fn == src_base or fn == src_name or (fp and os.path.exists(fp)
                                                     and (md5(fp) == h or by_src(fp))):
-                arch_idx, kind = i, f"{fn[:10]}… → 归档第{i}块{zip_tag}"
+                arch_idx, kind = i, f"{fn[:10]}… → archive block {i}{zip_tag}"
                 break
         if arch_idx is None:
             fp = os.path.join(fd, merged) if (fd and merged) else ""
             if merged and (src_base == merged or src_name == merged
                            or (fp and os.path.exists(fp)
                                and (md5(fp) == h or by_src(fp)))):
-                kind = f"整图(full) → 非面板级{zip_tag}"
+                kind = f"whole figure (full) → not panel-level{zip_tag}"
             elif tj.get("image_source") == "split":
                 letter = re.sub(r"[^A-Za-z]", "", re.sub(rf"^{re.escape(fid)}", "", src_base))
-                kind = f"split 分割图（{letter or '无字母'}）"
+                kind = f"split image ({letter or 'no letter'})"
                 if letter and sids and letter.lower() != sids.replace(",", "").lower():
-                    bad.append(f"{t} split 图文件名字母({letter}) ≠ 子图({sids})")
+                    bad.append(f"{t} split image file-name letter({letter}) ≠ subfigure({sids})")
             else:
-                kind = "不可追溯（归档内无此图）"
-                bad.append(f"{t} 包内图无法在 {fid} 归档中反查到")
+                kind = "not traceable (no such image in the archive)"
+                bad.append(f"{t} pack image cannot be traced back in the {fid} archive")
 
         mark = "OK"
         if arch_idx and pi and int(pi) != arch_idx:
             mark = "MISMATCH"
-            bad.append(f"{t} panel_index={pi} ≠ 归档实际第{arch_idx}块（子图 {sids}）")
-        elif kind.startswith("不可追溯"):
+            bad.append(f"{t} panel_index={pi} ≠ actual archive block {arch_idx} (subfigure {sids})")
+        elif kind.startswith("not traceable"):
             mark = "UNTRACEABLE"
         if arch_idx:
             used_panel.setdefault(fid, set()).add(arch_idx)
@@ -162,15 +162,15 @@ def check_paper(paper):
 
     n_bad = len({b.split(" ")[0] for b in bad})
     n_ok = sum(1 for r in rows if r[-1] == "OK")
-    print(f"汇总：包 {len(pkgs)} | OK {n_ok} | 异常 {n_bad}")
+    print(f"Summary: packs {len(pkgs)} | OK {n_ok} | problems {n_bad}")
 
     for fid, (fd, n) in sorted(seen_fig.items()):
         used = used_panel.get(fid, set())
-        if used and n > len(used):            # 有面板级包时，才提示未用块
+        if used and n > len(used):            # only warn about unused blocks when panel-level packs exist
             miss = [i for i in range(1, n + 1) if i not in used]
-            print(f"未用面板块：{fid} {miss} / 共 {n} 块 —— 工单未收录（如被排除的照片/示意图子图），属正常")
+            print(f"Unused panel blocks: {fid} {miss} / {n} total — not included by the work order (e.g. excluded photo/schematic panels), which is normal")
         elif not used and n > 1:
-            print(f"整图一包：{fid}（{n} 块未拆，取 _full 或最大块，属正常）")
+            print(f"Whole-figure pack: {fid} ({n} blocks not split; uses _full or the largest block, which is normal)")
     for b in bad:
         print(f"  ⚠ {b}")
     return 1 if bad else 0
@@ -182,11 +182,11 @@ def main():
         return 2
     root = sys.argv[1]
     if not os.path.exists(root):
-        print(f"路径不存在：{root}")
+        print(f"Path does not exist: {root}")
         return 2
     papers = paper_dirs(root)
     if not papers:
-        print(f"未找到含 02b_tasks 的论文夹：{root}")
+        print(f"No paper folder containing 02b_tasks was found: {root}")
         return 2
     return max(check_paper(p) for p in papers)
 

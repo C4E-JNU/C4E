@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
-"""step0c_clip_figures.py — 用 content_list 的 bbox 从 origin PDF 裁剪图块，按图注编号归档。
+"""step0c_clip_figures.py — crop figure blocks from the origin PDF using content_list bboxes, and archive them by caption number.
 
-为什么要它：MinerU 的 images/ 散图是「图内容流」，多面板图会被切碎、丢面板、串序；
-content_list 里的 bbox 是「图块在页面上的位置」——按 bbox 从 PDF 裁出来就是完整面板，
-且不依赖散图文件是否齐全，主控/子智能体都不需要先「看一张图猜它是第几图」。
+Why this exists: MinerU's loose images under images/ are a "figure content stream", so multi-panel figures get chopped up, lose panels or fall out of order;
+the bboxes in content_list are "where the figure block sits on the page" — cropping from the PDF by bbox yields complete panels
+and does not depend on the loose image files being complete, so neither the orchestrator nor a subagent has to "look at an image and guess which figure it is".
 
-连接键 = 图片文件名（hash）：content_list 给 hash→(page_idx,bbox)，full.md 给 hash→图号。
+Join key = image file name (hash): content_list gives hash→(page_idx,bbox), full.md gives hash→figure number.
 
-输入：论文文件夹 / 批次目录 / 裸 PDF（须已有 *_content_list.json + *_origin.pdf）
-输出：<论文夹>/datamining/images/FigureN/<hash>.jpg（同名目录整体重建）
-      + FigureN_full.jpg（多块时按原布局拼接）
-      + FigureN.txt（英文图注 + 各块页码/bbox）
-      未被任何图注收留的块 → unknown_NN/
-用法：python step0c_clip_figures.py <论文夹|批次目录|pdf>
+Input: a paper folder / a multi-paper directory / a bare PDF (must already have *_content_list.json + *_origin.pdf)
+Output: <paper folder>/datamining/images/FigureN/<hash>.jpg (the same-named directory is rebuilt entirely)
+      + FigureN_full.jpg (stitched in the original layout when there are several blocks)
+      + FigureN.txt (English caption + page number/bbox of each block)
+      blocks not claimed by any caption → unknown_NN/
+Usage: python step0c_clip_figures.py <paper folder|multi-paper directory|pdf>
 """
 import io
 import json
@@ -46,7 +46,7 @@ def _origin_pdf(paper):
 
 
 def load_blocks(cl_path):
-    """{hash文件名: (page_idx, [x0,y0,x1,y1])}，取自 type=chart/image/table 条目"""
+    """{hash file name: (page_idx, [x0,y0,x1,y1])}, taken from type=chart/image/table entries"""
     out, tables = {}, set()
     data = json.load(open(_lp(cl_path), encoding="utf-8"))
     if not isinstance(data, list):
@@ -75,7 +75,7 @@ def load_blocks(cl_path):
 
 
 def resolve_scale(doc, blocks):
-    """bbox 是页面点距坐标还是 1000×1000 归一化坐标 → 返回 (sx, sy)"""
+    """Whether bbox uses page point units or 1000×1000 normalized coordinates → return (sx, sy)"""
     ok = tot = 0
     for pg, bbox in blocks.values():
         if pg is None or not (0 <= pg < len(doc)):
@@ -88,7 +88,7 @@ def resolve_scale(doc, blocks):
 
 
 def _clip(doc, pg, bbox, scale):
-    """裁一块 → (PIL.Image, 缩放后 x0, y0)；失败 None"""
+    """Crop one block → (PIL.Image, scaled x0, y0); None on failure"""
     if pg is None or not (0 <= pg < len(doc)):
         return None
     page = doc[pg]
@@ -110,7 +110,7 @@ def _clip(doc, pg, bbox, scale):
 
 
 def _merge_layout(items, out_path):
-    """items=[(PIL.Image, x0, y0)] → 按原布局拼接（行内横排、行间纵排）"""
+    """items=[(PIL.Image, x0, y0)] → stitch in the original layout (horizontal within a row, vertical across rows)"""
     if len(items) < 2:
         return None
     med_h = sorted(im.height for im, _, _ in items)[len(items) // 2]
@@ -149,12 +149,12 @@ def _merge_layout(items, out_path):
 
 
 def _write_folder(target, name, entries, caption, kind):
-    """entries=[(hash, page, bbox, PIL.Image)]；建 FigureN/ 并写图 + txt"""
+    """entries=[(hash, page, bbox, PIL.Image)]; build FigureN/ and write the images + txt"""
     folder = os.path.join(str(target), name)
     if os.path.isdir(_lp(folder)):
         shutil.rmtree(_lp(folder))
     os.makedirs(_lp(folder), exist_ok=True)
-    lines = [caption or name, "", f"{kind} {name}：{len(entries)} 块", "-" * 40]
+    lines = [caption or name, "", f"{kind} {name}: {len(entries)} blocks", "-" * 40]
     crops = []
     for i, (fname, page, bbox, im) in enumerate(entries, 1):
         dst = os.path.join(folder, fname)
@@ -175,11 +175,11 @@ def _write_folder(target, name, entries, caption, kind):
 def clip_paper(paper):
     cl_path, pdf_path = _content_list(paper), _origin_pdf(paper)
     if not cl_path or not pdf_path:
-        print(f"{os.path.basename(os.path.normpath(paper))[:44]:46s} 缺 content_list 或 PDF，跳过")
+        print(f"{os.path.basename(os.path.normpath(paper))[:44]:46s} missing content_list or PDF, skipped")
         return None
     blocks, table_files = load_blocks(cl_path)
     if not blocks:
-        print(f"{os.path.basename(os.path.normpath(paper))[:44]:46s} content_list 无 figure 块，跳过")
+        print(f"{os.path.basename(os.path.normpath(paper))[:44]:46s} content_list has no figure block, skipped")
         return None
     doc = fitz.open(pdf_path)
     scale = resolve_scale(doc, blocks)
@@ -225,17 +225,17 @@ def clip_paper(paper):
             continue
         n_unk += 1
         _write_folder(target, f"unknown_{n_unk:02d}", [(f, pg, bbox, r[0])],
-                      f"Original: {f}\nNote: 未被任何图注收留（装饰图/未识别块）。", "unknown")
+                      f"Original: {f}\nNote: not claimed by any caption (decorative or unrecognized block).", "unknown")
 
     name = os.path.basename(os.path.normpath(paper))
-    print(f"{name[:44]:46s} PDF裁剪 OK 图 {n_fig} / 块 {len(used & set(blocks))} / unknown {n_unk}"
-          f" （坐标系 {'点距' if scale[0] == 1.0 else '1000归一化'}）")
+    print(f"{name[:44]:46s} PDF crop OK figures {n_fig} / blocks {len(used & set(blocks))} / unknown {n_unk}"
+          f" (coordinate system {'points' if scale[0] == 1.0 else '1000-normalized'})")
     return {"figures": n_fig, "blocks": len(blocks), "unknown": n_unk}
 
 
 def papers_in(root):
     if os.path.isfile(root):
-        return [root]  # 单篇 PDF：交由上层先补 MinerU 产物，这里只提示
+        return [root]  # a single PDF: the caller first completes MinerU products; this is only a hint
     if os.path.isdir(os.path.join(root, "datamining")) or _content_list(root):
         return [root]
     return [os.path.join(root, p) for p in sorted(os.listdir(root))
@@ -244,11 +244,11 @@ def papers_in(root):
 
 def main(root):
     if os.path.isfile(root):
-        print("该路径是文件：请先跑 step0b_mineru_reparse.py 生成文献文件夹与 MinerU 产物，再跑本脚本")
+        print("This path is a file: run step0b_mineru_reparse.py first to produce the paper folder and MinerU products, then run this script")
         return
     papers = papers_in(root)
     if not papers:
-        print("未找到含 *_content_list.json 的论文文件夹")
+        print("No paper folder containing *_content_list.json was found")
         return
     for p in papers:
         clip_paper(p)
@@ -256,6 +256,6 @@ def main(root):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("用法：python step0c_clip_figures.py <论文夹|批次目录|pdf>")
+        print("Usage: python step0c_clip_figures.py <paper folder|multi-paper directory|pdf>")
         sys.exit(1)
     main(sys.argv[1])

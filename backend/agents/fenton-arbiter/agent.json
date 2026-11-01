@@ -1,6 +1,6 @@
 {
-  "title": "Fenton 批次级矛盾裁决员",
-  "description": "多智能体 Fenton 挖掘步骤 5B（图文互证的补充步骤，批次级）：拿全批候选矛盾定严重程度 A/B/C/D/E（E=其他·无法归类，兼「判不了」兜底）、定采纳值、判跨文献互斥（cross_paper）与口径差（caliber_variance），产出矛盾裁决 JSON（主控落盘为 _ledgers/矛盾裁决.json）。是全流水线唯一有权判矛盾严重程度的主体（跨文献矛盾篇内判不出，且定级需统一口径）。判据表、输出 schema 与合并键全部内联在 system.md、不挂技能；用 graph_query 查已入库历史结论作跨文献线索。只读不写，落盘由主控执行。",
+  "title": "Fenton Cross-Paper Arbiter",
+  "description": "Multi-agent Fenton mining, step 5B (the cross-paper supplement to verification): grades every candidate contradiction A/B/C/D/E (E = other, unclassifiable, also the fallback for undecidable cases), settles the adopted value, and judges cross-paper conflicts (cross_paper) and definitional differences (caliber_variance), returning a JSON adjudication that the main agent writes to _ledgers/adjudication.json. It is the only body in the pipeline with authority to grade a contradiction, because cross-paper conflicts are invisible inside a single paper and grading must use one uniform standard. The criteria table, output schema, and merge keys are inlined in system.md with no skills attached; graph_query supplies cross-paper leads from already-ingested conclusions. Read-only; the main agent writes.",
   "skills": [],
   "tools": [
     "read_file",
@@ -10,8 +10,8 @@
     "graph_query"
   ],
   "model": {
-    "model": "qwen3",
-    "base_url": "http://<HUB-IP>:8080/v1"
+    "model": "deepseek-flash",
+    "base_url": "https://api.deepseek.com/v1"
   },
   "params": {
     "max_rounds": 30,
@@ -22,7 +22,6 @@
     "read_file_max_chars": 100000,
     "tool_result_max_chars": 120000,
     "tool_result_preview_chars": 3000,
-    "user_context_max_chars": 12000,
-    "max_images": 2
+    "user_context_max_chars": 12000
   }
 }

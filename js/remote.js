@@ -1,5 +1,5 @@
-// 大屏右下角「远程控制」：显示手机/其他电脑访问这台电脑用的固定地址 + 二维码。
-// 地址由后端 /api/remote/info 给出（隧道实现在项目根 tunnel.py）。
+// "Remote control" at the bottom right: shows the fixed address for phones/other PCs plus a QR code.
+// The address comes from the backend /api/remote/info (tunnel implemented in tunnel.py).
 
 (function initRemoteControl() {
     const btn = document.getElementById('remote-ctrl-btn');
@@ -30,7 +30,7 @@
         copyBtn.disabled = !info.url;
 
         qrBox.innerHTML = '';
-        // 只在隧道真的在跑时才出二维码：没开隧道时扫码打不开，不如让用户先点「开启隧道」
+        // Show the QR code only while the tunnel is running; otherwise scanning would fail
         if (info.running && info.url && typeof QRCode !== 'undefined') {
             new QRCode(qrBox, {
                 text: info.url, width: 132, height: 132,
@@ -57,7 +57,7 @@
     const closeBtn = document.getElementById('remote-ctrl-close');
     closeBtn.addEventListener('click', () => { panel.hidden = true; });
 
-    document.addEventListener('click', (e) => {          // 点面板外面收起
+    document.addEventListener('click', (e) => {          // Click outside collapses the panel
         if (!panel.hidden && !panel.contains(e.target) && e.target !== btn) panel.hidden = true;
     });
 
@@ -78,7 +78,7 @@
         try {
             const r = await fetch('/api/remote/start', { method: 'POST' });
             info = await r.json();
-        } catch (e) { /* 保持原状态，状态行会如实说明 */ }
+        } catch (e) { /* Keep the current state; the status line reports the truth */ }
         toggleBtn.disabled = false;
         render();
     });

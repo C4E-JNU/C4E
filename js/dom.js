@@ -2,25 +2,25 @@
         const apiKeyInput = document.getElementById('api-key-input');
         const saveKeyBtn = document.getElementById('save-key-btn');
         const keyStatus = document.getElementById('key-status');
-        const currentModelName = null; // 已移除顶部模型显示
+        const currentModelName = null; // Top model display removed
         const messagesContainer = document.getElementById('messages-container');
         const messageInput = document.getElementById('message-input');
         const sendBtn = document.getElementById('send-btn');
-        // 修复：用 data-disabled 替代 disabled 属性，避免浏览器阻止点击事件
+        // Fix: use data-disabled instead of the disabled attribute so browsers still deliver clicks
         sendBtn.removeAttribute('disabled');
         function setSendBtnDisabled(val) { sendBtn.classList.toggle('btn-disabled', val); }
-        // 发送按钮的**唯一状态真源**（用户 2026-09-27）：
-        //   · 生成中 = 「⚡催促回答」（2026-10-13 由「立即回答」改名），**必须可点**。旧代码发送后把按钮置 btn-disabled，
-        //     而点击处理第一行就是 `if (btn-disabled) return` → 停止/立即回答永远点不到（踩过）。
-        //   · 空闲 = 有文字 + 模型已配置 才可点。
+        // Single source of truth for the send button state (user decision 2026-09-27):
+        //   - Generating = "⚡ Nudge answer" (renamed 2026-10-13), must stay clickable. The old code set btn-disabled,
+        //     and the click handler began with `if (btn-disabled) return`, so Stop/Nudge never fired.
+        //   - Idle = clickable only when there is text and a model is configured.
         function updateSendButtonState() {
             if (state.isGenerating) { setSendBtnDisabled(false); return; }
             const hasText = messageInput.value.trim().length > 0;
             const hasKey = !!(state.currentModel && state.apiKeys[state.currentModel]);
             setSendBtnDisabled(!hasText || !hasKey);
         }
-        // 流式输出的自动滚动（用户 2026-09-27）：只在用户没往上滑时贴底——
-        //   否则正在看前面的思考内容会被强制拽到底部看最新消息。
+        // Auto-scroll during streaming (user decision 2026-09-27): pin to the bottom only when the user has not scrolled up,
+        //   otherwise reading earlier reasoning would be yanked to the newest message.
         function scrollToBottomIfFollowing() {
             if (state.userHasScrolledUp) return;
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -29,10 +29,10 @@
         const startExperienceBtn = document.getElementById('start-experience');
         const totalTokensEl = document.getElementById('total-tokens');
 
-        // 新增：聊天区模型选择器
+        // Chat-area model selector
         const chatModelSelector = document.getElementById('chat-model-selector');
 
-        // 侧边栏相关元素
+        // Sidebar elements
         const chatSidebar = document.getElementById('chat-sidebar');
         // const historyCount = document.getElementById('history-count'); // Removed from DOM
         const historyList = document.getElementById('history-list');
@@ -42,20 +42,20 @@
         const newChatBtn = document.getElementById('new-chat-btn');
         const newChatBtnEmpty = document.getElementById('new-chat-btn-empty');
 
-        // 笔记面板元素
+        // Notes panel elements
         const notesToggleBtn = document.getElementById('notes-toggle-btn');
         const notesPanel = document.getElementById('notes-panel');
         const notesList = document.getElementById('notes-list');
         const notesEmpty = document.getElementById('notes-empty');
         const notesAddBtn = document.getElementById('notes-add-btn');
 
-        // 分支重命名相关元素
+        // Branch rename elements
         const renameBranchModal = document.getElementById('rename-branch-modal');
         const renameBranchNameInput = document.getElementById('rename-branch-name-input');
         const cancelRenameBtn = document.getElementById('cancel-rename-btn');
         const confirmRenameBtn = document.getElementById('confirm-rename-btn');
 
-        // 新的文件附件相关元素
+        // File attachment elements
           const attachmentBtn = document.getElementById('attachment-btn');
           const expandBtn = document.getElementById('expand-btn');
           const expandedTextarea = document.getElementById('expanded-textarea');
@@ -66,9 +66,9 @@
           const uploadDropZone = document.getElementById('upload-drop-zone');
         const selectedFilesList = document.getElementById('selected-files-list');
 
-        // 数据库相关元素
+        // Database elements
         const dbAnalysisBtn = document.getElementById('db-analysis-btn');
-        const manageDatabaseBtn = null; // 已移除顶部数据库管理按钮
+        const manageDatabaseBtn = null; // Top database-manage button removed
         const databaseModal = document.getElementById('database-modal');
         const dbFileUploadArea = document.getElementById('db-file-upload-area');
         const databaseFileInput = document.getElementById('database-file-input');
@@ -83,15 +83,15 @@
         const dbChars = document.getElementById('db-chars');
         const dbUpdated = document.getElementById('db-updated');
 
-        // 智能体配置已并入设置面板（见 agent_config.js / ui.js），不再有独立面板元素
+        // Agent configuration merged into the settings panel (see agent_config.js / ui.js)
         const neo4jStatusDot = document.getElementById('neo4j-status-dot');
-        // MinerU 配置面板元素
+        // MinerU configuration panel elements
         const panelMineruToken = document.getElementById('panel-mineru-token');
         const panelMineruSave = document.getElementById('panel-mineru-save');
         const panelMineruMsg = document.getElementById('panel-mineru-msg');
          const skillsConfigContainer = document.getElementById('skills-config-container');
          const connectNeo4jBtn = document.getElementById('panel-neo4j-connect');
-         // Neo4j 设置元素
+         // Neo4j settings elements
         const neo4jUri = document.getElementById('neo4j-uri');
         const neo4jUser = document.getElementById('neo4j-user');
         const neo4jPassword = document.getElementById('neo4j-password');
@@ -99,21 +99,21 @@
         const neo4jTestResult = document.getElementById('neo4j-test-result');
         const neo4jSettingsStatus = document.getElementById('neo4j-settings-status');
 
-        // 面板内 Neo4j 连接元素
+        // In-panel Neo4j connection elements
         const panelNeo4jUri = document.getElementById('panel-neo4j-uri');
         const panelNeo4jUser = document.getElementById('panel-neo4j-user');
         const panelNeo4jPass = document.getElementById('panel-neo4j-pass');
         const panelNeo4jConnect = document.getElementById('panel-neo4j-connect');
         const panelNeo4jMsg = document.getElementById('panel-neo4j-msg');
 
-        // 智能体配置相关元素
+        // Agent configuration elements
         const settingsBtn = document.getElementById('settings-btn');
         const settingsPanel = document.getElementById('settings-panel');
         const settingsOverlay = document.getElementById('settings-overlay');
         const closeSettingsBtn = document.getElementById('close-settings');
         const saveSettingsBtn = document.getElementById('save-settings');
 
-        // 设置输入元素
+        // Settings input elements
         const temperatureSlider = document.getElementById('temperature');
         const contextSlider = document.getElementById('context-length');
         const maxTokensInput = document.getElementById('max-tokens');
@@ -122,20 +122,20 @@
         const contextBudgetInput = document.getElementById('context-budget');
         const streamingToggle = document.getElementById('streaming-toggle');
 
-        // 设置值显示元素
+        // Setting value display elements
         const tempValue = document.getElementById('temp-value');
         const contextValue = document.getElementById('context-value');
         const maxTokensValue = document.getElementById('max-tokens-value');
         const streamingStatus = document.getElementById('streaming-status');
 
-        // 默认系统提示词（不再使用，保留null引用不报错）
+        // Default system prompt (unused; keep the null reference so nothing breaks)
         const defaultSystemPrompt = '';
 
-        // ==================== 模型配置 ====================
+        // ==================== Model configuration ====================
 
-// ── 自定义右键菜单：复制 / 全选（2026-10-14）──
-// 背景：WebView2 原生上下文菜单在该环境里不弹出（设置已开、探针管道却能弹，原因未明），
-// 改为页面层 contextmenu 事件自绘小菜单，浏览器/桌面端行为一致。
+// -- Custom context menu: copy / select all (2026-10-14) --
+// WebView2 does not show its native context menu in this environment, so draw a small menu
+// on the page contextmenu event; behavior is then identical in browsers and the desktop shell.
 (function () {
     var menu = null;
     function hide() { if (menu) { menu.remove(); menu = null; } }
@@ -154,7 +154,7 @@
         ta.remove();
     }
     document.addEventListener('contextmenu', function (ev) {
-        // 输入框/textarea 走系统自带菜单（WebView2 对编辑控件有内置菜单）；且别拦数据库面板的移动菜单
+        // Inputs/textareas use the system menu; do not intercept the database panel move menu
         var evT = ev.target;
         if (evT && (evT.tagName === 'INPUT' || evT.tagName === 'TEXTAREA' || evT.isContentEditable)) return;
         if (evT && evT.closest && evT.closest('.db-move-menu')) return;

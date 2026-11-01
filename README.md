@@ -1,127 +1,127 @@
-# C4EAI · Shared Wiki — 组内科研辅助智能体
+# C4EAI · Shared Wiki — a research assistant agent for a lab group
 
-一个面向**组内科研辅助与共享知识库**的多用户多工具智能体。前端纯静态 SPA + FastAPI 后端，内置共享 Wiki（笔记/文档共享库）、知识图谱（Neo4j）检索、文献批量解析（MinerU）、联网搜索、文件处理、代码执行与技能系统。
+A multi-user, multi-tool agent for **research assistance and a shared knowledge base**. It combines a static single-page frontend with a FastAPI backend and ships with a shared wiki (notes/documents), knowledge-graph (Neo4j) retrieval, batch literature parsing (MinerU), web search, file handling, code execution and a skill system.
 
-> 设计对齐 [Hermes Agent](https://github.com/NousResearch/hermes-agent)：工具能力由 OpenAI function-calling schema 提供，技能以 `<available_skills>` 简列注入系统提示词、详情按需 `skill_view` 读取。
+> The design follows [Hermes Agent](https://github.com/NousResearch/hermes-agent): tool capabilities come from OpenAI function-calling schemas, skills are listed as `<available_skills>` with name + description, and full skill text is read on demand with `skill_view`.
 
 ---
 
-## 📚 先读这三份文档
+## Documentation
 
-| 文档 | 什么时候读 |
+| Document | When to read it |
 |---|---|
-| **[HANDOFF.md](开发中间产物/HANDOFF.md)** | **接手项目先读这个** —— 当前状态快照：权限体系、部署形态、开发命令、已知坑 |
-| **[CHANGELOG.md](CHANGELOG.md)** | 想知道"某处为什么这么写" —— 按日期记录了每次改动的原因与影响文件 |
-| [项目架构说明.md](项目架构说明.md) | 要改代码 —— 前后端文件职责、API 全表、核心链路 |
+| **[HANDOFF.md](开发中间产物/HANDOFF.md)** | **Read first when taking over** — current state, permissions, deployment shapes, dev commands, known pitfalls |
+| **[CHANGELOG.md](CHANGELOG.md)** | Why a piece of code looks the way it does — dated entries with reasons and affected files |
+| [ARCHITECTURE.md](项目架构说明.md) | Changing code — frontend/backend responsibilities, full API table, core flows |
 
-> 部署到服务器看 [共享库部署指南.md](共享库部署指南.md)。
+> For server deployment see [SHARED_LIBRARY_DEPLOYMENT.md](共享库部署指南.md).
 
 ---
 
-## ✨ 功能
+## Features
 
-| 模块 | 说明 |
+| Module | Description |
 |---|---|
-| 🧠 **Agent 引擎** | 手搓流式（custom）与 LangChain 两套引擎，保留候选 |
-| 🌐 **知识图谱** | Neo4j 查询（graph_query：schema / cypher / search），图谱结构可配置，当前库内存有科研实体关系数据 |
-| 📄 **文献解析** | MinerU v4 批量 PDF→Markdown（支持文件/文件夹） |
-| 🔍 **联网搜索** | web_search / web_extract，免费 Bing 抓取无 key |
-| 📎 **全后端文件解析** | pdf / docx / xlsx / xls / pptx / odt / txt（上传只存 file_id，历史附件即引用，Hermes 式） |
-| 🖼️ **图片多模态** | 后端自动转 base64 交给千问等视觉模型；仅 OCR 保留前端 |
-| 💻 **代码执行** | run_code（沙箱） + **terminal**（项目真实环境，可 uv/pip 装包、建 venv） |
-| 🗂️ **文件工具** | read_file / write_file / list_files（支持按 file_id 读上传附件） |
-| 💾 **技能系统** | SKILL.md 技能 + skill_view / skill_write 自我生成 |
-| 🎛️ **权限模式** | 安全 / 询问 / 完全访问，控制 agent 的文件与终端操作边界 |
-| 🔤 **工具/技能钩选** | 配置面板中按分组动态钩选，数据来自后端注册表 |
+| 🧠 **Agent engines** | A hand-written streaming engine (custom) and a LangChain engine |
+| 🌐 **Knowledge graph** | Neo4j queries via graph_query (schema / cypher / search); the schema is configurable and the current graph stores research entity relations |
+| 📄 **Literature parsing** | MinerU v4 batch PDF→Markdown (single file or folder) |
+| 🔍 **Web search** | web_search / web_extract; free Bing scraping without a key |
+| 📎 **Backend file parsing** | pdf / docx / xlsx / xls / pptx / odt / txt (uploads store a file_id; history attachments are references, Hermes style) |
+| 🖼️ **Multimodal images** | The backend converts images to base64 for vision models; OCR remains frontend-only |
+| 💻 **Code execution** | run_code (restricted) plus **terminal** (the real project environment; uv/pip installs, venvs) |
+| 🗂️ **File tools** | read_file / write_file / list_files (also reads uploaded attachments by file_id) |
+| 💾 **Skill system** | SKILL.md skills plus skill_view / skill_write for self-authoring |
+| 🎛️ **Permission modes** | Safe / Ask / Full access, bounding file and terminal operations |
+| 🔤 **Tool and skill selection** | Grouped checkboxes in the settings panel, populated from the backend registry |
 
 ---
 
-## 🚀 快速启动
+## Quick start
 
-### 依赖
-- Python 3.10+（推荐 3.11/3.12）
-- 可选：`uv`（更快管理环境），或 `pip`
-- 图谱：Neo4j 实例（Aura 或本地）
-- MinerU：配置 API Token
+### Requirements
+- Python 3.10+ (3.11/3.12 recommended)
+- Optional: `uv` (faster environments) or `pip`
+- Graph: a Neo4j instance (Aura or local)
+- MinerU: an API token
 
-### 安装
+### Install
 
 ```bash
-# 方式一：uv（推荐）
+# Option 1: uv (recommended)
 cd c4eai
-uv sync            # 根据 backend/pyproject.toml + uv.lock 创建并装好环境
+uv sync            # creates the environment from backend/pyproject.toml + uv.lock
 
-# 方式二：pip
+# Option 2: pip
 cd c4eai/backend
 python -m venv .venv
 .venv\Scripts\activate        # Windows
 pip install -r requirements.txt
 ```
 
-### 启动后端（端口 8080，同时服务前端 + API）
+### Start the backend (port 8080, serves frontend and API)
 
 ```bash
-# 方式一：start.bat（Windows）
+# Option 1: start.bat (Windows)
 start.bat
 
-# 方式二：命令行
+# Option 2: command line
 cd backend
 python app.py
 
-# 启动后访问 http://127.0.0.1:8080
+# Then open http://127.0.0.1:8080
 ```
 
-首次启动约需 20 秒（编译导入）。启动后打开页面，在**智能体配置**中：
-1. 配置模型（DeepSeek / 千问 / OpenAI 兼容）API Key
-2. 连接 Neo4j 图谱
-3. 配置 MinerU Token（文献解析）
-4. 按需钩选工具/技能
+The first start takes about 20 seconds (imports/compilation). In **Agent settings**:
+1. Configure a model API key (DeepSeek / Qwen / any OpenAI-compatible endpoint)
+2. Connect the Neo4j graph
+3. Configure the MinerU token (literature parsing)
+4. Tick the tools and skills you need
 
 ---
 
-## 🏗️ 架构
+## Architecture
 
 ```
-前端（静态 SPA）                    后端（FastAPI, :8080）
+Frontend (static SPA)                 Backend (FastAPI, :8080)
 ┌─────────────────────┐     ┌─────────────────────────────┐
-│ index.html / js/*   │     │ app.py  (全部 /api/* 端点)    │
-│  messages.js 渲染   │     │  agent/agent.py              │
-│  graph_rag.js Agent │ ←→  │    stream_agent (手搓)       │
-│  agent_config.js 配置│ SSE  │    stream_agent_lc (LangChain)│
-│  工具/技能动态钩选   │     │  agent/tools.py tools_registry│
-└─────────────────────┘     │  tools/  (16 个后端工具)      │
+│ index.html / js/*   │     │ app.py  (all /api/* endpoints)│
+│  messages.js render │     │  agent/agent.py              │
+│  graph_rag.js agent │ ←→  │    stream_agent (custom)     │
+│  agent_config.js    │ SSE │    stream_agent_lc (LangChain)│
+│  dynamic tool/skill │     │  agent/tools.py tools_registry│
+└─────────────────────┘     │  tools/  (16 backend tools)   │
                             └─────────────────────────────┘
 ```
 
-**数据流（一次对话）**：`messages.js sendMessage → reactAgentLoop → POST /api/agent/stream(SSE) → stream_agent → LLM + 工具循环 → 逐事件回流 → 前端渲染`
+**Data flow (one turn)**: `messages.js sendMessage → reactAgentLoop → POST /api/agent/stream (SSE) → stream_agent → LLM + tool loop → event stream → frontend rendering`
 
-详见 [`项目架构说明.md`](项目架构说明.md)（含全部流程图的 mermaid 源码）。
+See [ARCHITECTURE.md](项目架构说明.md) for details, including the mermaid sources of every diagram.
 
 ---
 
-## 🛠️ 工具清单（后端 `tools_registry`）
+## Tool list (backend `tools_registry`)
 
-| 分组 | 工具 |
+| Group | Tools |
 |---|---|
-| 图谱 (graph) | graph_query（schema / cypher / search 三合一） |
-| 联网 (web) | web_search · web_extract |
-| 技能 (skills) | skill_list · skill_view · skill_write |
-| 文件 (file) | read_file · write_file · list_files |
-| 代码/终端 (code) | run_code · terminal |
-| 记忆 (memory) | search_history · search_knowledge · conversation_notes |
-| 任务 (task) | todo |
-| 文档解析 (documents) | mineru_parse |
+| graph | graph_query (schema / cypher / search) |
+| web | web_search · web_extract |
+| skills | skill_list · skill_view · skill_write |
+| file | read_file · write_file · list_files |
+| code/terminal | run_code · terminal |
+| memory | search_history · search_knowledge · conversation_notes |
+| task | todo |
+| documents | mineru_parse |
 
 ---
 
-## 📄 LICENSE
+## License
 
-本项目采用 [MIT License](LICENSE)。
+MIT License (see LICENSE).
 
 ---
 
-## 🙏 致谢
+## Acknowledgements
 
-- 架构与设计借鉴 [Hermes Agent](https://github.com/NousResearch/hermes-agent)（工具 schema 优先、技能简列注入、项目 venv + uv 环境管理）
-- MinerU：PDF 解析
-- LangChain：Agent 框架（可选引擎）
+- Architecture inspired by [Hermes Agent](https://github.com/NousResearch/hermes-agent) (schema-first tools, compact skill listing, project venv + uv)
+- MinerU for PDF parsing
+- LangChain for the optional agent engine

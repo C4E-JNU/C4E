@@ -14,7 +14,7 @@
   ③ 参数：agents/<name>/agent.json
      · model 段：model / base_url / api_key / temperature / max_tokens（可混服务商）
      · params 段：max_rounds / timeout / 三级超时 / read_file_max_chars /
-                  tool_result_max_chars / user_context_max_chars / max_images
+                  tool_result_max_chars / user_context_max_chars
 
 进程内隔离靠 contextvar：子智能体启动前 set_current_profile()，
 file_tools / skill_tools 实时读 —— asyncio 每个 Task 独立拷贝 context，
@@ -61,7 +61,7 @@ DEFAULTS = {
     "tools_dir": "tools",         # 相对 agents/<name>/
     "allow_write": False,         # 是否解锁写类工具（默认关闭，见 write_tools）
     "write_tools": [],
-    "status_line": True,          # 结论末尾附 【STATUS】/【MISSING】/【CONFIDENCE】机器可读行
+    "status_line": True,          # 结论末尾附 [STATUS]/[MISSING]/[CONFIDENCE]机器可读行
     "model": {},                  # model / base_url / api_key / temperature / max_tokens
     "params": {
         # None = 「不表态」：轮次/超时沿用主控设置（保证不配档案时零感知）
@@ -74,7 +74,6 @@ DEFAULTS = {
         "tool_result_max_chars": 4000,
         "tool_result_preview_chars": 2000,
         "user_context_max_chars": 6000,
-        "max_images": 3,
     },
 }
 
@@ -374,12 +373,7 @@ def current_read_file_max_chars() -> int:
 
 # ══════════════════ 结论状态行（评估 + 重派用）══════
 
-STATUS_HINT = (
-    "\n【结论状态行·必填】在结论摘要的**最后一行**输出机器可读状态（正文照常写，这行是给主控评估用的）：\n"
-    "【STATUS】ok|partial|failed 【MISSING】缺什么（没有就写 none） 【CONFIDENCE】0~1\n"
-    "· ok=任务完整完成；partial=部分完成（MISSING 写明缺口）；failed=没完成（MISSING 写原因）。\n"
-    "· 不要为了让状态好看而谎报：主控会拿你的 MISSING 决定是否换一个子智能体重做。"
-)
+STATUS_HINT = "\n[Status line - required] End the summary with one machine-readable line on the **last line** (write the body as usual; this line is what the orchestrator evaluates):\n[STATUS] ok|partial|failed [MISSING] what is missing (write none if nothing) [CONFIDENCE] 0-1\n- ok = the task is complete; partial = partly complete (name the gap in MISSING); failed = not done (give the reason in MISSING).\n- Never overstate the status: the orchestrator uses your MISSING field to decide whether to re-dispatch the task to another subagent."
 
 _STATUS_RE = re.compile(r"[\[【]\s*STATUS\s*[\]】]\s*([A-Za-z\u4e00-\u9fff_]+)")
 _MISSING_RE = re.compile(r"[\[【]\s*MISSING\s*[\]】]\s*([^\n\[【]*)")

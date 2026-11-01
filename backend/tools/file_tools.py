@@ -192,7 +192,7 @@ def _resolve_safe_path(relative_path: str, write: bool = False) -> str:
     raise PermissionError("__NEED_FULL__ 该写操作超出工作区域与 skills 目录，需要切换到完全访问模式才能执行")
 
 
-def _page_lines(lines, offset: int, limit: int, subject: str = "内容", extra_note: str = "",
+def _page_lines(lines, offset: int, limit: int, subject: str = "content", extra_note: str = "",
                 max_chars: int = 0):
     """按行取一段 + 字符封顶，并生成【与实现一致】的续读提示。返回 dict。
 
@@ -229,10 +229,10 @@ def _page_lines(lines, offset: int, limit: int, subject: str = "内容", extra_n
         else:
             # 第一行本身就把额度占满：按行号续读会拿回同一段，必须明说，
             # 否则模型按 next_offset 重试就是死循环（超长单行的 JSON 正是这种形状）。
-            warning = (f"第 {start + 1} 行单行就有 {len(lines[start])} 字符，超过"
-                       f"{_cap} 上限，无法按行续读。"
-                       f"别反复调本工具，改用 run_code/terminal 对该行做字符切片读取，"
-                       f"或改读已清洗的正文文件。")
+            warning = (f"Line {start + 1} alone has {len(lines[start])} characters, over the"
+                       f"{_cap} limit; line paging cannot continue."
+                       f"Do not call this tool again; use run_code/terminal to slice that line by characters,"
+                       f"or read the cleaned text file instead.")
     elif end < total:
         # 字符没封顶，但窗口没读到文件末尾
         next_offset = end + 1
@@ -240,14 +240,14 @@ def _page_lines(lines, offset: int, limit: int, subject: str = "内容", extra_n
 
     note = ""
     if truncated or warning:
-        note = (f"{subject}共约 {total_chars} 字符 / {total} 行，"
-                f"本段取自第 {start + 1} 行起、封顶 {_cap} 字符。")
+        note = (f"{subject}: about {total_chars} characters / {total} lines;"
+                f"this segment starts at line {start + 1} and is capped at {_cap} characters.")
     if warning:
         note += " " + warning
     elif has_more:
-        note += f"未读完，请用 offset={next_offset} 继续调用本工具。"
+        note += f"Not finished; call this tool again with offset={next_offset}."
     elif not truncated and offset > 1:
-        note += "已读到末尾。"
+        note += "End of file reached."
     if extra_note:
         note = (note + " " + extra_note).strip()
     return {"content": content, "truncated": truncated, "has_more": has_more,
@@ -257,20 +257,20 @@ def _page_lines(lines, offset: int, limit: int, subject: str = "内容", extra_n
 
 async def read_file(path: str = "", file_id: str = "", as_base64: bool = False, offset: int = 1,
                     limit: int = 500, max_chars: int = 0):
-    """读取文件内容。统一入口：
-    - 提供 file_id（上传附件 id）时，按附件读取：文档返回解析全文；图片在图像通道开启时返回【图像内容块】
-      （[{"type":"text"...},{"type":"image_url"...}]），可直接看到像素；通道关闭时只回提示，不回吐 base64 文本
-    - 否则按 path 读取磁盘文件（行号分页）
+    """Read file content. Unified entry:
+    - With file_id (an uploaded attachment), read the attachment: documents return full parsed text; images return [image content blocks] when the image channel is on
+      ([{"type":"text"...},{"type":"image_url"...}]), so you see real pixels; with the channel off only a hint is returned, never base64 text
+    - Otherwise read a disk file by path (line paging)
     Args:
-        path: 相对于 workspace/ 的文件路径
-        file_id: 上传附件的 file_id（优先于 path）
-        as_base64: 当按 file_id 且是文档时，仍尝试返回原始字节 base64（图片默认返回 base64）
-        offset: 起始行号 (1-indexed)。path 与 file_id 两个分支含义相同，均可分页续读
-        limit: 最多返回多少行
-        max_chars: 本次单次返回的字符上限（0 = 用当前生效上限）。子智能体档案可为自己
-                   设更大的上限（如 50000），主智能体默认 20000 —— 互不影响。
-    注意：单次返回【按字符数封顶】，防止长行 JSON/大文档一次撑爆模型上下文。
-    被截断时返回体带 next_offset，按其值续读即可读完整个文件（附件与磁盘文件同样适用）。
+        path: file path relative to workspace/
+        file_id: uploaded attachment id (takes precedence over path)
+        as_base64: for document attachments, still return raw bytes as base64 (images are base64 by default)
+        offset: start line (1-indexed). Same meaning for path and file_id; both support paging
+        limit: maximum number of lines
+        max_chars: per-call character cap (0 = current effective cap). Subagent profiles may set
+                   a larger cap (e.g. 50000); the main agent defaults to 20000, independently.
+    Note: output is capped by characters so long JSON lines or huge documents cannot overflow the context.
+    Truncated responses carry next_offset; continue from it to finish the file (attachments and disk files alike).
     """
     # 附件模式：按 file_id 读上传的文件
     if (file_id or "").strip():
@@ -281,19 +281,19 @@ async def read_file(path: str = "", file_id: str = "", as_base64: bool = False, 
             if _IMG_EMIT == "off":
                 return json.dumps({"ok": True, "source": "attachment", "file_id": fid,
                                    "mode": "image_no_inline",
-                                   "hint": "当前引擎不支持把工具结果内联成图像块。请让用户把图作为当轮附件发送，"\
-                                           "或改用 custom 引擎；不要靠读 base64 文本猜图内容。"}, ensure_ascii=False)
+                                   "hint": "This engine cannot inline tool images. Ask the user to send the image as an attachment in this turn,"\
+                                           "or switch to the custom engine; never infer image content from base64 text."}, ensure_ascii=False)
             if len(data_url) > IMAGE_INLINE_MAX_CHARS:
                 return json.dumps({"ok": True, "source": "attachment", "file_id": fid, "mode": "image_too_large",
-                                   "hint": f"图片 dataURL 过大（{len(data_url)} 字符 > 上限 {IMAGE_INLINE_MAX_CHARS}）；"
-                                           f"请先用 run_code(PIL) 裁 panel / 降质量 / 缩宽度，或切成多张小图分别读取。"},
+                                   "hint": f"Image dataURL is too large ({len(data_url)} characters > limit {IMAGE_INLINE_MAX_CHARS});"
+                                           f"use run_code(PIL) to crop the panel, lower quality or shrink it, or split it into smaller images."},
                                   ensure_ascii=False)
             return _image_payload(data_url, {"ok": True, "source": "attachment", "file_id": fid,
                                              "data_url_chars": len(data_url)})
         text = await get_upload_text(fid)
         if text:
             p = _page_lines(text.splitlines(keepends=True), offset, limit,
-                            subject="附件正文", extra_note="续读时 file_id 保持不变。",
+                            subject="attachment text", extra_note="keep the same file_id when continuing.",
                             max_chars=max_chars)
             return json.dumps({"ok": True, "source": "attachment", "file_id": fid, "mode": "text",
                                "offset": offset, "limit": limit,
@@ -335,13 +335,13 @@ async def read_file(path: str = "", file_id: str = "", as_base64: bool = False, 
                 _txt = (_txt or "").strip()
                 if not _txt:
                     return json.dumps({"ok": False, "file_id": fid,
-                                       "error": f"附件 {fid} 未提取到文本（可能是扫描件；"
-                                                f"图片请用 read_file，扫描 PDF 可试 mineru_parse）"},
+                                       "error": f"No text could be extracted from attachment {fid} (possibly a scan;"
+                                                f"use read_file for images and mineru_parse for scanned PDFs)"},
                                       ensure_ascii=False)
                 p = _page_lines(_txt.splitlines(keepends=True), offset, limit,
-                                subject="原件正文", extra_note="续读时 file_id 保持不变。",
+                                subject="original text", extra_note="keep the same file_id when continuing.",
                                 max_chars=max_chars)
-                _note = "该附件未预先解析（笔记附件），以上为本次即时提取的原文；未写入索引。"
+                _note = "This attachment was not pre-parsed (note attachment); the text above was extracted on the fly and not indexed."
                 if p["note"]:
                     _note += " " + p["note"]
                 return json.dumps({"ok": True, "source": "attachment", "file_id": fid, "mode": "text",
@@ -353,19 +353,19 @@ async def read_file(path: str = "", file_id: str = "", as_base64: bool = False, 
                                    "content": p["content"]}, ensure_ascii=False)
             except Exception as e:
                 return json.dumps({"ok": False, "file_id": fid,
-                                   "error": f"即时提取失败: {type(e).__name__}: {str(e)[:120]}"},
+                                   "error": f"On-the-fly extraction failed: {type(e).__name__}: {str(e)[:120]}"},
                                   ensure_ascii=False)
-        return json.dumps({"ok": False, "error": f"附件 {fid} 无内容"})
+        return json.dumps({"ok": False, "error": f"Attachment {fid} has no content"})
 
     path = (path or "").strip()
     if not path:
-        return json.dumps({"error": "文件路径不能为空"})
+        return json.dumps({"error": "File path cannot be empty"})
 
     try:
         full_path = _resolve_safe_path(path)
 
         if not os.path.isfile(full_path):
-            return json.dumps({"error": f"文件不存在: {path}"})
+            return json.dumps({"error": f"File not found: {path}"})
 
         # ── 图片：按 path 直接转 dataURL（image_read 通道）──────────
         _ext = os.path.splitext(full_path)[1].lower()
@@ -421,12 +421,12 @@ async def write_file(path: str, content: str):
     """写入文件到 workspace 目录
 
     Args:
-        path: 相对于 workspace/ 的文件路径
+        path: file path relative to workspace/
         content: 文件内容（完整覆盖）
     """
     path = path.strip()
     if not path:
-        return json.dumps({"error": "文件路径不能为空"})
+        return json.dumps({"error": "File path cannot be empty"})
 
     norm = path.replace("\\", "/")
     # `outputs/xxx` = 写入**本人的产出区**，并自动登记成正式附件（只记指针、不复制文件）。
@@ -663,11 +663,11 @@ def register_output(rel_path: str, owner: str = "", name: str = "") -> str:
     owner = owner or _CURRENT_USER
     rel_path = (rel_path or "").strip().replace("\\", "/")
     if os.path.isabs(rel_path) or ".." in rel_path.split("/"):
-        return json.dumps({"error": f"产出路径非法: {rel_path}"}, ensure_ascii=False)
+        return json.dumps({"error": f"Invalid output path: {rel_path}"}, ensure_ascii=False)
     udir = _user_dir(owner)
     full = os.path.abspath(os.path.join(udir, rel_path))
     if not _within(udir, full) or not os.path.isfile(full):
-        return json.dumps({"error": f"产出文件不存在或越界: {rel_path}"}, ensure_ascii=False)
+        return json.dumps({"error": f"Output file missing or out of range: {rel_path}"}, ensure_ascii=False)
 
     existed = _find_output_file_id(rel_path, owner)
     if existed:
@@ -788,7 +788,7 @@ async def upload_file(filename: str, content_bytes: bytes, owner: str = "",
                 doc = docx.Document(io.BytesIO(content_bytes))
                 text_content = "\n".join(p.text for p in doc.paragraphs)
             except Exception as e:
-                text_content = f"[Word 文档解析失败: {str(e)}]"
+                text_content = f"[Word document parsing failed: {str(e)}]"
         elif ext == ".pptx":
             try:
                 import io
@@ -801,7 +801,7 @@ async def upload_file(filename: str, content_bytes: bytes, owner: str = "",
                             texts.append(shape.text)
                 text_content = "\n".join(texts)
             except Exception as e:
-                text_content = f"[PPT 解析失败: {str(e)}]"
+                text_content = f"[PPT parsing failed: {str(e)}]"
         elif ext == ".odt":
             try:
                 import zipfile, io
@@ -812,7 +812,7 @@ async def upload_file(filename: str, content_bytes: bytes, owner: str = "",
                     paras = tree.findall(".//text:p", ns)
                     text_content = "\n".join("".join(p.itertext()) for p in paras)
             except Exception as e:
-                text_content = f"[ODT 解析失败: {str(e)}]"
+                text_content = f"[ODT parsing failed: {str(e)}]"
         elif ext == ".svg":
             text_content = content_bytes.decode("utf-8", errors="replace")
         elif ext == ".xlsx":
@@ -826,7 +826,7 @@ async def upload_file(filename: str, content_bytes: bytes, owner: str = "",
                 text_content = "\n".join(rows)
                 wb.close()
             except Exception as e:
-                text_content = f"[Excel 解析失败: {str(e)}]"
+                text_content = f"[Excel parsing failed: {str(e)}]"
         elif ext == ".xls":
             # 旧版 Excel(.xls) 用 xlrd 解析（openpyxl 不支持 .xls）
             try:
@@ -838,12 +838,12 @@ async def upload_file(filename: str, content_bytes: bytes, owner: str = "",
                         rows.append("\t".join(str(ws.cell_value(r, c)) for c in range(ws.ncols)))
                 text_content = "\n".join(rows) if rows else ""
             except Exception as e:
-                text_content = f"[Excel(.xls) 解析失败: {str(e)}；建议将文件另存为 .xlsx 后重传]"
+                text_content = f"[Excel (.xls) parsing failed: {str(e)}; save the file as .xlsx and upload again]"
         elif ext == ".doc":
             # 旧版 Word(.doc) 无成熟解析库；给出清晰指引
-            text_content = "[Word(.doc) 旧格式暂不支持后端解析；建议将文件另存为 .docx 后重传]"
+            text_content = "[Legacy .doc is not parsed on the backend; save the file as .docx and upload again]"
         elif ext in (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff"):
-            text_content = f"[图片文件: {filename}]"
+            text_content = f"[Image file: {filename}]"
         elif ext == ".svg":
             text_content = content_bytes.decode("utf-8", errors="replace")
         else:
@@ -851,9 +851,9 @@ async def upload_file(filename: str, content_bytes: bytes, owner: str = "",
             try:
                 text_content = content_bytes.decode("utf-8", errors="replace")
             except:
-                text_content = f"[二进制文件，无法提取文本: {filename}]"
+                text_content = f"[Binary file; no text can be extracted: {filename}]"
     except Exception as e:
-        text_content = f"[文本提取失败: {str(e)}]"
+        text_content = f"[Text extraction failed: {str(e)}]"
 
     # 保存提取文本
     with open(os.path.join(file_dir, "text.txt"), "w", encoding="utf-8") as f:
@@ -908,7 +908,7 @@ async def delete_upload(file_id: str) -> str:
             except Exception:
                 pass
         return json.dumps({"status": "ok", "file_id": file_id})
-    return json.dumps({"error": f"文件 {file_id} 不存在"})
+    return json.dumps({"error": f"File {file_id} not found"})
 
 
 # 无 text.txt 时可回退「直读原文件本体」的文本类扩展名。
@@ -1125,7 +1125,7 @@ async def add_note(title: str, content: str, branch_id: str = "", owner: str = "
     notes = _read_notes(owner)
     note = {
         "id": "note-" + str(int(__import__("time").time() * 1000)),
-        "title": title or "新笔记",
+        "title": title or "New note",
         "content": content or "",
         "branch_id": branch_id,
         "owner": owner,
@@ -1156,7 +1156,7 @@ async def update_note(note_id: str, title: str = None, content: str = None,
     """更新条目。kind 传入时一并更新（迁移/改分类用）；folder_id 传入时改归属分组。"""
     n, okey = _find_note(owner, note_id)
     if n is None:
-        return json.dumps({"error": "笔记不存在"})
+        return json.dumps({"error": "Note not found"})
     notes = _read_notes(okey)
     for x in notes:
         if x.get("id") == note_id:
@@ -1171,13 +1171,13 @@ async def update_note(note_id: str, title: str = None, content: str = None,
             x["updatedAt"] = str(datetime.now())
             _write_notes(okey, notes)
             return json.dumps({"status": "ok"}, ensure_ascii=False)
-    return json.dumps({"error": "笔记不存在"})
+    return json.dumps({"error": "Note not found"})
 
 
 async def delete_note(note_id: str, owner: str = "guest") -> str:
     n, okey = _find_note(owner, note_id)
     if n is None:
-        return json.dumps({"error": "笔记不存在"})
+        return json.dumps({"error": "Note not found"})
     notes = [x for x in _read_notes(okey) if x.get("id") != note_id]
     _write_notes(okey, notes)
     return json.dumps({"status": "ok"}, ensure_ascii=False)
@@ -1187,11 +1187,11 @@ async def move_note(note_id: str, direction: int, owner: str = "guest") -> str:
     """在所属对话(branch)内移动笔记顺序。direction<0 上移, >0 下移。"""
     n, okey = _find_note(owner, note_id)
     if n is None:
-        return json.dumps({"error": "笔记不存在"})
+        return json.dumps({"error": "Note not found"})
     notes = _read_notes(okey)
     idx = next((i for i, x in enumerate(notes) if x.get("id") == note_id), -1)
     if idx == -1:
-        return json.dumps({"error": "笔记不存在"})
+        return json.dumps({"error": "Note not found"})
     branch_id = notes[idx].get("branch_id", "")
     rng = range(idx - 1, -1, -1) if direction < 0 else range(idx + 1, len(notes))
     for j in rng:
@@ -1199,7 +1199,7 @@ async def move_note(note_id: str, direction: int, owner: str = "guest") -> str:
             notes[idx], notes[j] = notes[j], notes[idx]
             _write_notes(okey, notes)
             return json.dumps({"status": "ok"}, ensure_ascii=False)
-    msg = "已经是第一条" if direction < 0 else "已经是最后一条"
+    msg = "Already the first item" if direction < 0 else "Already the last item"
     return json.dumps({"status": "ok", "message": msg}, ensure_ascii=False)
 
 

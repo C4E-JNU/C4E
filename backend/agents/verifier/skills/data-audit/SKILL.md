@@ -36,7 +36,7 @@ version: 1.0.0
 末尾按统一约定附状态行：
 
 ```
-【STATUS】ok|partial|failed 【MISSING】缺什么（无则 none） 【CONFIDENCE】0~1
+[STATUS]ok|partial|failed [MISSING]缺什么（无则 none） [CONFIDENCE]0~1
 ```
 
 ## 常见坑

@@ -1,0 +1,24 @@
+{
+  "title": "Fenton Graph Export & Sync Agent",
+  "description": "Multi-agent Fenton mining, step 10 (SOP V6, 2026-10-30): validates and, when asked, executes the graph/tables/vector deliverables. Read-first scope: (a) verify per-corpus graph_export/ (nodes_*.json + edges.json + manifest.json, node counts consistent with manifest, every Contradiction has REPORTED_IN/DISPUTES target, zero orphans); (b) verify tables.xlsx sheets (paper/catalyst/experiment/variable/curve/contradiction) row counts match manifest and column templates; (c) verify Neo4j sync state via graph_query (labels, relationship counts, vector indexes vec_catalyst/vec_category/vec_pollutant/vec_experiment/vec_contradiction, nodes with embedding vs with search_text). Execution commands (run_scripts/terminal by the MAIN agent, not this profile): step10_graph_export.py for JSON+tables, neo4j_stack/step10_graph_sync.py [--wipe] [--embed] for Neo4j load + bge-small-zh-v1.5 vectorization. This profile audits and reports; it never writes.",
+  "skills": [],
+  "tools": [
+    "read_file",
+    "list_files",
+    "find_files",
+    "search_files",
+    "graph_query"
+  ],
+  "model": {
+    "model": "deepseek-flash",
+    "base_url": "https://api.deepseek.com/v1"
+  },
+  "params": {
+    "max_rounds": 20,
+    "timeout": 1800,
+    "read_file_max_chars": 60000,
+    "tool_result_max_chars": 60000,
+    "tool_result_preview_chars": 3000,
+    "user_context_max_chars": 8000
+  }
+}

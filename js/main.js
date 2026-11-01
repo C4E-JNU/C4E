@@ -1,12 +1,12 @@
         init();
 
-        // 注：依赖个人设置的初始化（loadAgentConfigFromLocal / initAgentConfigPanel /
-        // updateNeo4jStatusUI）已移入 api.js 的 initAfterSettings() ——
-        // 那些设置现在要先由 hydrateUserSettings() 从后端灌回本地缓存才有值，
-        // 放在这里会在 hydrate 完成前执行、读到空值。
-        // 桌宠小e 的初始化在 js/xiaoe.js 内部自行完成（它在本文件之后加载）
+        // Note: initialization that depends on personal settings (loadAgentConfigFromLocal / initAgentConfigPanel /
+        // updateNeo4jStatusUI) moved to initAfterSettings() in api.js - those settings must first be
+        // hydrated from the backend into the local cache, otherwise they read empty here.
+        // Desktop pet "xiaoe" initializes itself inside js/xiaoe.js (loaded after this file)
+// The desktop pet initializes itself in js/xiaoe.js (loaded after this file)
 
-        // 暴露函数给全局作用域
+        // Expose helpers to the global scope
         window.editMessage = editMessage;
         window.saveMessageEdit = saveMessageEdit;
         window.cancelMessageEdit = cancelMessageEdit;
@@ -22,7 +22,7 @@
         window.deleteBranchWithConfirm = deleteBranchWithConfirm;
         window.exportConversation = exportConversation;
 
-        // 新增：表格与Mermaid工具函数
+        // Table and Mermaid helpers
         window.setGlobalTheme = setGlobalTheme;
         window.switchTableStyle = switchTableStyle;
         window.copyTableToClipboard = copyTableToClipboard;
@@ -32,7 +32,7 @@
         window.copyMermaidCode = copyMermaidCode;
         window.copyMermaidImageAsPng = copyMermaidImageAsPng;
 
-        // 推理链展开/收起功能
+        // Reasoning chain expand/collapse
         function toggleReasoningChain(messageId) {
             const reasoningEl = document.querySelector(`[data-id="${messageId}"] .reasoning-chain`);
             if (reasoningEl) {
@@ -41,7 +41,7 @@
         }
         window.toggleReasoningChain = toggleReasoningChain;
 
-        // 笔记功能
+        // Notes
         window.toggleNotesPanel = toggleNotesPanel;
         window.addNoteCard = addNoteCard;
         window.deleteNoteCard = deleteNoteCard;
@@ -56,7 +56,7 @@
         window.syncNotesPanel = syncNotesPanel;
         window.toggleSidebarHeader = toggleSidebarHeader;
 
-        // 添加CSS动画
+        // CSS animations
         const style = document.createElement('style');
         style.textContent = `
             @keyframes highlight {

@@ -18,10 +18,10 @@ var imageTools = (function () {
         fetch('/api/file/upload', { method: 'POST', body: fd })
             .then(function (r) { return r.json(); })
             .then(function (res) {
-                if (!res || !res.file_id) { console.error('图片上传失败'); return; }
+                                if (!res || !res.file_id) { console.error('Image upload failed'); return; }
                 if (cb) cb('/api/file/' + res.file_id);
             })
-            .catch(function (e) { console.error('图片上传失败', e); });
+                        .catch(function (e) { console.error('Image upload failed', e); });
     }
 
     // ── 任意文件上传（笔记附件用）：保留原名与原类型，不强制 .png ──
@@ -31,13 +31,13 @@ var imageTools = (function () {
         fetch('/api/file/upload', { method: 'POST', body: fd })
             .then(function (r) { return r.json(); })
             .then(function (res) {
-                if (!res || !res.file_id) { console.error('文件上传失败', res); if (cb) cb(''); return; }
+                                if (!res || !res.file_id) { console.error('File upload failed', res); if (cb) cb(''); return; }
                 if (cb) cb('/api/file/' + res.file_id);
             })
-            .catch(function (e) { console.error('文件上传失败', e); if (cb) cb(''); });
+                        .catch(function (e) { console.error('File upload failed', e); if (cb) cb(''); });
     }
     function fetchBlob(url, cb) {
-        fetch(url).then(function (r) { return r.blob(); }).then(cb).catch(function (e) { console.error('加载图片失败', e); });
+                fetch(url).then(function (r) { return r.blob(); }).then(cb).catch(function (e) { console.error('Failed to load image', e); });
     }
     function chooseFile(cb) {
         var inp = document.createElement('input');

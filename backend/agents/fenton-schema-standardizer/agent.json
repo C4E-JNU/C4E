@@ -1,0 +1,30 @@
+{
+  "title": "Fenton Schema Standardizer",
+  "description": "Dedicated profile for 06_schema standardisation: it reads the authoritative SOP (D:\\fenton_papers\\_sop_06schema_标准与格式标准化_2026-10-23.md) and standardises whatever schema the main agent hands over - field names, nesting, value/unit/raw triples, unit whitelist, empty-value placeholders, ordering - then writes the standardised file plus a change log. Has read tools + write_file, with 5,000,000-character (about 5M token) per-call input/output caps for both reading and writing.",
+  "skills": [],
+  "tools": [
+    "read_file",
+    "list_files",
+    "find_files",
+    "search_files",
+    "write_file"
+  ],
+  "allow_write": true,
+  "write_tools": [
+    "write_file"
+  ],
+  "model": {
+    "model": "deepseek-flash",
+    "base_url": "https://api.deepseek.com/v1",
+    "temperature": 0.1
+  },
+  "params": {
+    "max_rounds": 60,
+    "timeout": 3600,
+    "abort": 3600,
+    "read_file_max_chars": 5000000,
+    "tool_result_max_chars": 5000000,
+    "tool_result_preview_chars": 8000,
+    "user_context_max_chars": 200000
+  }
+}

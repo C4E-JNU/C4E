@@ -1,169 +1,169 @@
 ---
 name: literature-contradiction
-description: "当要对单篇已归档文献做内部矛盾审计时用。先把己方错误/口径差异/一致归入 Q1–Q4（互证成绩单），再对真矛盾判 A–E 严重度（E=其他·无法归类）；图账先做像素读数（image_read，已打通）再与图注/正文三方交叉，图账表账用 delegate_task(role=contradiction) 并行，段落账主控做。"
+description: "Use when auditing the internal consistency of a single archived paper. First classify our own errors / caliber differences / agreement as Q1–Q4 (the verification scorecard), then grade genuine contradictions A–E (E = other · unclassifiable). Read figure values from pixels first (image_read, both engines wired), then cross them three ways against the caption and the text; figure and table ledgers run in parallel via delegate_task(role=contradiction), and the paragraph ledger is done by the orchestrator."
 version: 1.5.0
-tags: [文献, 矛盾核查, 图账, 表账, 段落账, 像素读数]
+tags: [literature, contradiction-audit, figure-ledger, table-ledger, paragraph-ledger, pixel-reading]
 ---
 
-# 单篇文献对账（图账 · 表账 · 段落账 → 矛盾台账表）
+# Single-Paper Reconciliation (figure ledger · table ledger · paragraph ledger → contradiction table)
 
-对**一篇**已归档文献做内部一致性审计：图和正文对账、表和正文对账、段落之间对账，找出真矛盾并裁决，输出表格结果。
+Audit the internal consistency of **one** archived paper: figures against text, tables against text, and paragraphs against each other; find genuine contradictions, adjudicate them, and output a table.
 
-## 🔑 两条轴（唯一口径，勿混）
+## 🔑 Two axes (single source of truth; never mix them)
 
-| | **轴二 · 互证发现项 Q** | **轴一 · 真矛盾严重程度** |
+| | **Axis 2 · verification finding Q** | **Axis 1 · severity of a genuine contradiction** |
 |---|---|---|
-| 回答 | 互证这一步查出我方多少错、值多少 | 文献自身这个矛盾有多严重 |
-| 取值 | **Q1 / Q2 / Q3 / Q4** | **A / B / C / D / E**（E = 其他·无法归类；判不了 → E） |
-| 谁给 | 本技能全程 | 本技能（篇内可判） |
-| 去向 | **不进矛盾台账**（Q3/Q4 连判决也不进） | 进矛盾台账 `severity` |
+| Answers | How many of our own errors verification found, and of what value | How serious the paper's own contradiction is |
+| Values | **Q1 / Q2 / Q3 / Q4** | **A / B / C / D / E** (E = other · unclassifiable; ungradable → E) |
+| Assigned by | This skill throughout | This skill (decidable intra-paper) |
+| Destination | **Never into the contradiction ledger** (Q3/Q4 not even into the verdict) | The ledger's `severity` |
 
-- 载体来源（图文/表文/文文/表表）**不是分类**，降级为字段 `evidence_source`（`text-vs-figure` / `text-vs-table` / `text-vs-text`），只用于回溯定位。
-- `cross_paper`（跨文献互斥）是布尔标记：**本技能为单篇篇内模式，不下此标记**（篇内判不出，需批次/全库视野）。
-- **`E` 是合法级别**（其他·无法归类，兼「判不了」兜底）；**作为类别前缀的旧 E（E1/E2/E3/E5）已废弃**，`unknown` 亦不再使用。
-- 方法论：**先归 Q，再判 A–E**，只报文献真问题，**宁缺毋滥**。
+- The evidence carrier (figure-text / table-text / text-text / table-table) **is not a classification**; it is downgraded to the field `evidence_source` (`text-vs-figure` / `text-vs-table` / `text-vs-text`), used only for traceability.
+- `cross_paper` (cross-paper exclusion) is a boolean flag: **this skill runs in single-paper mode and never sets it** (it cannot be decided intra-paper and needs corpus-wide visibility).
+- **`E` is a legal level** (other · unclassifiable, also the "cannot grade" fallback); **the old E as a class prefix (E1/E2/E3/E5) is deprecated**, and `unknown` is no longer used.
+- Method: **classify Q first, then grade A–E**; report only genuine problems in the paper, and **prefer omission to over-reporting**.
 
-## 🔒 读文件白名单（铁律）
+## 🔒 File-reading whitelist (iron rule)
 
-只读：`00_full_cleaned.md`（分页，按返回的 `next_offset` 续读）、`00_images_map.json`、`images/FigureN/FigureN.txt`、`images/TableN/TableN.txt`、`images/` 下的图片文件（**必须**走"像素读数"通道，见下节）。
-**❌ 禁读**：`layout.json`、`*_model.json`、`*_content_list*.json`（巨型转储）。
+Read only: `00_full_cleaned.md` (paged; continue with the returned `next_offset`), `00_images_map.json`, `images/FigureN/FigureN.txt`, `images/TableN/TableN.txt`, and the image files under `images/` (**must** go through the "pixel reading" channel below).
+**❌ Never read**: `layout.json`, `*_model.json`, `*_content_list*.json` (huge dumps).
 
-## 🖼 像素读数（image_read 通道）—— 图账的第三源
+## 🖼 Pixel reading (image_read channel) — the third source of the figure ledger
 
-**为什么必须做**：饼图扇区、柱高、散点、谱峰这些分量**只存在于像素里**，图注与正文都没有。只做"图注 ↔ 正文"对账 = 图账做了一半。
+**Why it is mandatory**: pie sectors, bar heights, scatter points and spectral peaks **exist only in pixels**; neither the caption nor the text carries them. Reconciling "caption ↔ text" alone means the figure ledger is only half done.
 
-**通道现状（两个引擎都已打通，勿再凭想象）**：`read_file(path="x.jpg")` / `read_file(file_id=...)` 直接返回**结构化图像块** `[{"type":"text",...},{"type":"image_url",...}]`。
-- **langchain 引擎**：走框架原生路径（`_format_output` → `ToolMessage.content` 内容块 → wire 上 `role=tool` 带 `image_url`），零 middleware。
-- **custom 引擎**：循环把图提升成独立的 `user` 图像块，工具消息只留文字桩。
-两种引擎主控都能直接"看到"像素。详见 `references/image_read_channel.md`。
+**Channel status (both engines are wired; do not speculate)**: `read_file(path="x.jpg")` / `read_file(file_id=...)` return a **structured image block** `[{"type":"text",...},{"type":"image_url",...}]`.
+- **langchain engine**: uses the framework's native path (`_format_output` → `ToolMessage.content` blocks → `role=tool` with `image_url` on the wire), zero middleware.
+- **custom engine**: the loop promotes the image into a separate `user` image block, leaving only a text stub in the tool message.
+Both engines let the orchestrator "see" pixels directly. See `references/image_read_channel.md`.
 
-**两条铁律**
-1. **像素读数只能由主控做**：子智能体无图像通道（工具结果纯文本 + 4000 字符截断）。主控读完后转录成"像素读数表"（纯文本）塞进摘录包，再派子智能体。
-2. **读不到就写"需图核"，绝不虚构数值**（历史事故：未读原文编出 0.88 → 假矛盾）。凡"值"来自图画而非文字的，台账里必须标 `source: image_read`。
+**Two iron rules**
+1. **Only the orchestrator may read pixels**: subagents have no image channel (tool results are plain text truncated at 4,000 characters). The orchestrator reads, transcribes into a plain-text "pixel reading table", inserts it into the excerpt pack, and only then dispatches the subagent.
+2. **If it cannot be read, write "needs figure check" — never invent a number** (historical incident: an unread source produced 0.88 → a false contradiction). Any "value" that comes from a figure rather than text must be marked `source: image_read` in the ledger.
 
-**前置闸门（三步，缺一即降级）**
-1. **通道闸门**：两个引擎默认开（`set_image_emit("blocks")`）。若返回 `mode=image_no_inline`，说明被显式关了（langchain 可设环境变量 `C4EAI_LC_IMAGE_MODE=off` 关闭）→ 改回默认重启，或让用户把图作为当轮附件发送。
-2. **尺寸闸门**：单张 dataURL ≤ `IMAGE_INLINE_MAX_CHARS`（**1600000 字符**，可用环境变量 `C4EAI_IMAGE_INLINE_MAX_CHARS` 覆盖）；超限返回 `mode=image_too_large`。超限时用 `run_code`+PIL **裁 panel / 缩尺寸 / 切两半分别登记**。
-   ⚠️ **别靠降 JPEG 质量来"省 token"**：视觉 token 只与像素数成正比（约 1 token / 1024 px），降质量白丢信息、token 不减。
-3. **登记闸门**：要按 `file_id` 读，图必须落在**产出区**（`users/<u>/outputs/`）→ `list_outputs()` 自动补登记拿 `file_id`。
+**Preconditions (three gates; failing any one degrades the run)**
+1. **Channel gate**: both engines enable it by default (`set_image_emit("blocks")`). A return of `mode=image_no_inline` means it was explicitly disabled (the langchain engine honours `C4EAI_LC_IMAGE_MODE=off`) → restore the default and restart, or ask the user to send the image as an attachment for that turn.
+2. **Size gate**: a single dataURL must be ≤ `IMAGE_INLINE_MAX_CHARS` (**1,600,000 characters**, overridable with `C4EAI_IMAGE_INLINE_MAX_CHARS`); beyond that it returns `mode=image_too_large`. When over the limit, use `run_code` + PIL to **crop the panel / downscale / split in two and register each half**.
+   ⚠️ **Never lower JPEG quality to "save tokens"**: visual tokens scale only with pixel count (about 1 token per 1,024 px), so lowering quality loses information for free and saves nothing.
+3. **Registration gate**: to read by `file_id` the image must live in the **output area** (`users/<u>/outputs/`) → `list_outputs()` registers it automatically and returns the `file_id`.
 
-**操作序列（主控自己跑）**
+**Operation sequence (run by the orchestrator itself)**
 ```python
-from PIL import Image      # run_code 的工作目录即产出区，直接写文件名
-im = Image.open(r"<归档>/images/Figure6/<hash>.jpg")
+from PIL import Image      # run_code's working directory is the output area; write the filename directly
+im = Image.open(r"<archive>/images/Figure6/<hash>.jpg")
 im.crop((0, 0, im.width, im.height//2)).convert("L").save("fig6_top.png", optimize=True)
 ```
-→ `list_outputs()` 取 file_id → `read_file(file_id=..., as_base64=True)` → 逐 panel 转录成**像素读数表** `{panel, 轴/量程, 图例序列, 读数, 单位, 不确定度}`；**不确定度按轴最小刻度半格估**，估不出就留空 —— **没不确定度的读数值不得进台账**。
+→ `list_outputs()` to obtain the file_id → `read_file(file_id=..., as_base64=True)` → transcribe panel by panel into a **pixel reading table** `{panel, axis/range, legend series, reading, unit, uncertainty}`; **estimate uncertainty as half the smallest axis tick**, and leave it blank when it cannot be estimated — **a reading without an uncertainty may not enter the ledger**.
 
-## 裁决体系（全程适用）
+## Adjudication system (applies throughout)
 
-### 第一步 · 归 Q —— 这些**不进矛盾台账**
+### Step 1 · Classify Q — these **never enter the contradiction ledger**
 
-| 代码 | 含义 | 处置 |
+| Code | Meaning | Handling |
 |---|---|---|
-| **Q1** | 我方**读图错**：裁图/图注编号错位、图被读错值 | 修正读数，记 Q1 |
-| **Q2** | 我方**读文/读表错**：正文/表格转录错、条件对错；**以及 OCR 伪影**（清洗稿与 `TableN.txt`/`FigureN.txt` 原文不一致 → 以原文为准） | 修正，记 Q2 |
-| **Q3** | **口径差**：单位/基准/换算不同（矿化率 vs 去除率、干重 vs 湿重），双方都没错 | 两值并存 + 标 `caliber_variance=true`，**不算矛盾** |
-| **Q4** | **一致**：相对差 <1%（舍入/修约）、差 <5% 量程（估读内取正文值）、图像估读误差（≤ 该轴 1 格 ×2） | 只记覆盖率 |
+| **Q1** | Our **figure-reading error**: crop/caption numbering misalignment, wrong value read from a figure | Correct the reading, record Q1 |
+| **Q2** | Our **text/table-reading error**: transcription error, condition mismatch; **and OCR artifacts** (the cleaned text disagrees with the original `TableN.txt`/`FigureN.txt` → the original wins) | Correct, record Q2 |
+| **Q3** | **Caliber difference**: different unit/basis/conversion (mineralization vs. removal, dry vs. wet weight); neither side is wrong | Keep both values + set `caliber_variance=true`, **not a contradiction** |
+| **Q4** | **Consistent**: relative difference <1% (rounding), difference <5% of the range (take the text value within reading error), or image estimation error (≤ 1 axis tick × 2) | Counts toward coverage only |
 
-Q1/Q2 是**我们自己的错**（互证的价值就在此），Q3 是解释，Q4 是覆盖率 —— 三者都不进矛盾台账。
-**「图像估读误差」不单列代码**，归 Q4；若因我方裁图/编号错而读错值 → 才是 Q1。
+Q1/Q2 are **our own errors** (this is exactly where verification earns its keep), Q3 is an explanation, Q4 is coverage — none of the three enters the contradiction ledger.
+**"Image estimation error" gets no separate code**: it belongs to Q4; only a wrong value caused by our own crop/numbering error is Q1.
 
-### 第二步 · 判严重程度 A–E（唯一分类，写 `severity`）
+### Step 2 · Grade severity A–E (the only classification, written to `severity`)
 
-**判级前置（三条全满足才判级）**：① 已排除 Q1/Q2（非我方提取错）；② 已排除 OCR 伪影；③ 差 ≥ 5% 量程（或 ≥5% 相对值，取大者）—— **5% 内不是矛盾**。
+**Grading prerequisites (all three must hold)**: (1) Q1/Q2 excluded (not our extraction error); (2) OCR artifacts excluded; (3) difference ≥5% of the range (or ≥5% relative, whichever is larger) — **anything within 5% is not a contradiction**.
 
-| 级别 | 名称 | 判据 | 典型 |
+| Level | Name | Criterion | Typical |
 |---|---|---|---|
-| **A** | 数值偏差 | 同量级、方向一致，仅超容差 | 正文 92% vs 图 88% |
-| **B** | 归属/条件错位 | 值本身对，但挂错样本，或温度/pH/剂量/时间/投加量错置 | 90 min 的 95% 被写成 120 min 的值 |
-| **C** | 命名/编号/计数错 | 材料名、图号、实验编号、计数不一致 | 正文称 Fig.7a，图注写 Fig.7b；「四组」实为三组 |
-| **D** | 结论被自身数据否定 | 定性结论与自家数据反向或无支撑 | 称「显著提升」，数据无差异 |
-| **E** | 其他（无法归类） | 有对立值却**不属 A–D 任何一类**，或**证据不足以定级** | 正文仅定性而图有数值趋势；判级前置未凑齐 |
+| **A** | Numerical deviation | Same order of magnitude and direction, only beyond tolerance | Text 92% vs. figure 88% |
+| **B** | Attribution / condition mismatch | The value is right but attached to the wrong sample, or temperature/pH/dose/time/dosage is misplaced | The 95% at 90 min is written as the 120 min value |
+| **C** | Naming / numbering / counting error | Material name, figure number, experiment number or count inconsistent | Text says Fig.7a while the caption says Fig.7b; "four groups" are really three |
+| **D** | Conclusion refuted by its own data | A qualitative conclusion runs opposite to, or is unsupported by, the paper's own data | Claims "significant enhancement" while the data show no difference |
+| **E** | Other (unclassifiable) | Has opposing values but **fits none of A–D**, or **evidence is insufficient to grade** | Text is qualitative while the figure shows a numerical trend; prerequisites incomplete |
 
-- **只用 A/B/C/D/E 五值**。篇内两个不同来源互斥（图 A vs 图 B、图 vs 表、像素 vs 图注/正文）时，按最贴合的一条判 A–D，**不属 A–D 的判 E**；跨文献互斥需批次视野 → 本技能不判，如实说明。
-- **判不了 / 不属 A–D** → `severity="E"` + `needs_human_review=true`，**不硬判、不留空、不写 `unknown`**。
-- **真矛盾只收两类**：① 同一量两个值（同一对象同一指标，不同位置给出不同值）；② 结论被自身数据否定。
+- **Use only the five values A/B/C/D/E.** When two different sources inside the paper conflict (figure A vs. figure B, figure vs. table, pixel vs. caption/text), grade A–D by the closest fitting criterion; **anything outside A–D is E**. Cross-paper exclusion needs corpus-wide visibility → this skill does not judge it and says so honestly.
+- **Cannot grade / outside A–D** → `severity="E"` + `needs_human_review=true`; **never force a grade, never leave it empty, never write `unknown`**.
+- **Only two classes count as genuine contradictions**: (1) the same quantity with two values (same object, same indicator, different values in different places); (2) a conclusion refuted by its own data.
 
-**不报**：模糊表述（about/nearly）、术语漂移、缩写不一致、参考文献编号。
-**特例**：正文自相矛盾时**不自动"正文优先"** —— 取多源佐证方，两个出处都引全。
+**Not reported**: vague wording (about/nearly), terminology drift, inconsistent abbreviations, reference numbering.
+**Special case**: when the text contradicts itself, **do not default to "text wins"** — take the side with more corroboration and quote both sources in full.
 
-## 流程（五阶段）
+## Flow (five stages)
 
-### 阶段 0 · 主控结构扫描（派发的前提）
-1. `read_file` 读 `00_images_map.json` → 得到全部逻辑图（folder/token/caption_en/panels）。
-2. 分页读 `00_full_cleaned.md` 一遍，边读边产出两样东西：
-   - **图/表 → 正文摘录包**：每张数据图、每个表格，把它在正文中被引用/描述的段落原句摘出来（含章节位置），≤6000 字/单元；
-   - **段落断言表**：抽取数据断言 {实体, 指标, 数值, 条件, 位置}（同一量出现多处的，全部记下）。
-3. **图分类（领域无关判据）**：
-   - **进图账（含可读数内容）**：图注/正文出现 坐标、单位、数值、曲线、峰位、条形/占比/热图/谱图/显微测量 等**可读取的数据**；
-   - **跳过（无数据内容）**：机理示意、流程框图、装置示意、路线图、纯照片等无可读数内容的图；
-   - **拿不准 → 跳过**，列入末尾"未核图"清单。
-4. **像素读数**：对每张进图账的图按上节读数，逐 panel 转录，并顺手核对**图注所引数值是否与像素一致**（此处常出 B 级：子图字母与条件对调）。读不到 → 该 panel 记 `需图核`。
+### Stage 0 · Orchestrator structural scan (the prerequisite for dispatch)
+1. `read_file` on `00_images_map.json` → obtain all logical figures (folder/token/caption_en/panels).
+2. Read `00_full_cleaned.md` once, page by page, producing two things as you go:
+   - **figure/table → text excerpt pack**: for every data figure and every table, extract the exact sentences where the text cites or describes it (with section location), ≤6,000 characters per unit;
+   - **paragraph assertion table**: extract data assertions {entity, indicator, value, condition, location} (record every occurrence of the same quantity).
+3. **Figure classification (domain-independent criteria)**:
+   - **Enters the figure ledger (has readable content)**: the caption/text shows coordinates, units, numbers, curves, peak positions, bars/proportions/heat maps/spectra/microscopy measurements, i.e. **readable data**;
+   - **Skipped (no data content)**: mechanism schematics, flow block diagrams, setup schematics, route maps, pure photographs and other figures with nothing to read;
+   - **When unsure → skip**, and list it in the "unchecked figures" list at the end.
+4. **Pixel reading**: for every figure entering the ledger, read it as described above, transcribe panel by panel, and incidentally check **whether the numbers cited in the caption agree with the pixels** (this is where B-level issues usually appear: subfigure letters swapped with conditions). If unreadable → mark that panel "needs figure check".
 
-### 阶段 1 · 图账（并行子智能体）
-对每张**数据图**一个子任务，分批派发（每批 ≤"最多子任务"数）：
+### Stage 1 · Figure ledger (parallel subagents)
+One subtask per **data figure**, dispatched in groups (at most the maximum subtask count per round):
 ```
 delegate_task(tasks=[
  {"role":"contradiction","tools":["read_file"],
-  "goal":"图账：核对 Figure2 与正文的一致性。三方交叉：①图注/正文数值·趋势 vs 图像像素读数（摘录包中 source:image_read 的条目）②子图字母(a/b/c…)与正文条件的绑定是否对调（B 级）③结论方向 vs 图所呈数据。先归 Q（Q1 读图错/Q2 读文错/Q3 口径差/Q4 一致），再对真矛盾判 severity A|B|C|D|E（判不了/不属 A–D 填 E）。只输出 JSON 数组：[{\"kind\":\"contradiction|q\",\"q\":\"Q1|Q2|Q3|Q4|\",\"severity\":\"A|B|C|D|E|\",\"evidence_source\":\"text-vs-figure\",\"figure\":\"Figure2\",\"field\":\"...\",\"text_quote\":\"...\",\"figure_quote\":\"...\",\"value_a\":\"...\",\"value_b\":\"...\",\"adopted_value\":\"...\",\"source\":\"image_read|text\",\"confidence\":\"高|中|低\"}]，无发现输出[]。禁止复述正文。",
-  "context":"<该图完整图注 + 正文相关段落摘录 + 该图像素读数表（含不确定度）+ 阈值与 Q1–Q4 归类规则一句话摘要>"},
- ... ≤4 个/批
+  "goal":"Figure ledger: reconcile Figure2 against the text. Three-way cross-check: (1) caption/text numbers and trends vs. the pixel reading (entries with source:image_read in the excerpt pack); (2) whether subfigure letters (a/b/c…) are swapped with the text conditions (B level); (3) conclusion direction vs. the data shown. Classify Q first (Q1 figure misread / Q2 text misread / Q3 caliber difference / Q4 consistent), then grade genuine contradictions severity A|B|C|D|E (E when ungradable or outside A–D). Output a JSON array only: [{\"kind\":\"contradiction|q\",\"q\":\"Q1|Q2|Q3|Q4|\",\"severity\":\"A|B|C|D|E|\",\"evidence_source\":\"text-vs-figure\",\"figure\":\"Figure2\",\"field\":\"...\",\"text_quote\":\"...\",\"figure_quote\":\"...\",\"value_a\":\"...\",\"value_b\":\"...\",\"adopted_value\":\"...\",\"source\":\"image_read|text\",\"confidence\":\"high|medium|low\"}], output [] when nothing is found. Never restate the text.",
+  "context":"<full caption of this figure + relevant text excerpts + this figure's pixel reading table (with uncertainties) + a one-line summary of the thresholds and the Q1–Q4 rules>"},
+ ... ≤4 per round
 ])
 ```
-主智能体收结果时**只做记录**，不重读该图内容。
+The orchestrator **only records** the returned results and never re-reads that figure.
 
-### 阶段 2 · 表账（并行子智能体）
-每个表一个子任务，`context` = `TableN.txt` 全文 + 正文引用该表的句子。规则：**表文冲突以 TableN.txt 为准绳**（markdown 表 OCR 易错）；核对表内数值 vs 正文引用句、表行条件 vs 正文条件描述；输出格式同上（`evidence_source="text-vs-table"`）。
+### Stage 2 · Table ledger (parallel subagents)
+One subtask per table, with `context` = the full `TableN.txt` + the sentences in the text that cite that table. Rule: **`TableN.txt` is authoritative for table-text conflicts** (markdown tables are OCR-prone); compare table values against the citing sentences, and table-row conditions against the conditions described in the text; output format as above (`evidence_source="text-vs-table"`).
 
-### 阶段 3 · 段落对账（主控做，全局视野）
-对阶段 0 的断言表做交叉比较：同一 实体+指标+条件 在 ≥2 处出现且值不同 → 候选（含"结论被自身数据否定"检查）；**先按第一步归 Q，剩下的过阈值后判 A–E**。
+### Stage 3 · Paragraph reconciliation (done by the orchestrator, global view)
+Cross-compare the assertion table from Stage 0: if the same entity + indicator + condition appears in ≥2 places with different values → candidate (including the "conclusion refuted by its own data" check); **classify Q first, and grade the remainder A–E only after passing the threshold**.
 
-### 阶段 4 · 合并裁决 · 输出
-1. 三轨道结果按 `figure+field+text_quote` 去重（图账/表账与段落账可能重复报同一处）；
-2. 逐条终审 adopted_value，标 confidence；
-3. **输出 = Markdown 表格**（直接在回复里，不写笔记），按严重度排序（**D → A，`E`（其他/判不了）置末**）：
+### Stage 4 · Merge, adjudicate, output
+1. Deduplicate the three tracks by `figure+field+text_quote` (the figure/table ledgers and the paragraph ledger may report the same spot);
+2. Give every entry a final `adopted_value` and a confidence;
+3. **Output = a Markdown table** (directly in the reply, no notes written), sorted by severity (**D → A, with `E` (other/ungradable) last**):
 
-| # | 位置 | 指标 | 值A（出处） | 值B（出处） | 采纳值 | 严重度 | 置信 |
+| # | Location | Indicator | Value A (source) | Value B (source) | Adopted value | Severity | Confidence |
 |---|---|---|---|---|---|---|---|
 
-表后附三行小结：**矛盾 N 条（A× · B× · C× · D× · E×）｜互证发现项 Q1× Q2× Q3× Q4×｜未核图 K 张（列出）**。
+After the table, three summary lines: **contradictions N (A× · B× · C× · D× · E×) | verification findings Q1× Q2× Q3× Q4× | unchecked figures K (list them)**.
 
-**互证收益（本步的成绩单，写在矛盾表之外）**：设 $N$ = 核对条数，$checked$ = 实际比对条数，$e=|Q1|+|Q2|$，$fixed$ = 已修正数，则
+**Verification gain (the scorecard for this run, written outside the contradiction table)**: with $N$ = records checked, $checked$ = records actually compared, $e=|Q1|+|Q2|$, $fixed$ = number corrected:
 
 $$C=\frac{checked}{N}\qquad R=\frac{fixed}{e}\qquad \Delta=\frac{fixed}{N}$$
 
-覆盖率 $C$、纠错率 $R$、**$\Delta$ = 互证把提取准确率抬高了多少**；互证前错误率 $e/N$ → 互证后 $(e-fixed)/N$。
+Coverage $C$, correction rate $R$, and **$\Delta$ = how much verification raised extraction accuracy**; the error rate goes from $e/N$ before verification to $(e-fixed)/N$ after.
 
-4. 台账 JSON 仅在用户要求留档时 `write_file` 到 `outputs/<篇名>_台账.json`。
+4. Persist the ledger JSON with `write_file` to `outputs/<paper name>_ledger.json` only when the user asks for a record.
 
-## 完成核验清单
+## Completion checklist
 
-1. 每条矛盾都有可回溯的 `text_quote`（能在归档文件里找到原句）；来自像素的条目须同时有 `panel + 读数 + 不确定度`；
-2. 表文冲突的裁决依据是 `TableN.txt` 而非 markdown 表；
-3. 阈值与"不报"清单确实执行（台账里不该出现 <1% 相对差、<5% 量程的条目）；
-4. **口径合规**：`severity` 取值须 ∈ **A/B/C/D/E**（出现 `unknown` 即口径违规）；"图文/表文/文文"不得当类别用，只能作 `evidence_source`；`cross_paper` 在本技能（单篇）里不得乱标；
-5. Q 类与矛盾分开放：Q1/Q2/Q3/Q4 只进小结与收益，不进矛盾表；
-6. 未核图/Q 计数数量级合理（示意图占比高的论文，未核数应大于矛盾数）；
-7. 子智能体输出是纯 JSON（被复述正文污染的条目丢弃重派）。
+1. Every contradiction has a traceable `text_quote` (the exact sentence can be found in the archive); entries from pixels must also carry `panel + reading + uncertainty`;
+2. Table-text conflicts are adjudicated against `TableN.txt`, not the markdown table;
+3. The thresholds and the "do not report" list were actually enforced (the ledger must contain no entry below 1% relative difference or below 5% of the range);
+4. **Caliber compliance**: `severity` ∈ **A/B/C/D/E** (any `unknown` is a violation); "figure-text/table-text/text-text" may never be used as a class, only as `evidence_source`; `cross_paper` must never be set arbitrarily in this single-paper skill;
+5. Q classes are kept separate from contradictions: Q1/Q2/Q3/Q4 go only into the summary and the gain, never into the contradiction table;
+6. Unchecked-figure and Q counts are of a plausible order (in papers with many schematics, unchecked figures should outnumber contradictions);
+7. Subagent output is pure JSON (entries polluted by restating the text are discarded and re-dispatched).
 
-## 坑
+## Pitfalls
 
-- **别把 Q 当矛盾**：Q1/Q2 是**我们自己的错**，写进矛盾表会虚增文献问题；Q3 口径差双方都没错，Q4 是相符。它们只进小结/收益。
-- **别写 `unknown`**：严重度只有 **A–E 五值**，`E`（其他·无法归类）就是「判不了 / 不属 A–D」的兜底位。跨文献互斥（`cross_paper`）本技能判不了，需批次视野。
-- **别把示意图派去对账**：无可读数内容的图只会产出假矛盾；拿不准就跳过进"未核图"。
-- **别跳过阶段 0 直接派子**：没有摘录包的子智能体会各自重复全文分页读，慢且超限。
-- **别期待子智能体看得见图**：它只有文本。像素读数是主控的活，转录后以文本下传。
-- **别凭"图应该长这样"写数值**：读不到就标 `需图核`。虚构读数是本技能最严重的事故。
-- **别为省 token 降 JPEG 质量**：视觉 token 只随像素数变，降质量白丢信息；要省就裁小尺寸/裁 panel。
-- **别忘重启后端**：改过 `backend/` 代码后必须重启才生效。
-- 子任务返回超长会被截断 → goal 里"只输出 JSON、禁止复述"必须写。
-- 单篇模式：不做跨文献对账（条件不可比，假矛盾多）；用户要求跨篇时明确说明本技能不适用，建议走 `fenton-multiagent-mining`（步骤 5B 批次级裁决）。
-- `role="contradiction"` 是子智能体带上裁决纪律的关键，忘带=自由发挥。
+- **Never treat Q as a contradiction**: Q1/Q2 are **our own mistakes**; writing them into the contradiction table inflates the paper's problems. Q3 is a caliber difference where neither side is wrong, and Q4 is agreement. They belong only in the summary/gain.
+- **Never write `unknown`**: severity has exactly **five values A–E**, and `E` (other · unclassifiable) is the fallback for "cannot grade / outside A–D". Cross-paper exclusion (`cross_paper`) cannot be judged by this skill and needs corpus-wide visibility.
+- **Never send a schematic to reconciliation**: a figure with nothing readable only produces false contradictions; when unsure, skip it into "unchecked figures".
+- **Never skip Stage 0 and dispatch directly**: subagents without an excerpt pack each re-read the full text page by page — slow and over the limit.
+- **Never expect a subagent to see an image**: it only has text. Pixel reading is the orchestrator's job, transcribed and passed down as text.
+- **Never write a number from "what the figure should look like"**: if it cannot be read, mark "needs figure check". Inventing readings is the most serious failure mode of this skill.
+- **Never lower JPEG quality to save tokens**: visual tokens depend only on pixel count, so lowering quality loses information for free; to save, crop smaller or crop panels.
+- **Never forget to restart the backend**: changes under `backend/` take effect only after a restart.
+- Subtask returns are truncated when too long → the goal must state "output JSON only, never restate the text".
+- Single-paper mode: no cross-paper reconciliation (conditions are incomparable and false contradictions abound); when the user asks for cross-paper work, state clearly that this skill does not apply and recommend `fenton-multiagent-mining` (Step 5B cross-paper adjudication).
+- `role="contradiction"` is what gives the subagent its adjudication discipline; forgetting it means free improvisation.
 
-## 依赖
+## Dependencies
 
-前置归档：`mineru-agent-parse`（需 `00_full_cleaned.md` + `00_images_map.json` + FigureN/TableN txt + `images/` 原图）。
-口径来源：`skills/fenton-multiagent-mining/references/矛盾分类规范.md`（A–E + Q1–Q4 的唯一口径，本技能与之保持一致）。
-像素读数通道：**两个引擎都已打通**（`file_tools.py` / `agent.py` / `subagent.py` 三处加法式改动：工具返回图像内容块），用法与常量见 `references/image_read_channel.md`；需**视觉模型**，改代码后重启后端。
-子智能体角色预设：`delegate_task` 的 `role=contradiction`。改项目代码前先备份原文件（`xxx.py.bak_<主题>`），改后需重启后端才生效。
+Upstream archiving: `mineru-agent-parse` (requires `00_full_cleaned.md` + `00_images_map.json` + FigureN/TableN txt + the original images under `images/`).
+Taxonomy source: `skills/fenton-multiagent-mining/references/contradiction_taxonomy.md` (the single source of truth for A–E + Q1–Q4; this skill stays consistent with it).
+Pixel reading channel: **both engines are wired** (three additive changes in `file_tools.py` / `agent.py` / `subagent.py`: tools return image content blocks); usage and constants in `references/image_read_channel.md`; requires a **vision model**, and the backend must be restarted after code changes.
+Subagent role preset: `delegate_task` with `role=contradiction`. Back up any file before changing project code (`xxx.py.bak_<topic>`), and restart the backend afterwards for changes to take effect.

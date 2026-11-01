@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-"""step2b_task_packages.py — V5 步骤②收尾：物化提取任务 + 打包（下一部的完整输入）
-每篇产出：
-  datamining/02b_extraction_tasks.json       任务清单（索引/统计）
-  datamining/02b_tasks/<xy|basic>/T01/       每任务一个包：
-    ├─ image.jpg                              待提取图像（原图直通；仅超内联上限才重编码）
-    └─ task.json                              提取要求（figure/subfigure_ids/mode/描述/图注/图片路径）
-status=no_image 的任务不打包、不调用 LLM。
-包内 task.json 的 panel_index 一律是**归档面板序号**（1 起，= 图内第几块），
-不是「工单收录子图序号」—— 有 excluded_subfigures 时两者不同（如 Fig.7 收 a/c/d，c 是第 3 块）。
-用法：python step2b_task_packages.py <批次根目录> [单篇名...]
+"""step2b_task_packages.py — end of Step 4: materialize extraction tasks + pack them (the complete input for the next stage)
+Products per paper:
+  datamining/02b_extraction_tasks.json       task list (index/statistics)
+  datamining/02b_tasks/<xy|basic>/T01/       one pack per task:
+    ├─ image.jpg                              the image to extract (original passed through; re-encoded only when over the inline limit)
+    └─ task.json                              extraction request (figure/subfigure_ids/mode/description/caption/image path)
+Tasks with status=no_image are not packed and never call an LLM.
+The panel_index in a pack's task.json is always the **archive panel index** (1-based, i.e. which block within the figure),
+not the "index among subfigures included by the work order" — with excluded_subfigures the two differ (e.g. Fig.7 includes a/c/d, where c is block 3).
+Usage: python step2b_task_packages.py <corpus root directory> [single paper name...]
 """
 import hashlib
 import io
@@ -21,29 +21,29 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-# read_file 内联上限（字符）。与后端 backend/tools/file_tools.py:IMAGE_INLINE_MAX_CHARS 同源，
-# 优先读环境变量 C4EAI_IMAGE_INLINE_MAX_CHARS，缺省 1600000（≈1.2 MB 原图）。
+# read_file inline limit (characters). Same source as backend/tools/file_tools.py:IMAGE_INLINE_MAX_CHARS;
+# the environment variable C4EAI_IMAGE_INLINE_MAX_CHARS takes precedence, default 1600000 (≈1.2 MB original image).
 IMAGE_INLINE_LIMIT_CHARS = int(os.environ.get("C4EAI_IMAGE_INLINE_MAX_CHARS") or 1600000)
 
 
 def dataurl_chars(path):
-    """文件按 base64 dataURL 内联时的字符数（前缀 23 + 4/3 膨胀）。"""
+    """Character count when a file is inlined as a base64 dataURL (23-character prefix + 4/3 expansion)."""
     return 23 + 4 * ((os.path.getsize(path) + 2) // 3)
 
 
 def fit_for_inline(src, dst, max_chars=None):
-    """把待提取图规范成「read_file 能内联」的体量，统一输出 image.jpg。
+    """Normalize the image to be extracted into a size that read_file can inline, always emitting image.jpg.
 
-    原则：**能不重编码就不重编码**。2026-10-05 实测（本地 llama-server / Qwen3.6-35B-A3B）：
-    视觉 token 只与**像素数**成正比（1 token ≈ 1024 px = 32×32 patch），与 JPEG 质量、
-    与字节数无关 —— 1451×1283 用 q95 JPEG（442 KB）与 PNG 无损（1271 KB）内联同为
-    1820 prompt_tokens。故降质量/缩尺寸换不到任何 token 收益，纯粹丢信息。
-    内联上限本身已调高到 1600000 字符（≈1.2 MB 原图），现有语料全部走 ① 原图直通。
+    Principle: **never re-encode unless necessary**. Measured 2026-10-05 (local llama-server / Qwen3.6-35B-A3B):
+    visual tokens scale only with **pixel count** (1 token ≈ 1024 px = 32×32 patch), independent of JPEG quality
+    and byte size — 1451×1283 as q95 JPEG (442 KB) and as lossless PNG (1271 KB) both inline to
+    1820 prompt tokens. Lowering quality or downscaling therefore buys no token savings and only loses information.
+    The inline limit itself has been raised to 1600000 characters (≈1.2 MB original image), so the current corpus all takes route ①.
 
-    ① 源是 jpg 且原图 dataURL ≤ 上限 → 原样复制（零重编码、零损失）；
-    ② 源是 png 等其它格式 → 保尺寸近无损编码（q95 + 4:4:4，逐级退到 q78）；
-    ③ 仍超限才逐级缩长边（q92），缩到装得下为止。
-    返回 (是否重编码, 原字节, 现字节, 现尺寸或 None)。
+    ① the source is jpg and its dataURL is within the limit → copy verbatim (zero re-encoding, zero loss);
+    ② the source is png or another format → same-size near-lossless encoding (q95 + 4:4:4, stepping down to q78);
+    ③ only if still over the limit, step down the long edge (q92) until it fits.
+    Returns (re-encoded?, original bytes, current bytes, current size or None).
     """
     limit = int(max_chars or IMAGE_INLINE_LIMIT_CHARS)
     orig = os.path.getsize(src)
@@ -59,7 +59,7 @@ def fit_for_inline(src, dst, max_chars=None):
     im = Image.open(src)
     if im.mode not in ("RGB", "L"):
         im = im.convert("RGB")
-    # ② 保尺寸、近无损（只有非 jpg 源会走到这里）
+    # ② same size, near-lossless (only non-jpg sources reach here)
     for q in (95, 90, 85, 78):
         buf = io.BytesIO()
         im.save(buf, "JPEG", quality=q, optimize=True, subsampling=0)
@@ -70,7 +70,7 @@ def fit_for_inline(src, dst, max_chars=None):
             dims = im.size
             im.close()
             return True, orig, len(data), dims
-    # ③ 仍装不下 → 才逐级缩长边（先保分辨率、再缩）
+    # ③ still does not fit → only then step down the long edge (preserve resolution first, then downscale)
     best = None
     for long_edge in (2400, 2000, 1600, 1400, 1200, 1000, 900, 800):
         w, h = im.size
@@ -100,16 +100,16 @@ def wf_of(paper):
 
 
 def archive_candidates(fid):
-    """图号 → 归档文件夹名候选集合。
-    修复1：SI 图号（Fig.S1/Figure S1）必须映射 FigureS1，不能只取数字误配到 Figure1。
-    修复2（B34）：部分归档文件夹名带子图字母（Figure4a = 主图4的a面板整图），
-    figure_id "Fig.4a" 须同时尝试 Figure4 与 Figure4a。"""
+    """Figure number → candidate archive folder names.
+    Fix 1: an SI figure number (Fig.S1/Figure S1) must map to FigureS1 and must not be mismatched to Figure1 by taking digits only.
+    Fix 2 (B34): some archive folder names carry a subfigure letter (Figure4a = the whole a panel of main figure 4),
+    so figure_id "Fig.4a" must try both Figure4 and Figure4a."""
     s = (fid or "").strip()
     m = re.match(r"(?i)^(?:fig(?:ure)?\.?|fig\.?)\s*([A-Za-z]*)(\d+)([a-zA-Z]*)$", s)
     if m:
         letters, num, trail = m.groups()
         core = letters + num
-        cands = {s, f"Figure{core}", f"Figure {core}", f"Fig.{core}", f"Fig. {core}", f"图{core}"}
+        cands = {s, f"Figure{core}", f"Figure {core}", f"Fig.{core}", f"Fig. {core}"}
         if trail:
             cands |= {f"Figure{core}{trail}", f"Figure {core}{trail}", f"Fig.{core}{trail}", f"Fig. {core}{trail}"}
         return cands
@@ -152,14 +152,14 @@ def find_original(wf, fid):
 
 
 def whole_image(wf, fid, panels_arch):
-    """「整图一包」时到底取哪张图 —— 绝不盲取多面板里的第一块。
+    """Which image a "whole-figure pack" actually takes — never blindly grab the first block of a multi-panel figure.
 
-    实测事故（2026-10-05）：Fig.1 归档成 5 块（含 1 块 93×96 的图注碎片），
-    旧逻辑取 panels_arch[0] → 把碎片当 XRD 发给提取员，数据必然全错。
-    取图优先级：
-      ① images/FigureN/FigureN_full.jpg（归档拼接整图，语义 = 该图注对应的整图）；
-      ② 多块且无 full 时，取**最大**的一块（唯一整图或页面大图），避开碎片；
-      ③ 都没有 → None（该任务落 no_image，不打包不调用）。
+    Measured incident (2026-10-05): Fig.1 was archived as 5 blocks (including a 93×96 caption fragment),
+    and the old logic took panels_arch[0] → the fragment was sent to the extractor as an XRD pattern, so the data were necessarily wrong.
+    Image acquisition priority:
+      ① images/FigureN/FigureN_full.jpg (the stitched whole figure from archiving, semantically the whole figure of that caption);
+      ② with several blocks and no full image, take the **largest** block (the only whole figure or the large page image) and avoid fragments;
+      ③ neither available → None (the task becomes no_image, never packed or called).
     """
     orig = find_original(wf, fid)
     if orig and "_full" in os.path.basename(orig):
@@ -177,11 +177,11 @@ def ext_of(path):
 
 
 def read_panel_list(wf, fid):
-    """读 images/FigureN/FigureN.txt 的「[-] <file> page=N」有序面板清单 → 全路径列表。
+    """Read the ordered panel list "[-] <file> page=N" from images/FigureN/FigureN.txt → a list of full paths.
 
-    归档 txt 由步骤二产出，是**权威且有序**的面板清单（顺序 = 论文图注 a/b/c 顺序）。
-    多面板图（如 Figure4 的 a/b/c）在 MinerU 归档时已各自独立成图，无需白线分割；
-    早期版本在此处退化为「一张图 + 全部子图 id 塞进一个包」，导致 b/c 无图可读。
+    The archive txt produced by Step 2 is the **authoritative and ordered** panel list (order = caption a/b/c order).
+    Multi-panel figures (e.g. Figure4 a/b/c) were already rendered as separate images during MinerU archiving, so no white-line splitting is needed;
+    an early version degraded here to "one image + all subfigure ids stuffed into one pack", leaving b/c with no image to read.
     """
     cands = archive_candidates(fid)
     img_dir = os.path.join(wf, "images")
@@ -202,7 +202,7 @@ def read_panel_list(wf, fid):
                 continue
             if not txt.strip():
                 continue
-            # 兼容两种面板行格式：新 step0c 归档「  [1] <file> page=N bbox=…」与旧归档「  [-] <file>」
+            # tolerate two panel-line formats: the new step0c archive "  [1] <file> page=N bbox=…" and the old archive "  [-] <file>"
             names = re.findall(r"^\s*\[[-\d]+\]\s+(\S+\.(?:jpg|jpeg|png))", txt, re.M)
             out = [os.path.join(d, n) for n in names if os.path.exists(os.path.join(d, n))]
             if out:
@@ -211,7 +211,7 @@ def read_panel_list(wf, fid):
 
 
 def alpha_index(subfigure_id):
-    """单字母子图 id（a/b/c…）→ 面板序号（0 起）；非单字母返回 None。"""
+    """Single-letter subfigure id (a/b/c…) → panel index (0-based); None when not a single letter."""
     s = str(subfigure_id).strip()
     if len(s) == 1 and s.isalpha():
         return ord(s.lower()) - ord("a")
@@ -223,7 +223,7 @@ def build_and_package(paper):
     wf = os.path.normpath(wf_of(paper))
     wo = json.load(open(os.path.join(wf, "01_work_order.json"), encoding="utf-8"))
     if not isinstance(wo, dict):
-        return None  # 旧版 list 格式工单(如 C4EAI 残留)跳过
+        return None  # skip legacy list-format work orders (e.g. leftovers from C4EAI)
     mp = os.path.join(wf, "02_image_match.json")
     match = {m["figure_id"]: m for m in json.load(open(mp, encoding="utf-8"))} if os.path.exists(mp) else {}
 
@@ -242,30 +242,29 @@ def build_and_package(paper):
             cn = caption_number(cap)
             wn = "".join(c for c in fid if c.isdigit())
             if cn and cn != wn:
-                cap_flag = f"图注编号({cn})与图号({wn})不符"
+                cap_flag = f"caption number ({cn}) does not match the figure number ({wn})"
         m = match.get(fid)
 
-        # 【2026-10-05 改】XY 判定下沉到子图级：needs_xy_extraction 写在每个 subfigure 内，
-        # 同一张图可混装（如 Fig.7 的 a/d 是降解曲线、c 是循环柱状）→ 分别出 xy 包与 basic 包。
+        # 【changed 2026-10-05】the XY decision moved down to subfigure level: needs_xy_extraction is written inside each subfigure,
+        # so one figure may mix both (e.g. Fig.7 a/d are degradation curves while c is a cycling bar chart) → emit xy and basic packs separately.
         if any("needs_xy_extraction" in s for s in subs):
             xy_subs = [s for s in subs if s.get("needs_xy_extraction")]
-        else:  # 兼容旧工单：子图内均无该字段 → 回退图级布尔（旧 true = 全部子图当 XY）
+        else:  # tolerate old work orders: no subfigure carries the field → fall back to the figure-level boolean (old true = all subfigures are XY)
             xy_subs = list(subs) if f.get("needs_xy_extraction") else []
         _xy_ids = {id(s) for s in xy_subs}
         ba_subs = [s for s in subs if id(s) not in _xy_ids]
-        idx_of = {}                      # 子图在本图内的序号（= 归档面板序号）
+        idx_of = {}                      # the subfigure's index within this figure (= archive panel index)
         for i, s in enumerate(subs):
             idx_of.setdefault(s.get("subfigure_id"), i)
 
-        panels_arch = read_panel_list(wf, fid)   # 归档权威面板清单（有序）
+        panels_arch = read_panel_list(wf, fid)   # the authoritative ordered panel list from archiving
 
         def panel_of(s, fallback_i=0):
-            """子图 → 面板图路径：先按子图 id 命名匹配（B33），失败按面板序号取。
+            """Subfigure → panel image path: match by subfigure id name first (B33), then fall back to the panel index.
 
-            面板序号优先由单字母子图 id 推导（'d' → 第 4 块，与图注字母序一致）；
-            工单只登记**收录**子图，若直接取列表序号，在有 excluded_subfigures 时会整体错位。
-            子图 id 非单字母（main / left / 数字）时回退列表序号。
-            """
+            The panel index is preferably derived from a single-letter subfigure id ('d' → block 4, matching caption letter order);
+            the work order registers only **included** subfigures, so taking the list index directly would shift everything when excluded_subfigures exist.
+            When the subfigure id is not a single letter (main / left / numeric), fall back to the list index."""
             sid = s.get("subfigure_id", "")
             letter = "A" if sid == "main" else str(sid).upper()
             k = alpha_index(sid)
@@ -283,17 +282,16 @@ def build_and_package(paper):
             return None
 
         def panel_no(s, i):
-            """子图 → **归档面板序号**（1 起）。优先按子图字母推导（c → 3），
-            无法推导（main / 数字 id）才回退收录列表序号 —— 有 excluded 子图时两者会错位。"""
+            """Subfigure → **archive panel index** (1-based). Prefer deriving it from the subfigure letter (c → 3),
+            and fall back to the included-list index only when that fails (main / numeric id) — the two diverge when subfigures are excluded."""
             k = alpha_index(s.get("subfigure_id"))
             return (k + 1) if k is not None else (idx_of.get(s.get("subfigure_id"), i) + 1)
 
         def per_panel_ok(group):
-            """该组子图能否逐面板拆包：归档面板 > 1，且每个子图都能推出有效面板序号。
+            """Whether this group can be unpacked panel by panel: archive panels > 1 and every subfigure yields a valid panel index.
 
-            只看子图 id（a/b/c…）与归档面板总数，不要求「工单子图数 == 面板数」——
-            工单只登记收录子图，被 excluded 的面板仍占图内位置（如 Fig.7 收 a/c/d 但面板有 4 块）。
-            """
+            Only the subfigure ids (a/b/c…) and the total archive panel count matter; "work-order subfigure count == panel count" is not required —
+            the work order registers only included subfigures, while excluded panels still occupy positions in the figure (e.g. Fig.7 includes a/c/d but has 4 blocks)."""
             if len(panels_arch) <= 1:
                 return False
             for s in group:
@@ -322,8 +320,8 @@ def build_and_package(paper):
                     add(fid, [sid], "xy", panel_of(s, i), True, {sid: s.get("description", "")},
                         extra={"panel_index": panel_no(s, i), "archive_panels": len(panels_arch)})
             elif per_panel_ok(xy_subs):
-                # 归档已把各面板独立成图（FigureN.txt 有序清单）→ 逐面板拆包：
-                # 每包 1 张图 + 1 个子图 id，面板按子图字母序对应
+                # archiving already made each panel a separate image (ordered FigureN.txt list) → unpack panel by panel:
+                # one image + one subfigure id per pack, panels paired in subfigure letter order
                 for i, s in enumerate(xy_subs):
                     sid = s.get("subfigure_id", f"s{i}")
                     add(fid, [sid], "xy", panel_of(s, i), False,
@@ -333,8 +331,8 @@ def build_and_package(paper):
                 img = whole_image(wf, fid, panels_arch)
                 extra = None
                 if len(xy_subs) > 1:
-                    extra = {"panel_mismatch": f"工单声明 {len(xy_subs)} 个 XY 子图，归档仅 {len(panels_arch)} 张图；"
-                                               f"本包为整图，请自行辨认图面属于哪个子图"}
+                    extra = {"panel_mismatch": f"the work order declares {len(xy_subs)} XY subfigures but the archive has only {len(panels_arch)} images;"
+                                               f" this pack is the whole figure, so identify yourself which subfigure the area belongs to"}
                 add(fid, [s.get("subfigure_id", f"s{i}") for i, s in enumerate(xy_subs)], "xy", img,
                     bool(m and m.get("split_success")),
                     {s.get("subfigure_id", f"s{i}"): s.get("description", "") for i, s in enumerate(xy_subs)},
@@ -343,8 +341,8 @@ def build_and_package(paper):
 
         if ba_subs:
             if per_panel_ok(ba_subs):
-                # 同理：basic 多面板也逐面板拆包（如 Figure1 的 a/b 两张 XRD）
-                # source 区分：取自 02_split 采纳的面板 / 直接用 images/FigureN 散图
+                # likewise: a multi-panel basic figure is also unpacked panel by panel (e.g. Figure1 a/b as two XRD patterns)
+                # source distinguishes: a panel accepted from 02_split / loose images under images/FigureN used directly
                 bsrc = "split_panel" if (m and m.get("split_success")) else "archive_panel"
                 for i, s in enumerate(ba_subs):
                     sid = s.get("subfigure_id", f"s{i}")
@@ -355,8 +353,8 @@ def build_and_package(paper):
                 img = whole_image(wf, fid, panels_arch)
                 extra = None
                 if len(ba_subs) > 1:
-                    extra = {"panel_mismatch": f"工单声明 {len(ba_subs)} 个 basic 子图，归档仅 {len(panels_arch)} 张图；"
-                                               f"本包为整图，请自行辨认图面属于哪个子图"}
+                    extra = {"panel_mismatch": f"the work order declares {len(ba_subs)} basic subfigures but the archive has only {len(panels_arch)} images;"
+                                               f" this pack is the whole figure, so identify yourself which subfigure the area belongs to"}
                 add(fid, [s.get("subfigure_id", f"s{i}") for i, s in enumerate(ba_subs)], "basic", img, False,
                     {s.get("subfigure_id", f"s{i}"): s.get("description", "") for i, s in enumerate(ba_subs)},
                     source="archive_panel" if panels_arch else ("original" if img else "missing"),
@@ -375,8 +373,8 @@ def build_and_package(paper):
         pkg = os.path.join(tasks_root, cat, t["task_id"])
         os.makedirs(pkg, exist_ok=True)
         img_dst = os.path.join(pkg, "image.jpg")
-        # 来源指纹：压缩会重编码（md5 必变），故把「图上哪儿来的」写进 task.json，
-        # step2c 靠它反查（否则整图/大图包会被误判 UNTRACEABLE）。
+        # Source fingerprint: compression re-encodes (the md5 always changes), so record "where on the figure this came from" in task.json
+        # and let step2c trace it back (otherwise whole-figure/large packs are wrongly judged UNTRACEABLE).
         try:
             t["image_source_name"] = os.path.basename(t["image_file"])
             t["image_source_md5"] = hashlib.md5(open(t["image_file"], "rb").read()).hexdigest()
@@ -384,7 +382,7 @@ def build_and_package(paper):
             t["image_source_name"], t["image_source_md5"] = "", ""
         _reenc, _ob, _nb, _dims = fit_for_inline(t["image_file"], img_dst)
         t["image_resized"] = bool(_reenc)
-        t["image_note"] = ((f"原图 {_ob // 1024} KB 超出内联上限，已重编码为 {_nb // 1024} KB"
+        t["image_note"] = ((f"original {_ob // 1024} KB exceeds the inline limit and was re-encoded to {_nb // 1024} KB"
                             + (f"（{_dims[0]}×{_dims[1]}）" if _dims else "") + "。")
                            if _reenc else "")
         t["image_bytes"] = _nb
@@ -393,7 +391,7 @@ def build_and_package(paper):
         orig = find_original(wf, t["figure_id"])
         t["original_image"] = orig or ""
         t["images_archive"] = os.path.join(wf, "images")
-        # 裸 origin.pdf 与 *_origin.pdf 都要认（B200 语料用的是裸名）
+        # accept both a bare origin.pdf and *_origin.pdf (the B200 corpus uses the bare name)
         pdfs = [f for f in os.listdir(paper) if f.lower().endswith(".pdf")] if os.path.isdir(paper) else []
         pdfs.sort(key=lambda f: (0 if f.lower() == "origin.pdf" else 1, f))
         t["pdf_path"] = os.path.join(paper, pdfs[0]) if pdfs else ""
@@ -420,8 +418,8 @@ def build_and_package(paper):
 
 def main(root, only=None):
     tot_calls = tot_xy = 0
-    # 用户可直接给「单篇论文文件夹」或「批次目录」（2026-10-05 修：原来只吃批次目录，
-    # 传单篇会静默输出 0 包 —— 已实测踩中，故与 step0/step0b 的入参口径对齐）。
+    # the user may pass either a single paper folder or a multi-paper directory (2026-10-05 fix: it used to accept only multi-paper directories,
+    # silently emitting 0 packs for a single paper — measured and confirmed — so the input caliber now matches step0/step0b).
     root = os.path.abspath(root)
     if os.path.exists(os.path.join(root, "datamining", "01_work_order.json")):
         papers = [root]
@@ -432,13 +430,13 @@ def main(root, only=None):
             continue
         r = build_and_package(paper)
         if r is None:
-            continue  # 跳过旧格式工单的文件夹
+            continue  # skip folders with legacy-format work orders
         t = r["totals"]
         tot_calls += t["calls_planned"]
         tot_xy += t["xy_tasks"]
-        print(f"{r['paper'][:44]:46s} 包 {t['calls_planned']:2d}（xy {t['xy_tasks']:2d} + basic {t['basic_tasks']:2d}）"
-              f" 无图{t['no_image']} 图注存疑{t['caption_flagged']}")
-    print(f"=== 任务包合计 {tot_calls}（xy 面板 {tot_xy}）===")
+        print(f"{r['paper'][:44]:46s} packs {t['calls_planned']:2d} (xy {t['xy_tasks']:2d} + basic {t['basic_tasks']:2d})"
+              f" no-image {t['no_image']} caption-flagged {t['caption_flagged']}")
+    print(f"=== total task packs {tot_calls} (xy panels {tot_xy}) ===")
 
 
 if __name__ == "__main__":

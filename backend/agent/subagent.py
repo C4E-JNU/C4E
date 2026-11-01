@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 
 import httpx
@@ -43,36 +44,36 @@ SUBAGENT_MAX_TASKS = 4                    # 单次最多派发子任务数（设
 # 专有子智能体角色预设：按任务类型注入领域系统提示（delegate_task 的 tasks[].role）
 SUBAGENT_ROLE_PROMPTS = {
     "contradiction": (
-        "\n【专属角色·文献矛盾核查】你是文献矛盾核查子智能体，只负责对分配给你的文献做矛盾清扫。"
-        "规则：① 只收两类——同一量两个值、结论被自身数据否定；"
-        "② 裁决分类 E1(我方读图错)/E2(我方读文错)/E3(文献真矛盾)/E5(口径差异，两值并存)/OCR伪影(剔除)；"
-        "③ 阈值：数值差<5%量程(标量<1%相对差)判一致取正文值，曲线终点±2%量程内一致——宁缺毋滥；"
-        "④ 不报：舍入/修约、口径差异、模糊表述(about/nearly)、术语漂移；"
-        "⑤ 每条给 text_quote 原句、两个值、adopted_value(正文自相矛盾时取多源佐证方)与 confidence；"
-        "⑥ 表格数值以 TableN.txt 为准，图注以 FigureN.txt 为准。"
+        "\n[Role: literature contradiction audit] You are the contradiction-audit subagent; only audit the papers assigned to you."
+        "Rules: (1) accept only two kinds - one quantity reported with two values, or a conclusion refuted by its own data;"
+        "(2) adjudicate as E1 (our figure-reading error) / E2 (our text-parsing error) / E3 (true contradiction) / E5 (definition difference; keep both values) / OCR artifact (drop);"
+        "(3) thresholds: a difference under 5% of the axis range (under 1% relative for scalars) counts as agreement and the text value is adopted; curve endpoints within +/-2% of range agree - prefer omission to false positives;"
+        "(4) do not report rounding, definition differences, vague wording (about/nearly) or terminology drift;"
+        "(5) each finding needs a verbatim text_quote, both values, adopted_value (the side supported by more sources when the text contradicts itself) and confidence;"
+        "(6) table values follow TableN.txt and captions follow FigureN.txt."
     ),
     "extraction": (
-        "\n【专属角色·数据提取】你是文献数据提取子智能体，按统一 schema 抽取定量数据。"
-        "单位铁律：浓度 mg/L、投加量 g/L、温度 ℃、时间 min、k min⁻¹；"
-        "只抽有明确出处的数值，每个值带 text_quote 原句与章节；"
-        "图上估读值标注 image_read 并给不确定度；抽不到就标 missing，不要编造。"
+        "\n[Role: data extraction] You are the data-extraction subagent; extract quantitative data into the unified schema."
+        "Units: concentration mg/L, dosage g/L, temperature degC, time min, k min^-1;"
+        "extract only values with an explicit source, each with a verbatim text_quote and section;"
+        "mark figure-read values as image_read with uncertainty; mark absent values as missing and never invent them."
     ),
     "verify": (
-        "\n【专属角色·数据核查】你是数据核查子智能体，对主智能体给出的数据清单逐条回到原文核验。"
-        "每条输出：原文是否支持(是/否/部分)、text_quote、建议修正值；不确定就标'需人工复核'，不要猜。"
+        "\n[Role: data verification] You are the verification subagent; check every item in the main agent's data list against the source."
+        "For each item output: supported by the source (yes/no/partly), text_quote, suggested correction; mark uncertain items as needing human review and never guess."
     ),
 }
 
 _SUBAGENT_SYSTEM = (
-    "你是一个被主智能体派发的子智能体（worker）。你只负责完成交给你的那个子任务，"
-    "不负责回答用户的完整问题。\n"
-    "规则：\n"
-    "1. 先用最少的工具调用收集事实（{rounds_hint}），不要反复试探。\n"
-    "2. 完成后必须给出一段**结构化结论摘要**：结论要点 + 关键数据 + 来源（如有）。\n"
-    "3. 摘要要能独立阅读：不要写“如上”“见上文”这类依赖上下文的话。\n"
-    "4. 不要向用户提问；信息不足时，就在摘要里写明“信息不足：<缺什么>”。\n"
-    "5. 你无法派发子智能体，也不要尝试写文件或执行终端命令。\n"
-    "6. **语言跟随用户**：结论摘要与**内部思考/推理（reasoning、thinking）应尽量使用用户消息所用的语言**；专业英文术语保留原样。"
+    "You are a subagent (worker) dispatched by the main agent. You only complete the subtask assigned to you,"
+    "not the user's full question.\n"
+    "Rules:\n"
+    "1. Collect facts with the fewest tool calls ({rounds_hint}); do not probe repeatedly.\n"
+    "2. Finish with a **structured summary**: conclusions + key data + sources (if any).\n"
+    "3. The summary must stand alone: no 'as above' or 'see previous' phrasing.\n"
+    "4. Do not ask the user questions; if information is missing, write 'insufficient information: <what>'.\n"
+    "5. You cannot dispatch subagents; do not write files or run terminal commands.\n"
+    "6. **Follow the user's language**: the summary and **internal reasoning (reasoning, thinking) should use the user's language**; keep technical English terms."
 )
 
 
@@ -130,7 +131,7 @@ async def run_subagent(goal: str, context: str = "", tools: list[str] | None = N
     _pname = (profile or role or "").strip()
     _prof = _pf.get_profile(_pname)
     if _prof is None:
-        return {"ok": False, "error": f"未知子智能体档案「{_pname}」（可用：见 /api/agents/profiles）",
+        return {"ok": False, "error": f"Unknown subagent profile {_pname} (available: see /api/agents/profiles)",
                 "goal": goal, "steps": [], "profile": _pname}
     _prof_name = _pname or "__generic__"
     _pp = _prof.get("params") or {}
@@ -138,10 +139,6 @@ async def run_subagent(goal: str, context: str = "", tools: list[str] | None = N
     proc_max_chars = int(_pp.get("tool_result_max_chars") or 4000)
     preview_chars = int(_pp.get("tool_result_preview_chars") or 2000)
     ctx_max_chars = int(_pp.get("user_context_max_chars") or 6000)
-    # 显式 max_images=0 = 该档案声明「不读图」：图片一律不内联（旧写法 `or 3` 会把 0 吃掉）
-    _mi = _pp.get("max_images")
-    max_images = 3 if _mi is None else max(0, int(_mi))
-
     _T = dict(SUBAGENT_TIMEOUTS_DEFAULT)
     if isinstance(timeouts, dict) and timeouts.get("abort") is not None:
         try:
@@ -171,14 +168,17 @@ async def run_subagent(goal: str, context: str = "", tools: list[str] | None = N
     cfg = dict(get_current_model_config() or {})
     for k in ("model", "base_url", "api_key", "temperature", "max_tokens"):
         v = (_prof.get("model") or {}).get(k)
-        if v not in (None, ""):
+        if isinstance(v, str) and v.startswith("env:"):
+            # 档案只写 env:VAR，实际密钥从运行环境读取，绝不落盘。
+            cfg[k] = os.environ.get(v[4:], "")
+        elif v not in (None, ""):
             cfg[k] = v
     if not cfg.get("model"):
-        return {"ok": False, "error": "子智能体无法启动：缺少模型配置", "goal": goal,
+        return {"ok": False, "error": "Subagent cannot start: model configuration missing", "goal": goal,
                 "steps": [], "profile": _prof_name}
     endpoint = _endpoint(cfg.get("base_url", ""))
     if not endpoint:
-        return {"ok": False, "error": "子智能体无法启动：模型 base_url 为空", "goal": goal,
+        return {"ok": False, "error": "Subagent cannot start: model base_url is empty", "goal": goal,
                 "steps": [], "profile": _prof_name}
 
     # 工具：该档案的私有注册表（全局只读白名单 ∩ 档案白名单 + agents/<name>/tools/）
@@ -191,15 +191,15 @@ async def run_subagent(goal: str, context: str = "", tools: list[str] | None = N
     tool_map = dict(_reg)
     openai_tools = [_tool_schema(t) for t in _reg.values()]
 
-    _sys = _SUBAGENT_SYSTEM.format(rounds_hint=("建议 ≤ %d 轮" % int(max_rounds)
-                                               if int(max_rounds) > 0 else "轮次不限，按需取数即可"))
+    _sys = _SUBAGENT_SYSTEM.format(rounds_hint=("suggest <= %d rounds" % int(max_rounds)
+                                               if int(max_rounds) > 0 else "unlimited rounds; take what you need"))
     _sys += SUBAGENT_ROLE_PROMPTS.get(role, "")
     _sys += ("\n" + _pf.system_prompt_for(_prof)) if _pf.system_prompt_for(_prof) else ""
     if _prof.get("status_line", True):
         _sys += _pf.STATUS_HINT
     messages = [
         {"role": "system", "content": _sys},
-        {"role": "user", "content": f"【子任务】{goal}\n\n【背景/上下文】\n{(context or '（无额外上下文）')[:ctx_max_chars]}"},
+        {"role": "user", "content": f"[Subtask] {goal}\n\n[Background/context]\n{(context or '(no extra context)')[:ctx_max_chars]}"},
     ]
     headers = {"Content-Type": "application/json"}
     if cfg.get("api_key"):
@@ -233,14 +233,14 @@ async def run_subagent(goal: str, context: str = "", tools: list[str] | None = N
             _cap = int(max_rounds) if int(max_rounds) > 0 else 100000   # 0 = 无限（用户 2026-09-27：不要锁死 20）
             for rnd in range(1, _cap + 1):
                 if generation_cancelled():
-                    _push({"type": "notice", "text": "子智能体被用户停止"})
+                    _push({"type": "notice", "text": "Subagent stopped by the user"})
                     return
                 # ── 子智能体超时保护：只剩一级强制中断（2026-10-13 删催促/警告）──
                 _el = time.time() - t0
                 if _T.get("abort") and _el >= _T["abort"]:
                     _push({"type": "notice",
-                           "text": f"已达终止时限 {_T['abort']}s（实际 {int(_el)}s），子智能体被中断。"})
-                    summary = summary or f"（子任务超时中断：超过 {_T['abort']}s）"
+                           "text": f"Abort timeout ({_T['abort']} s, actual {int(_el)} s); subagent interrupted."})
+                    summary = summary or f"(subtask interrupted by timeout: over {_T['abort']} s)"
                     return
                 rounds_used = rnd
                 _mark({"type": "round", "round": rnd})
@@ -254,8 +254,8 @@ async def run_subagent(goal: str, context: str = "", tools: list[str] | None = N
                     payload["tools"] = openai_tools
                 r = await client.post(endpoint, json=payload, headers=headers)
                 if r.status_code != 200:
-                    _push({"type": "notice", "text": f"模型接口错误 {r.status_code}: {r.text[:200]}"})
-                    summary = summary or f"（子任务失败：模型接口错误 {r.status_code}）"
+                    _push({"type": "notice", "text": f"Model API error {r.status_code}: {r.text[:200]}"})
+                    summary = summary or f"(subtask failed: model API error {r.status_code})"
                     return
                 msg = (r.json().get("choices") or [{}])[0].get("message") or {}
                 content = (msg.get("content") or "").strip()
@@ -278,26 +278,19 @@ async def run_subagent(goal: str, context: str = "", tools: list[str] | None = N
                            "input": json.dumps(args, ensure_ascii=False)[:1500]})
                     tool = tool_map.get(name)
                     if tool is None:
-                        result = json.dumps({"error": f"子智能体不可用该工具: {name}"}, ensure_ascii=False)
+                        result = json.dumps({"error": f"Subagent may not use this tool: {name}"}, ensure_ascii=False)
                     else:
                         try:
                             res = await tool.ainvoke(args)
                             result = res if isinstance(res, (str, list)) else json.dumps(res, ensure_ascii=False)
                         except Exception as e:
-                            result = json.dumps({"error": f"工具执行失败: {e}"}, ensure_ascii=False)
+                            result = json.dumps({"error": f"Tool execution failed: {e}"}, ensure_ascii=False)
                     # ── image_read：先抽出图片，再把正文换成桩（必须在 4000 截断之前）──
                     _img_u, _img_txt = _split_img(result)
                     if _img_u:
-                        if max_images > 0 and len(_pending_images) < max_images:
-                            _pending_images.append(_img_u)
-                            _img_note = "图片已作为图像附加，可直接查看像素"
-                        else:
-                            _img_note = ("本次未内联图片：当前档案 max_images=%d（声明为非读图档案）。"
-                                         "不要试图靠读 base64 文本猜图内容——需要图面数据请改由 "
-                                         "fenton-image / fenton-verifier 档案处理，或读归档的 FigureN.txt 图注文字。"
-                                         % max_images)
+                        _pending_images.append(_img_u)
                         result = json.dumps({"ok": True, "mode": "image",
-                                             "note": _img_note,
+                                             "note": "The image is attached as an image block; inspect the pixels directly",
                                              "meta": _img_txt},
                                             ensure_ascii=False)
                     elif isinstance(result, list):
@@ -306,11 +299,11 @@ async def run_subagent(goal: str, context: str = "", tools: list[str] | None = N
                     messages.append({"role": "tool", "tool_call_id": tc.get("id") or name,
                                      "content": str(result)[:proc_max_chars]})
                 if _pending_images:
-                    _vis = [{"type": "text", "text": "[系统] 上一步工具返回的图片如下，可直接读取像素："}]
+                    _vis = [{"type": "text", "text": "[System] The previous tool returned the following images; inspect the pixels directly:"}]
                     _vis += [{"type": "image_url", "image_url": {"url": _u}} for _u in _pending_images]
                     messages.append({"role": "user", "content": _vis})
                     _pending_images.clear()
-            summary = summary or "（子智能体达到轮次上限，未给出明确结论）"
+            summary = summary or "(subagent hit the round limit without a clear conclusion)"
 
     _hard = int(_T.get("abort") or SUBAGENT_TIMEOUT_DEFAULT)
     try:
@@ -318,16 +311,16 @@ async def run_subagent(goal: str, context: str = "", tools: list[str] | None = N
     except asyncio.TimeoutError:
         seconds = round(time.time() - t0, 1)
         _pf.reset_current_profile(_tok)
-        return {"ok": False, "error": f"子任务超时（{_hard}s）", "goal": goal, "profile": _prof_name,
+        return {"ok": False, "error": f"Subtask timed out ({_hard} s)", "goal": goal, "profile": _prof_name,
                 "status": "failed", "steps": steps, "rounds": rounds_used, "seconds": seconds}
     except Exception as e:
         _pf.reset_current_profile(_tok)
-        return {"ok": False, "error": f"子智能体异常：{e}", "goal": goal, "profile": _prof_name,
+        return {"ok": False, "error": f"Subagent error: {e}", "goal": goal, "profile": _prof_name,
                 "status": "failed", "steps": steps, "rounds": rounds_used,
                 "seconds": round(time.time() - t0, 1)}
 
     if not summary:
-        summary = "（子智能体未产出结论）"
+        summary = "(subagent produced no conclusion)"
     # 结论状态行（档案 status_line）→ 结构化字段，供主控评估「要不要重派/换档案重派」
     _clean, _meta = _pf.parse_status(summary)
     out = {"ok": True, "summary": _clean or summary, "goal": goal, "context": context,
@@ -336,7 +329,7 @@ async def run_subagent(goal: str, context: str = "", tools: list[str] | None = N
     out.update(_meta)
     if _meta.get("status") == "failed":
         out["ok"] = False
-        out["error"] = _meta.get("missing") or "子智能体自报 failed"
+        out["error"] = _meta.get("missing") or "subagent reported failed"
     _pf.reset_current_profile(_tok)
     return out
 

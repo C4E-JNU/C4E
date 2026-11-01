@@ -5,20 +5,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>C4EAI TruthCross Agent</title>
-    <!-- ★ FOUC 防护（2026-10-06）：WebView2/浏览器首帧在 CSS 就绪前会把原始 HTML 文本画出来
-         （用户看到的"右上角杂乱的字"）。body 先隐去，DOMContentLoaded（= 本地 CSS 全部应用）后显示。
-         用 visibility 而非 opacity：无过渡、首帧即终态；html 底色对齐默认浅色主题。 -->
+    <!-- FOUC guard (2026-10-06): before CSS is ready WebView2/browsers paint raw HTML text
+              (the "garbled text in the top-right corner" users saw). Hide body first, show it after DOMContentLoaded
+              (= all local CSS applied). Use visibility rather than opacity: no transition, final state on first frame. -->
     <style>html{background:#f6f7f9}body{visibility:hidden}body.fouc-on{visibility:visible}</style>
     <script>addEventListener('DOMContentLoaded',function(){requestAnimationFrame(function(){document.body.classList.add('fouc-on')})});</script>
-    <!-- 站点图标（标签页 / 书签 / 手机主屏）= C4E 字标，源图：C4E-mark-透明底.png
-         字标是浅蓝渐变，在浅色标签栏上对比不足（16px 几乎看不见）→ 统一用加深 30% 的版本生成。
-         ?v=2 是必需的：浏览器对 favicon 的缓存极顽固，换图不破缓存会一直显示旧图标。 -->
+    <!-- Site icon (tab / bookmark / mobile home screen) = C4E wordmark, source: C4E-mark-transparent.png
+              The wordmark is a light-blue gradient with poor contrast on light tab bars (almost invisible at 16px),
+              so a 30%-darkened version is generated. ?v=2 is required: browsers cache favicons aggressively. -->
     <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/c4e-app-32.png?v=5">
     <link rel="icon" type="image/png" sizes="16x16" href="assets/icons/c4e-app-16.png?v=5">
     <link rel="icon" type="image/png" href="assets/icons/c4e-app-48.png?v=5">
     <link rel="icon" type="image/x-icon" href="assets/icons/c4e-app.ico?v=5">
     <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png?v=5">
-    <!--与代码高亮和Markdown渲染相关的CDN-->
+    <!-- CDN for code highlighting and Markdown rendering -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
@@ -27,13 +27,13 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/copy-tex.min.js"></script>
-    <!-- 文档解析库 -->
+    <!-- Document parsing library -->
      <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <!-- Neo4j 驱动（浏览器直连图谱） -->
+    <!-- Neo4j driver (direct browser-to-graph connection) -->
     <script src="https://unpkg.com/neo4j-driver@5"></script>
 
-    <!-- 本地样式文件 -->
+    <!-- Local stylesheets -->
     <link rel="stylesheet" href="css/variables.css?v=10">
     <link rel="stylesheet" href="css/reset.css?v=5">
     <link rel="stylesheet" href="css/layout.css?v=57">
@@ -54,12 +54,12 @@
 
 <body>
     <script>
-        /* ★ 恢复上次的视图（在第一帧之前、在下列节点解析之前）。
-           为什么必须做：窗口最小化时 WebView2 可能被系统回收并**整页重载**，
-           而 full-screen-mode 是个纯运行时的 body 类 —— 重载后就丢了，
-           用户看到的是"像刷新了一下，然后回到落地页"（用户反馈过的现象）。
-           把视图存下来，重载后原样回去，重载对用户就不可见。
-           用户偏好："进入对话界面/回到落地页"由他自己决定，所以两个状态都记。 */
+        /* Restore the last view (before the first frame and before the nodes below are parsed).
+              Why: when the window is minimized, WebView2 may be reclaimed and the whole page reloaded;
+              full-screen-mode is a runtime-only body class and is lost on reload, so users see
+              "it looks like it refreshed and went back to the landing page". Persisting the view
+              makes the reload invisible. Both states are stored because the user decides
+              whether to enter the chat view or return to the landing page. */
         try {
             if (localStorage.getItem('c4eai-view-mode') === 'chat') {
                 document.body.classList.add('full-screen-mode');
@@ -70,16 +70,16 @@
             if (b && document.body.classList.contains('full-screen-mode')) b.classList.add('active');
         });
     </script>
-    <!-- 导航栏 -->
+    <!-- Navigation bar -->
     <header>
         <div class="container nav-container">
-            <!-- 召唤对话管理 = 点顶栏 C4E logo（sidebar.js 委托绑定；窄空间开抽屉、桌面展开侧栏） -->
+            <!-- Summon conversation manager = click the C4E logo in the top bar (bound in sidebar.js) -->
             <div class="logo-area">
                 <div class="c4e-art-logo"><img src="assets/icons/c4e-app-48.png?v=6" alt="C4E"></div>
             </div>
-            <!-- 窄空间：logo 后跟当前对话名（.nav-container.tight 时显示） -->
+            <!-- Narrow layout: current conversation name after the logo (shown when .nav-container.tight) -->
             <div class="header-chat-title" id="header-chat-title"></div>
-            <!-- 主题按键：点开色板浮层（唯一入口；旧的 ⋯ 面板已废） -->
+            <!-- Theme button: opens the palette popover (the only entry point; the old ... panel is retired) -->
             <div class="theme-slot">
                 <button type="button" class="theme-btn" id="theme-btn" title="Theme" aria-label="Theme" data-i18n-title="theme.title">
                     <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true">
@@ -104,7 +104,7 @@
                     </div>
                 </div>
             </div>
-            <!-- Shared Wiki（直达数据库面板）：简笔画书形图标，字样由溢出阶梯收 -->
+            <!-- Shared Wiki (opens the database panel): simple book icon, label collapses by overflow tier -->
             <button type="button" class="db-analysis-btn" id="db-analysis-btn">
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true">
                     <path d="M8 3.4C6.6 2.2 4.4 1.9 1.6 1.9v10c2.8 0 5 .3 6.4 1.5 1.4-1.2 3.6-1.5 6.4-1.5v-10c-2.8 0-5 .3-6.4 1.5z"/>
@@ -112,7 +112,7 @@
                 </svg>
                 <span class="btn-text">Shared Wiki</span>
             </button>
-            <!-- XWiki 快捷入口：点击新标签页打开 138 上的 XWiki -->
+            <!-- XWiki shortcut: opens XWiki on 138 in a new tab -->
             <a href="http://<HUB-IP>:8090/bin/view/Main/" target="_blank" rel="noopener" class="db-analysis-btn xwiki-btn" id="xwiki-btn" title="XWiki">
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true">
                     <circle cx="8" cy="8" r="6.5"/>
@@ -120,12 +120,12 @@
                 </svg>
                 <span class="btn-text">XWiki</span>
             </a>
-            <!-- 右侧字标：空间挤压（.tight）时收起只留 logo —— 溢出阶梯见 js/topbar.js -->
+            <!-- Right wordmark: collapses to the logo alone when space is tight (overflow tiers in js/topbar.js) -->
             <div class="header-brand" id="header-brand">
                 <span class="brand-name">C4EAI</span>
                 <span class="brand-sub" data-i18n="brand.sub">Computing for Environment Group · Jiangnan University</span>
             </div>
-            <!-- 桌面外壳（exe）窗口三键：浏览器无 .desktop-app 整块隐藏，字标自动右推 -->
+            <!-- Desktop shell (exe) window buttons: hidden entirely in browsers without .desktop-app -->
             <div class="win-controls" id="win-controls">
                     <button class="win-btn" id="win-min" type="button" title="Minimize" aria-label="Minimize" data-i18n-title="win.min"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5.5h10" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
                     <button class="win-btn" id="win-max" type="button" title="Maximize" aria-label="Maximize" data-i18n-title="win.max"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
@@ -134,7 +134,7 @@
         </div>
     </header>
 
-    <!-- 对话重命名小浮层 -->
+    <!-- Conversation rename popover -->
     <div class="popup-panel" id="rename-branch-modal">
         <h3 data-i18n="rename.title">Rename Conversation</h3>
         <input type="text" id="rename-branch-name-input" class="branch-name-input" placeholder="New name" data-i18n-ph="rename.ph">
@@ -144,29 +144,29 @@
         </div>
     </div>
 
-    <!-- 数据库面板（浮动窗，与笔记面板同形态；条目按用户分组展示） -->
+    <!-- Database panel (floating window, same shape as the notes panel; items grouped by user) -->
     <div class="notes-panel" id="database-panel" style="top:140px;left:auto;right:40px;width:520px;height:600px;">
         <div class="notes-panel-header" id="db-panel-header">
             <span class="notes-panel-title" data-i18n="db.title">🗄️ Database</span>
-            <span id="database-status-badge" style="font-size:0.78rem;color:var(--gray);margin-left:.5rem;">0 个条目</span>
+            <span id="database-status-badge" style="font-size:0.78rem;color:var(--gray);margin-left:.5rem;">0 entries</span>
             <div class="notes-panel-actions">
-                <!-- 上传/添加按钮已下沉到每个文件夹行（用户 2026-09-25 定）—— 见树渲染 -->
-                <!-- 筛选/排序：外置 -->
+                <!-- Upload/add buttons moved into each folder row (decided 2026-09-25) - see tree rendering -->
+                <!-- Filter/sort: external -->
                 <span class="db-filter-wrap">
                     <button id="db-f-owner-btn" title="Filter by uploader" aria-haspopup="true" data-i18n-title="db.f.owner">
-                        <span id="db-f-owner-label">👤 全部</span> ▾
+                        <span id="db-f-owner-label">👤 All</span> ▾
                     </button>
                     <div class="db-filter-menu" id="db-f-owner-menu" role="menu" hidden></div>
                 </span>
                 <span class="db-filter-wrap">
                     <button id="db-f-year-btn" title="Filter by year" aria-haspopup="true" data-i18n-title="db.f.year">
-                        <span id="db-f-year-label">📅 全部</span> ▾
+                        <span id="db-f-year-label">📅 All</span> ▾
                     </button>
                     <div class="db-filter-menu" id="db-f-year-menu" role="menu" hidden></div>
                 </span>
                 <span class="db-filter-wrap">
                     <button id="db-f-sort-btn" title="Sort order" aria-haspopup="true" data-i18n-title="db.f.sort">
-                        <span id="db-f-sort-label">🕒 最新</span> ▾
+                        <span id="db-f-sort-label">🕒 Newest</span> ▾
                     </button>
                     <div class="db-filter-menu" id="db-f-sort-menu" role="menu" hidden>
                         <button class="db-filter-item active" data-sort="time" role="menuitem" data-i18n="db.sort.new">🕒 Newest first</button>
@@ -185,13 +185,13 @@
         <div class="notes-list" id="db-doc-list" style="flex:1;overflow-y:auto;padding:0.6rem;"></div>
     </div>
 
-    <!-- 设置面板和遮罩 -->
-        <!-- 设置：模态框，左分类 / 右内容（原「智能体配置」内联卡已整块并入本面板，无第二套壳） -->
+    <!-- Settings panel and overlay -->
+        <!-- Settings: modal with categories on the left and content on the right -->
     <div class="settings-overlay" id="settings-overlay"></div>
     <div class="settings-panel" id="settings-panel">
         <div class="settings-head">
             <span class="settings-title" data-i18n="set.title">Settings</span>
-            <button class="key-btn" id="save-settings">保存</button>
+            <button class="key-btn" id="save-settings">Save</button>
             <button class="close-panel-btn" id="close-settings" title="Close" data-i18n-title="btn.close">×</button>
         </div>
         <div class="settings-body">
@@ -242,7 +242,7 @@
                         <div class="setting-item">
                                              <label class="setting-label">
                                                  <span data-i18n="set.budget">Compaction threshold</span>
-                                                 <span class="setting-value" id="context-budget-value">0（自动）</span>
+                                                 <span class="setting-value" id="context-budget-value">0 (auto)</span>
                                              </label>
                                              <input type="number" min="0" max="2000000" step="1000" value="0" class="number-input"
                                                  id="context-budget">
@@ -266,12 +266,12 @@
                                             <label class="setting-label" data-i18n="pp.config">Provider Configuration</label>
                                         <div class="models-content-wrapper">
                                             <div class="provider-layout">
-                                                <!-- 左侧服务商列表 -->
+                                                <!-- Provider list on the left -->
                                                 <div class="provider-sidebar" id="provider-list">
-                                                    <!-- JS动态生成 -->
+                                                    <!-- Generated by JS -->
                                                 </div>
 
-                                                <!-- 右侧配置区域 -->
+                                                <!-- Configuration area on the right -->
                                                 <div class="provider-content" id="provider-config-area">
                                                     <div class="provider-header">
                                                         <div class="provider-title">
@@ -282,15 +282,15 @@
                                                             style="display: none; background: var(--error); color: white;" data-i18n="pp.delete">Delete Provider</button>
                                                     </div>
 
-                                                    <!-- 配置表单 -->
+                                                    <!-- Configuration form -->
                                                     <div class="config-group">
                                                         <div class="form-group-item">
-                                                            <label class="form-label">API 域名 (Base URL)</label>
+                                                            <label class="form-label">API Base URL</label>
                                                             <input type="text" class="form-input" id="provider-endpoint"
-                                                                placeholder="例如: https://api.openai.com/v1">
+                                                                placeholder="e.g. https://api.openai.com/v1">
                                                         </div>
                                                         <div class="form-group-item">
-                                                            <label class="form-label">API 密钥 (API Key)</label>
+                                                            <label class="form-label">API Key</label>
                                                             <input type="password" class="form-input" id="provider-apikey" placeholder="sk-...">
                                                         </div>
                                                     </div>
@@ -298,11 +298,11 @@
                                                         <button class="save-config-btn" id="save-provider-config" data-i18n="pp.save">Save</button>
                                                     </div>
 
-                                                    <!-- 模型列表 -->
+                                                    <!-- Model list -->
                                                     <div>
                                                         <h4 style="margin-bottom: 1rem; color: var(--dark);" data-i18n="pp.models">Available Models</h4>
                                                         <div class="models-grid-compact" id="provider-models-list">
-                                                            <!-- JS动态生成 -->
+                                                            <!-- Generated by JS -->
                                                         </div>
                                                     </div>
                                                 </div>
@@ -407,14 +407,14 @@
                         <div class="config-section">
                                                             <div class="config-section-title"><span data-i18n="pa.tools">Tools</span> <span style="font-size:0.75rem;color:var(--gray);font-weight:normal" data-i18n="pa.tools.d">(checked = available to the LLM; from backend tools_registry)</span></div>
                                                             <div id="tools-groups-container" style="min-height:2rem;">
-                                                                <!-- 由 agent_config.js 从后端 /api/tools 按分组动态渲染 -->
+                                                                <!-- Rendered by agent_config.js from the backend /api/tools, grouped -->
                                                                 <div style="font-size:0.8rem;color:var(--gray);padding:0.25rem 0;" data-i18n="loading">Loading…</div>
                                                             </div>
                                                          </div>
                         <div class="config-section">
                                                         <div class="config-section-title">Skill</div>
                                                         <div id="skills-config-container">
-                                                            <!-- 由 JS 从 skills/index.json 动态生成 -->
+                                                            <!-- Generated by JS from skills/index.json -->
                                                             <div style="font-size:0.8rem;color:var(--gray);padding:0.25rem 0;" data-i18n="loading">Loading…</div>
                                                         </div>
                                                         </div>
@@ -565,9 +565,9 @@
     </div>
 
 
-    <!-- 主内容区 -->
+    <!-- Main content area -->
     <main class="container">
-        <!-- 英雄区域 -->
+        <!-- Hero area -->
         <section class="hero">
             <div style="text-align:center;">
                 <img src="assets/icons/c4e-logo.png" alt="C4EAI" class="hero-logo">
@@ -576,7 +576,7 @@
             </div>
             <div><button id="start-experience" class="cta-button" style="margin-top:2.2rem;" data-i18n="hero.start">Get Started →</button></div>
 
-            <!-- 远程控制：手机/其他电脑用固定地址打开这台电脑的 C4EAI（隧道见项目根 tunnel.py） -->
+            <!-- Remote control: open this computer's C4EAI from a phone or another PC (tunnel: see tunnel.py) -->
             <button id="remote-ctrl-btn" class="remote-ctrl-btn" type="button" title="Access this machine from a phone or another computer" data-i18n-title="remote.btn.t">
                 <span class="remote-dot"></span><span data-i18n="remote.btn">Remote Access</span>
             </button>
@@ -597,31 +597,31 @@
 
 
 
-        <!-- 添加自定义模型/服务商的模态框（统一 .modal/.modal-content） -->
+        <!-- Add custom model/provider modal (unified .modal/.modal-content) -->
         <div class="modal" id="add-custom-modal">
             <div class="modal-content" style="max-width:420px;">
                 <h3 data-i18n="m.model">Add Custom Model</h3>
                 <div class="form-group-item">
-                    <label class="form-label">模型名称 (Display Name)</label>
+                    <label class="form-label">Display Name</label>
                     <input type="text" class="form-input" id="custom-model-name" placeholder="e.g. My Llama 3">
                 </div>
                 <div class="form-group-item">
-                    <label class="form-label">模型ID (Model ID)</label>
+                    <label class="form-label">Model ID</label>
                     <input type="text" class="form-input" id="custom-model-id"
                         placeholder="e.g. meta-llama/Llama-3-8B-Instruct">
                 </div>
                 <div class="form-group-item">
-                    <label class="form-label">模型描述 (Description)</label>
+                    <label class="form-label">Description</label>
                     <input type="text" class="form-input" id="custom-model-desc" placeholder="e.g. General-purpose assistant">
                 </div>
                 <div class="modal-actions">
-                    <button class="chat-btn" id="cancel-add-model">取消</button>
+                    <button class="chat-btn" id="cancel-add-model">Cancel</button>
                     <button class="save-config-btn" id="confirm-add-model" data-i18n="btn.add">Add</button>
                 </div>
             </div>
         </div>
 
-        <!-- 添加自定义服务商模态框 -->
+        <!-- Add custom provider modal -->
         <div class="modal" id="add-provider-modal">
             <div class="modal-content" style="max-width:420px;">
                 <h3 data-i18n="m.provider">Add Custom Provider</h3>
@@ -638,18 +638,18 @@
                     <input type="text" class="form-input" id="new-provider-desc" placeholder="One-line description" data-i18n-ph="m.provider.desc.ph">
                 </div>
                 <div class="modal-actions">
-                    <button class="chat-btn" id="cancel-add-provider">取消</button>
+                    <button class="chat-btn" id="cancel-add-provider">Cancel</button>
                     <button class="save-config-btn" id="confirm-add-provider" data-i18n="btn.create">Create</button>
                 </div>
             </div>
         </div>
 
-        <!-- 聊天界面 -->
+        <!-- Chat interface -->
         <section class="chat-section">
-            <!-- 左侧聊天历史侧滑栏 -->
+            <!-- Chat history sidebar on the left -->
             <div class="chat-sidebar" id="chat-sidebar">
                 <div class="sidebar-header">
-                    <!-- 顶部标题行: 点击 C4E 图标可折叠搜索/过滤区 -->
+                    <!-- Header row: click the C4E icon to collapse the search/filter area -->
                     <div class="sidebar-top-bar">
                         <div class="sidebar-top-bar-title" onclick="toggleSidebarHeader()" style="display: flex; align-items: center; cursor: pointer; flex:1; user-select:none;">
                             <div class="c4e-sidebar-art-logo"><img src="assets/icons/c4e-app-48.png?v=6" alt="C4E"></div>
@@ -665,7 +665,7 @@
                         </div>
                     </div>
 
-                    <!-- 搜索栏 -->
+                    <!-- Search bar -->
                     <div class="sidebar-search-area">
                         <div class="search-input-wrapper">
                             <span class="search-icon">🔍</span>
@@ -673,7 +673,7 @@
                         </div>
                     </div>
 
-                    <!-- 过滤与操作行 -->
+                    <!-- Filter and action row -->
                     <div class="sidebar-controls-row">
                         <div class="history-filters">
                             <button class="filter-btn active" data-filter="all" data-i18n="sb.all">All</button>
@@ -693,19 +693,19 @@
                         </button>
                     </div>
                 </div>
-                <!-- 账号行：身份信息放侧栏底部（③方案B，Codex/VS Code 做法）——内容由 auth.js 渲染 -->
+                <!-- Account row: identity at the bottom of the sidebar, rendered by auth.js -->
                 <div class="side-account" id="auth-side-row"></div>
             </div>
 
-            <!-- 左右占比分隔拖条（历史侧栏 ↔ 聊天） -->
+            <!-- Drag handle for the sidebar/chat split -->
             <div class="sidebar-resizer" id="sidebar-resizer" title="Drag to resize sidebar" data-i18n-title="sb.resize"></div>
 
-            <!-- 侧边栏切换按钮 (仅全屏模式显示，提到 chat-main 外面避免被遮挡) -->
+            <!-- Sidebar toggle (full-screen mode only; placed outside chat-main so it is not covered) -->
             <button id="sidebar-toggle-btn" class="sidebar-toggle-btn" title="Toggle sidebar" data-i18n-title="sb.toggle">
                  <!-- Icon via CSS -->
              </button>
 
-             <!-- 笔记面板 -->
+             <!-- Notes panel -->
              <div class="notes-panel" id="notes-panel">
                  <div class="notes-panel-header">
                      <span class="notes-panel-title" data-i18n="notes.title">📝 Chat Notes</span>
@@ -721,14 +721,14 @@
                  <div class="notes-list" id="notes-list"></div>
              </div>
 
-             <!-- 主聊天区域 -->
+             <!-- Main chat area -->
              <div class="chat-main">
 
                 <div class="chat-container">
 
-                    <!-- 智能体思考：收起浮动键（对话区右侧留白，垂直居中）—— 只在屏幕上真的有未收起的思考时出现 -->
-                    <!-- 「快速回答」浮动键：贴着「收起思考」键正下方。只在生成中出现。
-                         2026-10-21 用户定：与发送位的「终止」对调——终止放发送位，催促放这里。 -->
+                    <!-- Agent thinking: floating collapse button (right gutter of the chat area, vertically centered) -->
+                    <!-- "Quick answer" floating button directly below the collapse-thinking button; only during generation.
+                              2026-10-21: swapped with "Stop" at the send position. -->
                     <button class="reasoning-rail-btn agent-nudge-btn" id="agent-nudge-btn" hidden title="Nudge: ask it to answer now (nothing is lost)" data-i18n-title="gen.nudge.t">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                             <path d="M13 2 3 14h7l-1 8 12-14h-8l1-6z"/>
@@ -758,7 +758,7 @@
                     </div>
 
                     <div class="input-area">
-                        <!-- 文件上传面板 (可展开/收起) -->
+                        <!-- File upload panel (collapsible) -->
                         <div class="file-upload-panel" id="file-upload-panel">
                             <div class="upload-panel-header">
                                 <span class="upload-panel-title" data-i18n="up.title">📎 Add Files</span>
@@ -774,35 +774,35 @@
                                  accept="image/*,.pdf,.docx,.pptx,.odt,.txt,.md,.rtf,.json,.csv,.xml,.log,.toml,.ini,.js,.py,.java,.cpp,.c,.h,.ts,.jsx,.tsx,.go,.rs,.php,.rb,.swift,.kt,.sh,.yaml,.yml,.sql,.html,.css,.lua,.r,.pl,.tex,.bat,.ps1" style="display: none;">
                         </div>
 
-                        <!-- 智能体配置面板 -->
+                        <!-- Agent configuration panel -->
                         
 
-                        <!-- 展开的消息输入区域 -->
+                        <!-- Expanded message input area -->
                         <div class="expanded-message-area" id="expanded-message-area">
                             <textarea id="expanded-textarea" class="expanded-textarea" placeholder="Type a message (multi-line)…" data-i18n-ph="in.expanded"></textarea>
                         </div>
 
-                        <!-- 输入行 -->
-                        <!-- 现代化输入条 -->
+                        <!-- Input row -->
+                        <!-- Modern input bar -->
                         <div class="modern-input-bar">
-                            <!-- 附件 -->
+                            <!-- Attachments -->
                             <button class="tool-icon-btn" id="attachment-btn" title="Attach files" data-i18n-title="in.attach">
                                 <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
                             </button>
-                            <!-- 展开消息 -->
+                            <!-- Expanded message -->
                             <button class="expand-btn" id="expand-btn" title="Expand input" data-i18n-title="in.expand">
                                 <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
                             </button>
 
-                            <!-- 输入框 -->
+                            <!-- Input box -->
                             <div class="input-field-container">
                                 <textarea id="message-input" class="modern-input" placeholder="Type a message…"
                                     rows="1" data-i18n-ph="in.main"></textarea>
                             </div>
 
-                            <!-- 右侧操作区 -->
+                            <!-- Right-side action area -->
                             <div class="input-actions-right">
-                                <!-- 模型选择 (紧凑) -->
+                                <!-- Model selector (compact) -->
                                 <div class="compact-model-select" title="Select model" data-i18n-title="in.model">
                                     <select id="chat-model-selector">
                                         <option value="" disabled selected>API</option>
@@ -810,21 +810,21 @@
                                 </div>
 
 
-                                <!-- 发送给 LLM 的上下文 Token 数（含压缩） -->
+                                <!-- Context token count sent to the LLM (including compression) -->
                                 <div class="context-size-display" id="context-size-display" title="Tokens sent to the model (after compaction)" data-i18n-title="in.ctx">
                                     <span id="context-size-text">0</span>
                                 </div>
 
 
-                                <!-- 设置按钮 -->
+                                <!-- Settings button -->
                                 <button class="tool-icon-btn" id="settings-btn" title="Settings" data-i18n-title="set.title">
                                     <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                                 </button>
 
-                                <!-- 全屏开关 (图标) -->
-                                <!-- 已移至侧边栏 -->
+                                <!-- Full-screen toggle (icon) -->
+                                <!-- Moved to the sidebar -->
 
-                                <!-- 发送按钮 (圆形) -->
+                                <!-- Send button (circular) -->
                                 <button id="send-btn" class="send-circle-btn btn-disabled" title="Send" data-i18n-title="in.send">
                                     <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
                                 </button>
@@ -838,10 +838,10 @@
 
 
 
-    <!-- 脚本文件 (按依赖顺序) -->
+    <!-- Scripts (in dependency order) -->
     <script src="js/i18n.js?v=6"></script>
     <script src="js/state.js?v=23"></script>
-    <!-- 个人设置后端存储（必须在其它模块之前：hydrate 要把后端设置灌回缓存） -->
+    <!-- Personal settings stored in the backend (must load before other modules) -->
     <script src="js/user_settings.js?v=2"></script>
     <script src="js/user_chats.js?v=9"></script>
     <script src="js/events.js?v=1"></script>
@@ -861,8 +861,8 @@
     <script src="js/tools.js?v=6"></script>
     <script src="js/graph_rag.js?v=27"></script>
     <script src="js/note_refs.js?v=3"></script>
-    <script src="js/subagent_view.js?v=4"></script>
-    <!-- 前端工具注册表已删除（工具全部由后端提供） -->
+    <script src="js/subagent_view.js?v=5"></script>
+    <!-- Frontend tool registry removed (all tools come from the backend) -->
     <script src="js/skill_system.js?v=3"></script>
     <script src="js/agent_config.js?v=15"></script>
     <script src="js/ui.js?v=14"></script>
@@ -884,7 +884,7 @@
         <button class="menu-item danger" data-action="delete" data-i18n="bub.del">🗑️ Delete</button>
     </div>
 
-    <!-- 添加气泡面板 -->
+    <!-- Add-bubble panel -->
     <div class="popup-panel bubble-add-panel" id="bubble-add-panel">
         <input type="text" id="bubble-add-input" placeholder="Bubble text…" data-i18n-ph="bub.ph">
         <div class="panel-btns">
@@ -894,27 +894,27 @@
         </div>
     </div>
 
-    <!-- 隐藏的文件选择器用于气泡链接文件（支持多选） -->
+    <!-- Hidden file picker for bubble-linked files (multi-select) -->
     <input type="file" id="bubble-file-input" style="display:none" multiple>
 
-    <!-- 气泡编辑小浮层 -->
+    <!-- Bubble edit popover -->
     <div class="popup-panel" id="bubble-edit-modal">
         <h3 data-i18n="bub.edittitle">Edit Bubble Text</h3>
         <input type="text" id="bubble-edit-input" placeholder="New bubble text" data-i18n-ph="bub.editph">
         <div class="popup-actions">
-            <button class="chat-btn" onclick="document.getElementById('bubble-edit-modal').classList.remove('show')">取消</button>
+            <button class="chat-btn" onclick="document.getElementById('bubble-edit-modal').classList.remove('show')">Cancel</button>
             <button class="key-btn" id="bubble-edit-confirm" data-i18n="btn.ok">OK</button>
         </div>
     </div>
 
-    <!-- 统一浮动 Markdown 编辑器（可拖动、可调整大小） -->
+    <!-- Unified floating Markdown editor (draggable, resizable) -->
     <div class="floating-editor" id="floating-editor">
         <div class="fe-header" id="fe-header">
             <span class="fe-title" id="fe-title" data-i18n="ed.title">Edit Content</span>
             <button class="fe-close" title="Close" data-i18n-title="btn.close" onclick="window.__feCancel && window.__feCancel()">×</button>
         </div>
         <div class="fe-title-row" id="fe-title-row" style="display:none;">
-            <input type="text" id="fe-title-input" placeholder="标题">
+            <input type="text" id="fe-title-input" placeholder="Title">
         </div>
         <div class="fe-toolbar">
             <button class="fe-btn" id="fe-undo" title="Undo" data-i18n-title="ed.undo" onclick="window.__feUndo && window.__feUndo()">↶</button>
@@ -939,21 +939,21 @@
             <button class="fe-btn" title="Edit selected image" data-i18n-title="ed.editimg" data-i18n="ed.editimg.l" onclick="window.__feEditImage && window.__feEditImage()">✂️ Image</button>
             <button class="fe-btn" title="Link" data-i18n-title="ed.link" data-i18n="ed.link.l" onclick="window.__feLink()">Link</button>
             <span class="fe-sep"></span>
-            <!-- 字号复合按钮：左=应用(显示当前档位)，右=展开下拉 -->
+            <!-- Font-size compound button: left applies (shows current level), right opens the dropdown -->
             <div class="fe-combo" data-combo="font">
                 <button class="fe-btn fe-combo-apply" id="fe-font-apply" title="Apply font size" data-i18n-title="ed.fontsize" onclick="window.__feSize()">
                     <span>A</span><span id="fe-font-value" style="font-size:0.7em;color:var(--gray);" data-i18n="ed.normal">Normal</span>
                 </button>
                 <button class="fe-btn fe-combo-arrow" title="Choose font size" data-i18n-title="ed.fontsize.s" onclick="window.__feDropdown('font', this)">▾</button>
             </div>
-            <!-- 着色复合按钮：左=应用(显示当前色标)，右=展开下拉 -->
+            <!-- Color compound button: left applies (shows current color), right opens the dropdown -->
             <div class="fe-combo" data-combo="color">
                 <button class="fe-btn fe-combo-apply" id="fe-color-apply" title="Apply color" data-i18n-title="ed.color" onclick="window.__feColor()">
                     <span style="font-weight:600;">A</span><span class="fe-color-bar" id="fe-color-bar"></span>
                 </button>
                 <button class="fe-btn fe-combo-arrow" title="Choose color" data-i18n-title="ed.color.s" onclick="window.__feDropdown('color', this)">▾</button>
             </div>
-            <!-- 隐藏的原生控件：作为当前选择存储 + 供 applySize/applyColor 读取 -->
+            <!-- Hidden native controls: store the current selection and feed applySize/applyColor -->
             <select class="fe-size" id="fe-fontsize" style="display:none;">
                 <option value="0.8em" data-i18n="ed.size.small">Small</option>
                 <option value="1em" selected data-i18n="ed.size.normal">Normal</option>
@@ -971,7 +971,7 @@
         </div>
     </div>
 
-    <!-- 文件浮窗预览（应用内打开，可拖动/缩放/记忆位置，仿笔记浮窗） -->
+    <!-- File preview window (opens in-app, draggable/resizable, remembers position) -->
     <div class="file-preview-panel" id="file-preview-panel">
         <div class="file-preview-header" id="file-preview-header">
             <span class="file-preview-title" id="file-preview-title" data-i18n="fp.title">File Preview</span>

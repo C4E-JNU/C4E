@@ -485,7 +485,7 @@ async function reactAgentLoop(userQuestion, options /* {fileIds:[], note_refs:[]
                 else if (evType === 'timeout_notice') { handleTimeoutNotice(ev.level || 'nudge', ev.text || '', ev.elapsed || 0); }
                 else if (evType === 'final') { finalAnswer = ev.text || ''; currentRoundText = ''; answerDiv.textContent = finalAnswer; }
                 else if (evType === 'stopped') { finalAnswer = t('gr.stoppedGen'); currentRoundText = ''; answerDiv.textContent = (streamedText || '') + '\n\n⏹️ ' + t('gr.stopped'); }
-                else if (evType === 'error') { throw new Error(ev.message || '后端错误'); }
+                                else if (evType === 'error') { throw new Error(ev.message || 'Backend error'); }
             }
         }
         hideLiveStatus();     // 本轮结束：收掉转圈状态行

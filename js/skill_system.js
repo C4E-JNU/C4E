@@ -1,13 +1,13 @@
-// ==================== Skill 系统 ====================
-// 技能注册表在 skills/index.json，新增技能只需：
-//   1. 创建 skills/<name>/SKILL.md
-//   2. 在 skills/index.json 加一条记录
+// ==================== Skill system ====================
+// The skill registry lives in skills/index.json. To add a skill:
+//   1. Create skills/<name>/SKILL.md
+//   2. Add one record to skills/index.json
 //
-// 说明：skill_view / skill_list / skill_write 是**后端工具**（backend/agent/tools.py 的
-// tools_registry），由智能体直接调用；前端只负责读取技能索引用于配置面板勾选展示，
-// 不再注册任何前端工具（旧的 registerAgentTool 死代码已随 js/agent_tools.js 一并删除）。
+// Note: skill_view / skill_list / skill_write are backend tools (backend/agent/tools.py
+// tools_registry) called by the agent directly; the frontend only reads the index for the
+// settings checkboxes and registers no frontend tools (the old registerAgentTool code is gone).
 
-// ── 动态加载技能注册表 ──────────────────────
+// -- Load the skill registry dynamically --
 async function loadSkillsIndex() {
     try {
         const resp = await fetch('skills/index.json');
@@ -21,11 +21,11 @@ async function loadSkillsIndex() {
                 return index;
             }
         }
-    } catch(e) { /* 降级 */ }
-    return {};   // 拿不到就是没有（旧的硬编码兜底已删：技能描述的唯一来源是 skills/index.json）
+    } catch(e) { /* degrade gracefully */ }
+    return {};   // Missing means none (the old hardcoded fallback was removed; skills/index.json is the only source)
 }
 
-// 缓存
+// Cache
 let _skillsIndexCache = null;
 
 async function getSkillsIndex() {
@@ -35,5 +35,5 @@ async function getSkillsIndex() {
     return _skillsIndexCache;
 }
 
-// ── 暴露到全局 ──────────────────────────────────
+// -- Expose to the global scope --
 window.getSkillsIndex = getSkillsIndex;

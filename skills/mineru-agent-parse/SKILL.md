@@ -1,99 +1,99 @@
 ---
 name: mineru-agent-parse
-description: "把 PDF 解析并归档成'全文+按图注编号的图表文件夹'，产出 00_full_cleaned.md 与 00_images_map.json 清单，供图文互证与数据挖掘使用。需配 MinerU Token。"
+description: "Parse and archive PDFs into a 'full text + figures/tables filed by caption number' layout, producing 00_full_cleaned.md and the 00_images_map.json manifest for cross-modal verification and data mining. Requires a MinerU token."
 version: 4.2.0
 tags: [mineru, pdf, parse, archive, literature]
 ---
 
-# MinerU 解析 + 归档（PDF → 全文 + 按图注编号归档的图片 + 清单）
+# MinerU Parsing + Archiving (PDF → full text + figures filed by caption number + manifest)
 
-把一篇/一批 PDF 变成后续可复用的标准中间产物：**清洗全文 `00_full_cleaned.md` + 图片按图注编号归到 `images/FigureN/` + 映射清单 `00_images_map.json`**。这是「高阶文献翻译」「图文挖掘」等技能的数据源，先跑本技能归档。
+Turn one or many PDFs into standard intermediate products reusable downstream: **cleaned full text `00_full_cleaned.md` + images filed by caption number into `images/FigureN/` + mapping manifest `00_images_map.json`**. This is the data source for later skills such as literature translation and figure-text mining; archive first.
 
-## 何时用
+## When to use
 
-- 用户上传 PDF、给出 PDF 文件或含 PDF 的文件夹路径，要解析/提取内容；
-- 要把文献做成「正文 + 图表归档」的规整目录，供翻译、图文互证、数据挖掘；
-- 只要 Markdown 正文时也可只跑第 1 步；要图片归类和清单则跑完 1→2→3。
+- The user uploads a PDF, gives a PDF path or a folder containing PDFs, and wants the content parsed or extracted;
+- A paper must be turned into a tidy "text + archived figures and tables" directory for translation, cross-modal verification or data mining;
+- If only the Markdown body is needed, run step 1 alone; for image filing and the manifest, run 1→2→3.
 
-## 前置条件
+## Prerequisites
 
-1. **MinerU Token 已配置**：『智能体配置』面板 → MinerU 解析配置，填 Token 保存（会过期）。
-2. 归档脚本用 Python 标准库解压，建议用 **terminal** 工具运行（需要「询问/完全访问」权限以读写 workspace）；纯计算也可 `run_code` 内联，但 `terminal` 更稳。
-3. 输出统一落在 `workspace/mineru_output/`（图片经静态挂载可用 `/workspace/...` URL 访问）。
+1. **MinerU token configured**: Agent Configuration panel → MinerU parsing configuration, enter the token and save (it expires).
+2. The archiving script uses the Python standard library; run it with the **terminal** tool (needs "ask/full access" permission to read and write the workspace). Pure computation can also be inlined in `run_code`, but `terminal` is more stable.
+3. Output goes to `workspace/mineru_output/` (images are statically mounted and reachable at `/workspace/...` URLs).
 
-**🔒 本技能的读文件白名单（铁律）**：归档全部由脚本完成，**你不需要读任何 json**。允许读的只有：
-- 脚本 stdout 的 JSON 结果（核验用）；
-- `00_images_map.json`（抽查图表清单，约 20KB，安全）；
-- `images/FigureN/FigureN.txt`（抽查某图图注）。
-**❌ 禁止读**：`layout.json`、`*_model.json`、`*_content_list_v2.json`、`*_content_list.json`——它们是几 MB 级坐标/模型转储或脚本内部索引，读它们曾直接把上下文撑到 890 万 token 导致 400 报错。选哪个 content_list 是脚本内部的事，与你无关。
+**🔒 File-reading whitelist for this skill (iron rule)**: all archiving is done by scripts, and **you never need to read any JSON**. The only permitted reads are:
+- the JSON printed by the script to stdout (for verification);
+- `00_images_map.json` (spot-checking the figure/table list, about 20 KB, safe);
+- `images/FigureN/FigureN.txt` (spot-checking one figure's caption).
+**❌ Never read**: `layout.json`, `*_model.json`, `*_content_list_v2.json`, `*_content_list.json` — they are multi-MB coordinate/model dumps or internal script indexes, and reading them once blew the context up to 8.9 million tokens and triggered a 400 error. Which content_list is used is the script's business, not yours.
 
-## 三步流程
+## Three-step flow
 
-### 第 1 步：解析（mineru_parse）
+### Step 1: Parse (mineru_parse)
 
 ```
-mineru_parse(path="workspace/uploads/xxx/某论文.pdf", out_dir="mineru_output")
-# 或批量：path 给一个含多个 PDF 的目录 → 递归扫 *.pdf，每批≤50，各输出一个同名 .zip
+mineru_parse(path="workspace/uploads/xxx/some_paper.pdf", out_dir="mineru_output")
+# or in bulk: pass a directory containing several PDFs → recursively scan *.pdf, ≤50 per batch, one same-named .zip each
 ```
-产物：`workspace/mineru_output/<论文名>.zip`。zip 是**扁平结构**：`full.md` / `images/<hash>.jpg` / `<uuid>_content_list.json` / `layout.json` / `..._origin.pdf`。
+Product: `workspace/mineru_output/<paper name>.zip`. The zip is **flat**: `full.md` / `images/<hash>.jpg` / `<uuid>_content_list.json` / `layout.json` / `..._origin.pdf`.
 
-返回 `downloaded` 里的 `zip` 路径就是下一步输入。
+The `zip` path in the returned `downloaded` list is the input to the next step.
 
-### 第 2 步：解压 + 图片归档 + 清洗 + 清单（自带脚本）
+### Step 2: Extract + file images + clean + manifest (bundled script)
 
-用 **terminal** 在项目根执行（脚本：`skills/mineru-agent-parse/scripts/mineru_archive.py`）：
+Run with **terminal** at the project root (script: `skills/mineru-agent-parse/scripts/mineru_archive.py`):
 
 ```bash
-# 单个 zip
-python skills/mineru-agent-parse/scripts/mineru_archive.py "workspace/mineru_output/<论文名>.zip"
-# 含多个 zip 的目录 → 批量
-python skills/mineru-agent-parse/scripts/mineru_archive.py "workspace/mineru_output" 
-# 也可指定输出根
+# a single zip
+python skills/mineru-agent-parse/scripts/mineru_archive.py "workspace/mineru_output/<paper name>.zip"
+# a directory of zips → bulk
+python skills/mineru-agent-parse/scripts/mineru_archive.py "workspace/mineru_output"
+# or specify the output root
 python skills/mineru-agent-parse/scripts/mineru_archive.py "<zip>" "workspace/mineru_output"
 ```
-脚本会：① 防目录穿越解压到 `<out>/<名>/`；② 读正确的 `*_content_list.json`（自动排除 `_v2`/`_model`/`layout`）；③ **以 full.md 的图注块为准归并子图**：`Fig./Table N` 图注前的连续若干 `images/<hash>` 视为同一张图的子图，一起复制进 `images/FigureN/`（一张多子图 → 同一文件夹的多张 jpg），并写 `FigureN.txt`（**完整英文图注** + 每个子图的 a/b/c 字母与页码）；表按 `Table N` 单独归档；content_list 仅用于补字母标号/页码/表格正文；④ 截 References 前正文写 `00_full_cleaned.md`；⑤ 写映射清单 `00_images_map.json`（含 `figures[]` 逻辑图分组，见下）。全程幂等（重跑覆盖），源 zip/论文目录不动。
+The script will: (1) extract safely (no path traversal) into `<out>/<name>/`; (2) read the correct `*_content_list.json` (automatically excluding `_v2`/`_model`/`layout`); (3) **group subfigures by the caption block in full.md**: the consecutive `images/<hash>` entries before a `Fig./Table N` caption are treated as subfigures of the same figure and copied together into `images/FigureN/` (one multi-panel figure → several jpgs in one folder), and writes `FigureN.txt` (**full English caption** + each subfigure's a/b/c letter and page number); tables are archived separately by `Table N`; content_list is used only to fill in letters, page numbers and table bodies; (4) write `00_full_cleaned.md` from the body up to References; (5) write the manifest `00_images_map.json` (including the `figures[]` logical grouping, see below). Fully idempotent (reruns overwrite); the source zip/paper directory is untouched.
 
-> 为什么不用单张 caption 抽号：MinerU 常把一张多子图拆成多个 image 项、每项 caption 只有"a/b/C"单字母甚至为空——只靠它会把 Fig.2 的 a–h 打散成 Figure2…Figure9。故改用 full.md 顺序聚类，**保证同一图号的子图进同一个 `FigureN/`**。
+> Why not extract numbers from single captions: MinerU often splits one multi-panel figure into several image entries whose caption carries only a single letter "a/b/C" or nothing at all — relying on that alone scatters Fig.2's a–h into Figure2…Figure9. Sequential clustering on full.md is used instead, **guaranteeing that all subfigures of one figure number land in the same `FigureN/`**.
 
-### 第 3 步：核验（**先跑校验脚本，别靠肉眼**）
+### Step 3: Verify (**run the checker first; do not rely on your eyes**)
 
-用 **terminal** 在项目根执行（脚本：`skills/mineru-agent-parse/scripts/verify_note.py`，纯标准库）：
+Run with **terminal** at the project root (script: `skills/mineru-agent-parse/scripts/verify_note.py`, standard library only):
 
 ```bash
-# 校验一个归档目录（推荐；也可传 00_images_map.json 或中文笔记 .md）
-python skills/mineru-agent-parse/scripts/verify_note.py "workspace/mineru_output/<论文名>"
-# 机器可读：
-python skills/mineru-agent-parse/scripts/verify_note.py "workspace/mineru_output/<论文名>" --json
+# verify one archive directory (recommended; 00_images_map.json or a Markdown note also accepted)
+python skills/mineru-agent-parse/scripts/verify_note.py "workspace/mineru_output/<paper name>"
+# machine-readable:
+python skills/mineru-agent-parse/scripts/verify_note.py "workspace/mineru_output/<paper name>" --json
 ```
 
-脚本逐项检查并给**行号/文件名**：① 破图（清单与 Markdown 引用的图片是否存在）；② 图注/子图数（`panel_count` vs `panels[]` vs `layout_html` 的 `<img>`/`<div>` vs `images/FigureN/` 实际图片数 vs `FigureN.txt` 记录的 `面板数`）；③ 正文截断（`$$`/代码块/`div` 未闭合、末行表格未收尾、`00_full_cleaned.md` 与 `full.md` 长度比）；④ 图片重复引用、图注编号跳号/重号。
-**退出码：0 = 通过（可能带 warning）；1 = 有 error；2 = 用法/读文件失败。** 有 error 必须修好再继续（重跑归档脚本即可幂等修复）。
+The script checks item by item and reports **line numbers / file names**: (1) broken images (whether the images referenced by the manifest and the Markdown exist); (2) caption/panel counts (`panel_count` vs. `panels[]` vs. the `<img>`/`<div>` in `layout_html` vs. the actual images in `images/FigureN/` vs. the panel count recorded in `FigureN.txt`); (3) truncation of the text (unclosed `$$`/code fences/`div`, an unfinished table on the last line, the length ratio of `00_full_cleaned.md` to `full.md`); (4) duplicate image references and skipped or duplicated caption numbers.
+**Exit code: 0 = pass (possibly with warnings); 1 = errors present; 2 = usage/file-read failure.** Any error must be fixed before continuing (rerunning the archiving script repairs it idempotently).
 
-脚本通过后，再人工看**脚本判不了**的这几项（脚本 stdout 的 JSON 与清单抽样）：
-- `ok:true`；`stats` 里 `figure/table/other` 合理，`unknown` 很少（若几乎全 `unknown` → 该 zip 的 content_list 取错或 images 命名对不上，检查 json）；
-- `cleaned.ok:true` 且 `chars>0`；
-- `workspace/mineru_output/<名>/` 下有 `images/FigureN/…`、`00_full_cleaned.md`、`00_images_map.json`；
-- 脚本报的 warning（如"图注字母数与 panel 数不符""子图缺 sub 标号"）需人判断是 MinerU 拆分问题还是要补图注。
+Once the script passes, inspect by hand the items **the script cannot judge** (script stdout JSON plus a manifest sample):
+- `ok:true`; `figure/table/other` in `stats` are plausible and `unknown` is small (if almost everything is `unknown` → the zip's content_list was taken wrongly or the image names do not line up; inspect the JSON);
+- `cleaned.ok:true` and `chars>0`;
+- `workspace/mineru_output/<name>/` contains `images/FigureN/…`, `00_full_cleaned.md` and `00_images_map.json`;
+- every warning from the script (e.g. "caption letter count differs from panel count", "subfigure missing its sub label") needs a human decision: is it a MinerU splitting problem, or does the caption need to be completed?
 
-## 产物结构
+## Product structure
 
 ```
-workspace/mineru_output/<论文名>/
-  00_full_cleaned.md      # 清洗全文（References 前）——翻译/挖掘文本源
-  00_images_map.json      # 图文映射清单（figures[] 逻辑图分组 + 逐子图，见下）
-  full.md                 # MinerU 原始全文（含内联 ![](images/<hash>.jpg)）
+workspace/mineru_output/<paper name>/
+  00_full_cleaned.md      # cleaned full text (up to References) — the text source for translation/mining
+  00_images_map.json      # figure-text mapping manifest (figures[] logical grouping + per-subfigure, see below)
+  full.md                 # MinerU's original full text (with inline ![](images/<hash>.jpg))
   <uuid>_content_list.json
   images/
-    <hash>.jpg            # 原始散图（保留，不动）
-    Figure2/              # ★ 一张多子图的图：该图号的全部子图 jpg 都在这里
-      <hashA>.jpg ...     #   每个子图一张 jpg
-      Figure2.txt         #   完整英文图注 + 每个子图的 a/b/c 字母与页码
-    Figure4/<hash>.jpg + Figure4.txt   # 单子图的图（1 张）
-    TableN/<hash>.jpg + TableN.txt     # 表（含表格正文转文本）
-    unknown_NN/                          # 未被任何 Fig./Table 图注收留的散图
+    <hash>.jpg            # original loose images (kept, untouched)
+    Figure2/              # ★ a multi-panel figure: all its subfigure jpgs live here
+      <hashA>.jpg ...     #   one jpg per subfigure
+      Figure2.txt         #   full English caption + each subfigure's a/b/c letter and page number
+    Figure4/<hash>.jpg + Figure4.txt   # a single-panel figure (1 image)
+    TableN/<hash>.jpg + TableN.txt     # a table (including the table body converted to text)
+    unknown_NN/                          # loose images not claimed by any Fig./Table caption
 ```
 
-## 清单 `00_images_map.json` 字段（翻译技能按位插图 + 一行多图靠它）
+## Manifest `00_images_map.json` fields (the translation skill places images with it, including several images per row)
 
 ```json
 { "paper":"…", "out_dir":"…", "content_list":"…_content_list.json",
@@ -104,30 +104,30 @@ workspace/mineru_output/<论文名>/
      "caption_en":"Fig. 2. Characteristics and validation of three water-related datasets. a-c …",
      "panel_count":8,
      "layout":{"cols":3,"width_px":290},
-     "layout_html":"<div style=\"display:flex;flex-wrap:wrap;…\"><img src=\"/workspace/…/Figure2/<h1>.jpg\" alt=\"图2a\" style=\"width:290px;…\" /> ×8</div>",
+     "layout_html":"<div style=\"display:flex;flex-wrap:wrap;…\"><img src=\"/workspace/…/Figure2/<h1>.jpg\" alt=\"Fig.2a\" style=\"width:290px;…\" /> ×8</div>",
      "panels":[{"file":"<hash>.jpg","sub":"a","web_url":"/workspace/…/images/Figure2/<hash>.jpg","page":4}]}
   ],
   "images":[
     {"orig":"images/<hash>.jpg","filename":"<hash>.jpg","folder":"Figure2","group":"Figure2",
      "sub":"a","type":"image","figure":"2","caption_en":"Fig. 2. …","page":4,
-     "web_url":"/workspace/mineru_output/<论文名>/images/Figure2/<hash>.jpg"}
+     "web_url":"/workspace/mineru_output/<paper name>/images/Figure2/<hash>.jpg"}
   ]
 }
 ```
-- `figures[]`：**按逻辑图分组**——一张多子图是**一条**，`panels` 列出该图全部子图（含字母 `sub`、`web_url`、`page`）。翻译技能据此把多个子图排进**一行**、共用一条中文图注。
-- `layout` / `layout_html`：**脚本按子图张数预排好的网格**（1→1列520px；2→2列380；3→3列290；4→2×2；5–9→3列290；≥10→4列215），`layout_html` 是可直接照抄的 flex HTML（写笔记插图用整段这个，只改 alt）。
-- `caption_en`：该图的**完整英文图注**（含 a/b/c… 分述），翻译后作图注。
-- `web_url`：笔记/正文 `![](…)` 直接可用的绝对路径（经静态挂载渲染）。
+- `figures[]`: **grouped by logical figure** — a multi-panel figure is **one** entry, and `panels` lists all its subfigures (with letter `sub`, `web_url`, `page`). The translation skill uses this to place several subfigures on **one row** sharing a single translated caption.
+- `layout` / `layout_html`: **a grid pre-arranged by the script according to the number of panels** (1→1 column 520 px; 2→2 columns 380; 3→3 columns 290; 4→2×2; 5–9→3 columns 290; ≥10→4 columns 215); `layout_html` is flex HTML you can copy verbatim (for note figures use the whole block and only change `alt`).
+- `caption_en`: the figure's **full English caption** (including the a/b/c… items), used as the caption after translation.
+- `web_url`: an absolute path usable directly in note/body `![](…)` (rendered via static mounting).
 
-## 坑
+## Pitfalls
 
-- `mineru_parse` **只下载 zip、不解压**；不解压就没有 `full.md/images/`，必须跑第 2 步。
-- content_list 有两份（`_content_list.json` 与 `_v2.json`）+ `_model.json`：脚本已锁定标准 `_content_list.json`；若手工读 json 别用 `_v2`/`_model`。
-- **子图归并依赖 full.md 的图注块**：若某篇 `full.md` 里图注写法特殊（如 `Fig. 2:` 冒号、或图注在子图之前），该图可能没聚成组而落到 `unknown_`。核验时留意 `unknown` 数量，必要时人工核对。部分图 caption 为空仍会归入正确 `FigureN`（靠 full.md 顺序），只是 `sub` 标号缺失、图注要靠正文补。
-- Token 过期 → 第 1 步报鉴权错误，让用户在配置面板重填。
-- **别用 `read_file` 整读巨型 JSON**：归档目录里的 `layout.json`、`*_model.json`、`*_content_list_v2.json` 常是"单行数 MB"的坐标/模型转储，读进来会瞬间撑爆模型上下文（曾触发 890 万 token 的 400 报错）。要正文只读 `00_full_cleaned.md`，要图表信息读 `00_images_map.json`（不大）。工具已加 20k 字符截断护栏，但仍应避免去 `list_files` 后逐个 `read_file` 这些 json。
-- 大 PDF / 中文深路径：脚本已内置 Windows 长路径 `\\?\` 处理，无需手动改。
+- `mineru_parse` **only downloads the zip and does not extract it**; without extraction there is no `full.md/images/`, so step 2 is mandatory.
+- There are two content_list files (`_content_list.json` and `_v2.json`) plus `_model.json`: the script locks onto the standard `_content_list.json`; if you read JSON by hand, never use `_v2`/`_model`.
+- **Subfigure grouping relies on caption blocks in full.md**: if a paper writes captions unusually (e.g. `Fig. 2:` with a colon, or the caption before the subfigures), that figure may fail to group and land in `unknown_`. Watch the `unknown` count during verification and check by hand when needed. Some figures with empty captions are still filed into the correct `FigureN` (thanks to full.md order), but the `sub` label is missing and the caption must be completed from the text.
+- Token expired → step 1 reports an authentication error; ask the user to re-enter it in the configuration panel.
+- **Never `read_file` a huge JSON in full**: `layout.json`, `*_model.json` and `*_content_list_v2.json` in an archive directory are often "single-line multi-MB" coordinate/model dumps that instantly blow up the model context (one incident produced a 400 error at 8.9 million tokens). For the body read only `00_full_cleaned.md`; for figure/table information read `00_images_map.json` (small). The tool now truncates at 20k characters as a guard rail, but you should still avoid `list_files` followed by reading each of these JSON files.
+- Large PDFs / deep Chinese paths: the script already handles Windows long paths (`\\?\`), so no manual change is needed.
 
-## 关联
+## Related
 
-归档完成后：先跑 `skills/mineru-agent-parse/scripts/verify_note.py "<归档目录>"` 校验（破图/图注子图数/正文截断/编号跳号，退出码非 0 即有错）；要做图文互证 / 实体挖掘 / Fenton 数据挖掘 → 用本清单与 `00_full_cleaned.md` 作为输入（Fenton 流程见技能 `fenton-multiagent-mining`）。
+After archiving: first run `skills/mineru-agent-parse/scripts/verify_note.py "<archive directory>"` (broken images / caption-panel counts / text truncation / numbering gaps; a non-zero exit code means errors); for cross-modal verification, entity mining or Fenton data mining → use this manifest and `00_full_cleaned.md` as inputs (the Fenton flow is the `fenton-multiagent-mining` skill).

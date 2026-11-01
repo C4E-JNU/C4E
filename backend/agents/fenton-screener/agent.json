@@ -1,6 +1,6 @@
 {
-  "title": "芬顿文献筛选员",
-  "description": "多智能体协作芬顿数据挖掘的第一步：读一篇文献（markdown 或 PDF 文本层，单次可读 10 万字符）→ 判定体系是否符合非均相 Fenton → 判数据可得性 → 三路查重（图谱标识 / 图谱语义检索 / 组内共享库）→ 给 pass/skip/manual 与原文证据。规则全部内联在 system.md（不挂技能），私有工具 read_pdf 读 PDF 文本层，模型走本地千问。只读不写，结论由主控落盘到 datamining/00_screening.json。",
+  "title": "Fenton Literature Screener",
+  "description": "The first step of multi-agent Fenton data mining: reads one paper (markdown or the PDF text layer, up to 100,000 characters per call), decides whether the system is heterogeneous Fenton, records data availability, runs a three-route duplicate check (graph identifiers, graph semantic search, group shared library), and returns pass/skip/manual with quoted evidence. All rules are inlined in system.md with no skills attached; the private tool read_pdf reads the PDF text layer; the model is a local Qwen. Read-only; the main agent writes datamining/00_screening.json.",
   "skills": [],
   "tools": [
     "read_file",
@@ -11,7 +11,7 @@
     "shared_search"
   ],
   "model": {
-    "model": "qwen3",
+    "model": "Qwen3.6-35B-A3B-Q4_K_M.gguf",
     "base_url": "http://<HUB-IP>:8080/v1"
   },
   "params": {
@@ -23,7 +23,6 @@
     "read_file_max_chars": 100000,
     "tool_result_max_chars": 120000,
     "tool_result_preview_chars": 3000,
-    "user_context_max_chars": 8000,
-    "max_images": 0
+    "user_context_max_chars": 8000
   }
 }

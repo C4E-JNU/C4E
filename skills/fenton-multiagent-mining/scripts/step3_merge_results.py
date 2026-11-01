@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-"""step3_merge_results.py — V5 步骤③收尾（增强版）：
-1. 汇总各任务包 03_result.json → 03_image_data.json
-2. 结构规范化：dict→list、figure/mode 从 task.json 回填、None 清洗
-3. 包数校验：02b_extraction_tasks 的 ready 包数 vs 实际 result 数，缺者列出供重派
-4. 归档修正清单收集
-用法：python step3_merge_results.py <批次根目录>
+"""step3_merge_results.py — end of Step 4 (enhanced):
+1. Merge each task pack's 03_result.json → 03_image_data.json
+2. Normalize structure: dict→list, backfill figure/mode from task.json, strip None
+3. Pack-count check: ready packs in 02b_extraction_tasks vs actual result count; list the missing ones for re-dispatch
+4. Collect the archive-fix list
+Usage: python step3_merge_results.py <corpus root directory>
 """
 import glob
 import json
@@ -18,9 +18,9 @@ def wf_of(paper):
 
 
 def normalize(records, task):
-    """结构规范化：确保每条记录有 figure/subfigure/mode，类型正确"""
+    """Normalize structure: ensure every record has figure/subfigure/mode with the right types"""
     if isinstance(records, dict):
-        # dict 包裹的 records 列表
+        # a records list wrapped in a dict
         records = records.get("records", [records])
     if not isinstance(records, list):
         records = [records]
@@ -29,23 +29,23 @@ def normalize(records, task):
     for r in records:
         if not isinstance(r, dict):
             continue
-        # 回填 figure（缺失或 None 时）
+        # backfill figure (when missing or None)
         if not r.get("figure"):
             r["figure"] = fig_id
-        # 回填 subfigure（缺失时用第一个子图 id）
+        # backfill subfigure (use the first subfigure id when missing)
         if not r.get("subfigure"):
             sids = task.get("subfigure_ids", ["main"])
             r["subfigure"] = sids[0] if sids else "main"
-        # 修正 mode
+        # fix mode
         if not r.get("mode"):
             r["mode"] = mode
-        # series→curves 容错（提取方偶发用 series 键承载曲线）
+        # tolerate series→curves (the extractor occasionally carries curves under the series key)
         if not r.get("curves") and isinstance(r.get("series"), list):
             r["curves"] = [
                 {"label": c.get("label") or c.get("name", ""), "points": c.get("points", []),
                  **{k: v for k, v in c.items() if k not in ("label", "name", "points")}}
                 for c in r["series"] if isinstance(c, dict)]
-        # 剥离 None 值
+        # strip None values
         for k in list(r.keys()):
             if r[k] is None and k not in ("degradation_profiles",):
                 del r[k]
@@ -61,7 +61,7 @@ def merge(paper):
     idx = json.load(open(idx_path, encoding="utf-8"))
     ready_pkgs = [t for t in idx.get("tasks", []) if t.get("status") == "ready"]
 
-    # 1) 收集已有结果并规范化
+    # 1) collect existing results and normalize them
     records, errors, got_tasks = [], [], set()
     for cat_dir in sorted(glob.glob(os.path.join(wf, "02b_tasks", "*"))):
         if not os.path.isdir(cat_dir):
@@ -77,7 +77,7 @@ def merge(paper):
             except Exception as e:
                 errors.append(f"{os.path.relpath(rj, wf)}: {str(e)[:60]}")
 
-    # 2) 校验：包数 vs 结果数，缺者列出
+    # 2) check: pack count vs result count; list the missing ones
     missing = [t["task_id"] for t in ready_pkgs if t["task_id"] not in got_tasks]
 
     json.dump(records, open(os.path.join(wf, "03_image_data.json"), "w", encoding="utf-8"),
@@ -87,12 +87,12 @@ def merge(paper):
     npts = sum(len(c.get("points", [])) for r in records if r.get("mode") == "xy"
                for c in r.get("curves", []))
     name = os.path.basename(os.path.normpath(paper))
-    print(f"{name[:44]:46s} {len(records):3d} 条（xy {n_xy:2d} + basic {len(records)-n_xy:2d}）"
-          f" 数据点 {npts:4d} 坏包 {len(errors)} 缺结果 {len(missing)}")
+    print(f"{name[:44]:46s} {len(records):3d} records (xy {n_xy:2d} + basic {len(records)-n_xy:2d})"
+          f" points {npts:4d} bad packs {len(errors)} missing results {len(missing)}")
     for e in errors:
         print("  ", e)
     if missing:
-        print(f"  ⚠ 缺结果包: {missing}（需重派）")
+        print(f"  ! missing-result packs: {missing} (re-dispatch required)")
     return len(records)
 
 
@@ -124,14 +124,14 @@ def main(root):
             total += merge(paper)
     collect_archive_fixes(root, fixes)
     if fixes:
-        # 2026-10-05 修正：写 <批次目录>/_ledgers/，不再写进技能目录
+        # 2026-10-05 fix: write into <multi-paper directory>/_ledgers/, no longer into the skill directory
         _ld = os.path.join(os.path.normpath(root), "_ledgers")
         os.makedirs(_ld, exist_ok=True)
-        fp = os.path.join(_ld, f"{os.path.basename(os.path.normpath(root))}_归档修正清单.json")
+        fp = os.path.join(_ld, f"{os.path.basename(os.path.normpath(root))}_archive_fix_list.json")
         json.dump(fixes, open(fp, "w", encoding="utf-8"),
                   ensure_ascii=False, indent=1)
-        print(f"=== 归档修正清单 {len(fixes)} 条 ===")
-    print(f"=== 全批合计 {total} 条记录 ===")
+        print(f"=== archive-fix list: {len(fixes)} entries ===")
+    print(f"=== total: {total} records ===")
 
 
 if __name__ == "__main__":

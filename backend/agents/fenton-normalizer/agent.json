@@ -1,6 +1,6 @@
 {
-  "title": "Fenton 单位复核员",
-  "description": "多智能体 Fenton 挖掘步骤八（2026-10-09 改版，纯 LLM 无脚本）：换主体只读复核 06_schema.json 的全部【数】字段三元组——单位白名单、换算正确性、缺失单位补充；只回修订清单（before/after/reason），raw 永不改写。主控落盘 06c_unit_review.json 并安排修订闭环回填充员。规范单位表与白名单内联在 system.md。",
+  "title": "Fenton Unit Reviewer",
+  "description": "Multi-agent Fenton mining, step 8 (revised 2026-10-09, pure LLM, no scripts): an independent body reviews every numeric triple in 06_schema.json for unit whitelist compliance, conversion correctness, and missing units, returning only a revision list (before/after/reason) and never rewriting raw. The main agent writes 06c_unit_review.json and runs the correction loop back to the filler. The canonical unit table and whitelist are inlined in system.md.",
   "skills": [],
   "tools": [
     "read_file",
@@ -9,8 +9,8 @@
     "search_files"
   ],
   "model": {
-    "model": "qwen3",
-    "base_url": "http://<HUB-IP>:8080/v1"
+    "model": "deepseek-flash",
+    "base_url": "https://api.deepseek.com/v1"
   },
   "params": {
     "max_rounds": 20,
@@ -21,7 +21,6 @@
     "read_file_max_chars": 100000,
     "tool_result_max_chars": 120000,
     "tool_result_preview_chars": 3000,
-    "user_context_max_chars": 10000,
-    "max_images": 0
+    "user_context_max_chars": 10000
   }
 }

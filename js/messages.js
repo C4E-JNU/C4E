@@ -897,13 +897,13 @@
             saveBranches();
             // 后端删除（仍被其他消息/气泡引用时保留文件）
             if (_fileIdReferencedElsewhere(fileId, messageId)) {
-                console.info('[附件] file_id 仍被其他消息引用，保留后端文件:', fileId);
+                                console.info('[Attachment] file_id is still referenced by other messages; keeping the backend file:', fileId);
             } else {
                 fetch('/api/file/delete', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ file_id: fileId })
-                }).catch(function(e) { console.warn('后端删除附件失败', fileId, e); });
+                                }).catch(function(e) { console.warn('Failed to delete backend attachment', fileId, e); });
             }
             // 重渲染消息列表（附件移除后刷新显示）
             if (typeof renderMessages === 'function') renderMessages();
@@ -1128,7 +1128,7 @@
             }
             fileIdsToDelete.forEach(function(fid) {
                 if (_fileIdReferencedElsewhere(fid, messageId)) {
-                    console.info('[DeleteMessage] file_id 仍被其他消息引用，保留后端文件:', fid);
+                                        console.info('[DeleteMessage] file_id is still referenced by other messages; keeping the backend file:', fid);
                     return;
                 }
                 fetch('/api/file/delete', {
@@ -1240,7 +1240,7 @@
                              });
 
                          } catch (error) {
-                             console.error(`处理文件 ${att.name} 失败:`, error);
+                                                          console.error(`Failed to process file ${att.name}:`, error);
                              showToast(t('msg.attProcessFail').replace('{name}', att.name), 'error');
                          }
                      }

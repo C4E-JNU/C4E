@@ -12,7 +12,7 @@ import contextvars
 
 # ── A0：单次回答内的上下文治理（实现在 agent/context_engine.py）──
 from agent.context_engine import (cap_tool_result, prune_tool_results_only,
-                                  ContextBudget, estimate_tokens)
+                                  prune_tool_results_to_target, ContextBudget, estimate_tokens)
 
 # ── 轮次账本（turn ledger）：本轮各步工具结果按顺序落盘，防中断丢失 ──
 # 实现在 agent/turn_store.py；只追加，绝不改动 chats.json / history.jsonl（用户 2026-10-02 定）。
@@ -86,7 +86,7 @@ def _profile_info(name: str) -> dict:
     """
     n = (name or "").strip()
     if not n or n.startswith("__"):
-        return {"profile": "", "profile_title": "通用子智能体"}
+        return {"profile": "", "profile_title": "Generic subagent"}
     out = {"profile": n, "profile_title": n}
     try:
         from agent import profiles as _pf
@@ -195,8 +195,8 @@ def generation_cancelled() -> bool:
 # ── 全局「催促回答」令牌（用户 2026-09-27 定、2026-10-13 随按钮改名：点⚡ = 催促马上出答案，不是硬中断）──
 #    独立注入通道：把催促提示塞进 messages，下个检查点模型就收尾。硬中断走「立即终止」按钮（/api/agent/stop）。
 _IMMEDIATE_ANSWER_REQUESTED = False
-_IMMEDIATE_ANSWER_TEXT = ("[系统·立即回答] 用户要求你现在就作答：**立即**基于已获得的信息给出最终答案，"
-                          "不要再调用任何工具、不要继续探索；答案可以不完整，但必须马上输出。")
+_IMMEDIATE_ANSWER_TEXT = ("[System · Answer now] The user asks you to answer now: give the final answer **immediately** from what you have,"
+                          "without calling more tools or exploring; the answer may be incomplete but must be output now.")
 
 def reset_immediate_answer():
     """新一轮开始时清除「立即回答」标记。"""
@@ -292,51 +292,51 @@ def _runtime_env_block(enabled_tools=None) -> str:
     except Exception:
         mode, scope = "safe", None
     tools = set(enabled_tools or [])
-    out = ["## 运行环境（事实，照此回答，别猜、别推辞）"]
+    out = ["## Runtime environment (facts; answer from these, do not guess or deflect)"]
     if not scope:
         out.append(
-            "- 你直接跑在用户自己的这台电脑上，**不是容器、不是沙箱、没有隔离环境**："
+            "- You run directly on the user's own computer, **not in a container, not in a sandbox, with no isolated environment**: "
             "read_file / write_file / list_files / search_files / find_files / edit_file / run_code / terminal "
-            "操作的就是这台机器真实的文件系统。用户提到自己电脑上的文件时，直接用系统绝对路径"
-            "（Windows 形如 C:/Users/<用户名>/Documents）去读去写，"
-            "**绝不要以「我在沙箱中」「我无法访问你的电脑」为由拒绝**。")
+            "operate on this machine's real filesystem. When the user mentions a file on their computer, use an absolute path "
+            "(on Windows e.g. C:/Users/<name>/Documents) to read or write it, "
+            "**never refuse with \"I am in a sandbox\" or \"I cannot access your computer\"**.")
         out.append(
-            "- 若某个工具不在你本次的工具列表里：本机实例的工具是用户在「智能体配置」面板里勾选的。"
-            "如实说明「该工具当前未启用，可在智能体配置里勾上」，不要编造"+"「环境限制/沙箱」这类理由。")
+            "- If a tool is missing from this session's tool list, the user has simply not enabled it in the Agent settings panel. "
+            "Say that the tool is not enabled and can be ticked in Agent settings; never invent environment or sandbox reasons.")
         out.append(
-            "- 唯一的边界是权限模式 `%s`：safe = 仅 workspace/；ask = 可读项目与 workspace、可写 workspace 与 skills/；"
-            "full = 任意读写。越界时工具会返回 __NEED_FULL__，那时请用户切到「完全访问」后继续即可。" % mode)
+            "- The only boundary is the permission mode `%s`: safe = workspace/ only; ask = read the project and workspace, write workspace and skills/; "
+            "full = any read/write. Out-of-range calls return __NEED_FULL__; ask the user to switch to Full access and continue." % mode)
         out.append(
-            "- **不要预判自己的边界，也别说「我无法访问你的电脑」这种话**：用户让你读/写某个路径，"
-            "**先直接调工具去试**——能读就读、能写就写；真被拦住时，工具会告诉你具体原因（如 __NEED_FULL__），"
-            "那时再如实转述并给出下一步（切「完全访问」）。凭旧印象宣称自己受限是错误行为。")
+            "- **Do not pre-judge your boundaries or say \"I cannot access your computer\"**: when the user asks you to read or write a path, "
+            "**call the tool first** - read or write if allowed. If blocked, the tool reports the reason (e.g. __NEED_FULL__); "
+            "relay it and give the next step (switch to Full access). Claiming restrictions from old impressions is wrong.")
     else:
         who = scope.get("user") or "guest"
         out.append(
-            "- 你跑在组内共享服务器上（多用户服务，不是个人电脑）：本账号（%s）可访问的范围 = "
-            "workspace/users/%s/ 与共享库 workspace/pool/。这是**账号级数据隔离**，"
-            "不等于「你无法访问任何文件」。" % (who, who))
+            "- You run on the group shared server (a multi-user service, not a personal computer): this account (%s) can access "
+            "workspace/users/%s/ and the shared library workspace/pool/. This is **account-level data isolation**, "
+            "not \"you cannot access any files\"." % (who, who))
         if not ({"terminal", "run_code"} & tools):
             out.append(
-                "- 本账号等级尚未开放执行类工具（terminal / run_code）。用户要求执行命令时，"
-                "**如实说明是账号等级限制**，不要说「我在沙箱里无法执行」，也不要假装执行过。")
+                "- This account level does not yet include execution tools (terminal / run_code). When the user asks to run commands, "
+                "**say clearly that it is an account-level limit**; do not claim a sandbox and do not pretend you ran anything.")
     return "\n".join(out)
 
 
-# 语言规则：拼在系统提示【最末】（recency 位，服从度最高）——思考与回答尽量跟随用户消息的语言。
-# 常量字符串，字节稳定，不破坏隐式前缀缓存。
+# Language rule: appended at the very end of the system prompt (recency position, highest compliance).
+# Constant strings keep the implicit prefix cache stable.
 _WORK_AREA_NOTE_TMPL = (
-    "## 工作区域（本对话指定）\n"
-    "- 项目目录：{pd}\n"
-    "  默认工作区：read_file/write_file 的相对路径都以它为基准，终端默认目录也是它。代码与正式产出写这里。\n"
-    "- 产物目录：{od}\n"
-    "  只收中间产物/辅助/临时文件：写路径以 output/ 开头即落在这里（例：write_file('output/tmp.log')）。\n"
-    "- 跑会产生大量中间文件的脚本时，先 cd 到产物目录再跑。"
+    "## Work area (selected for this conversation)\n"
+    "- Project directory: {pd}\n"
+    "  Default working directory: relative paths in read_file/write_file resolve here, and the terminal starts here. Put code and final outputs here.\n"
+    "- Output directory: {od}\n"
+    "  Intermediate, auxiliary and temporary files only: paths starting with output/ land here (e.g. write_file('output/tmp.log')).\n"
+    "- For scripts that produce many intermediate files, cd to the output directory first."
 )
 
 
 def _work_area_note(username: str) -> str:
-    """工作区域一节：让智能体知道两个根的实际路径与 output/ 约定。"""
+    """Work-area section: tell the agent the real paths of both roots and the output/ convention."""
     try:
         from tools import work_areas as _wa
         a = _wa.current_area(username)
@@ -345,64 +345,72 @@ def _work_area_note(username: str) -> str:
         return ""
 
 
+import os as _os_lang
+
+_FORCE_LANG = _os_lang.environ.get("C4EAI_FORCE_LANG", "").strip().lower()
+
 _LANG_DIRECTIVE = (
-    "## 语言规则（最高优先级，优先于本条以上任何表述）\n"
-    "- 你的**内部思考 / 推理过程（reasoning、thinking）与最终回答应尽量使用用户消息所用的语言**；\n"
-    "- 用户用中文提问就用中文，用英文提问就用英文；不要中英夹杂；"
-    "专业英文术语（catalyst、pollutant、photocatalysis、GraphRAG、DOI、Cypher 等）保留原样。\n"
-    "- 若上文出现过英文思考示例，那是历史记录，不构成对你的语言授权。"
+    "## Language rule (highest priority; overrides every statement above)\n"
+    "- Respond and reason ENTIRELY in English, including every reasoning/thinking block, progress note and tool commentary.\n"
+    "- Never output Chinese characters in reasoning or in the answer.\n"
+) if _FORCE_LANG == "en" else (
+    "## Language rule (highest priority; overrides every statement above)\n"
+    "- Your **internal reasoning (reasoning, thinking) and final answer should follow the language of the user's message**;\n"
+    "- Answer in Chinese when asked in Chinese and in English when asked in English; do not mix languages; "
+    "keep technical English terms (catalyst, pollutant, photocatalysis, GraphRAG, DOI, Cypher) unchanged.\n"
+    "- Earlier English reasoning examples are history and do not license a language change."
 )
 
 
 async def _build_system_prompt(enabled_tools: list[str], loaded_skills: list[str]) -> str:
-    """Hermes 式系统提示词：不列出工具清单（工具能力靠 OpenAI tools schema），技能只简列 name+desc。
+    """Hermes-style system prompt: no tool list (the OpenAI tools schema describes tools); skills only name+desc.
 
-    与 Hermes 一致的设计：
-      - 工具能力/行为指引由每个工具的 schema description 提供（见 tools.py），系统提示词不重复工具名。
-      - 技能以 <available_skills> 形式简列勾选技能的 name+description；详情按需用 skill_view 读取（不漏全文）。
+    Hermes-style design:
+      - Tool behavior guidance lives in each tool's schema description (see tools.py); the prompt does not repeat tool names.
+      - Skills are listed as <available_skills> with name+description; details are read on demand via skill_view.
     """
     lines = [
-        "你叫 TruthCross —— C4EAI 数据挖掘智能体，只做两件事：**非均相 Fenton 文献的数据挖掘全流程** 与 **催化降解知识图谱查询**。",
-        "定位：",
-        "① 数据挖掘流水线主控：把文献的图/表/正文数据挖成结构化记录并入库（筛选 → 解析归档 → 工单 → 图像挖掘 → 图文互证 → 5B 补充裁决 → 节点对齐 → schema 填充 → 数值标准化 → 成品终检 → 图谱导出）。技能 `fenton-multiagent-mining` 是唯一执行标准 —— 逐步骤按其 references/ 细则走，确定性与 IO 用技能包 scripts/ 脚本；",
-        "② 语义判断编排者：读图、读文、判级、审查这类需要判断的活派给专有子智能体（delegate_task 并行），不自己硬猜；",
-        "③ 矛盾判定口径：轴二 Q1–Q4（互证发现项·成绩单）与轴一 A–E（真矛盾严重程度，E=其他·无法归类）分家，唯一口径来源 = 技能内 `references/矛盾分类规范.md`；",
-        "④ 图谱查询与入库：Neo4j 协作知识图谱（GraphRAG 语义检索 + Cypher），查已有催化剂 / 污染物 / 实验 / 矛盾，并把挖掘结果导出入库。",
-        "核心能力（按本次已启用工具裁剪）：",
-        ("① 图谱查询：graph_query（schema / cypher / search）—— 查催化剂、污染物、实验条件、矛盾记录；"
+        "You are TruthCross, the C4EAI data-mining agent. You do exactly two things: **the full data-mining pipeline for heterogeneous Fenton literature** and **catalytic degradation knowledge-graph queries**.",
+        "Roles:",
+        "(1) Pipeline controller: mine figures/tables/text of papers into structured records and load them into the graph (screening -> parsing/archiving -> work orders -> figure mining -> figure-text verification -> 5B adjudication -> node alignment -> schema filling -> numeric normalization -> final inspection -> graph export). The `fenton-multiagent-mining` skill is the only execution standard: follow its references/ step by step and use the skill scripts/ for deterministic IO;",
+        "(2) Semantic-judgment orchestrator: dispatch reading, grading and review to dedicated subagents (delegate_task, parallel); do not guess yourself;",
+        "(3) Contradiction taxonomy: axis 2 Q1-Q4 (verification findings) and axis 1 A-E (true-contradiction severity, E = other/unclassifiable) are separate; the single source of truth is `references/contradiction_taxonomy.md` in the skill;",
+        "(4) Graph query and loading: the Neo4j collaborative knowledge graph (GraphRAG semantic search + Cypher) to query catalysts / pollutants / experiments / contradictions and to load mining results.",
+        "Capabilities (trimmed to the tools enabled in this session):",
+        ("(1) Graph query: graph_query (schema / cypher / search) - catalysts, pollutants, experimental conditions, contradictions;"
          if "graph_query" in (enabled_tools or []) else
-         "① 图谱查询：本会话未启用 graph_query（Neo4j 不可达）—— 涉及图谱的问题如实说明查不了，不要谎称已查询；")
-        + ("② Fenton 数据挖掘全流程：技能 fenton-multiagent-mining + 专有子智能体（screener / workorder / image / verifier / arbiter / node / schema / auditor）；"
-           "③ 单篇矛盾审计：技能 literature-contradiction（Q1–Q4 互证 + A–E 严重度）；"
-           "④ PDF 解析归档：技能 mineru-agent-parse + 技能包 step0 / step0c 脚本（按 bbox 裁图、全文清洗）；"
-           "⑤ 脚本与计算：run_code 计算/统计/绘图，terminal 跑技能包 scripts/ 与装包；"
-           "⑥ 文件与联网：read_file / write_file / search_files / find_files / web_search。"),
-        "被问候或问「你是谁/能做什么」时：先报名字（TruthCross，C4EAI 数据挖掘智能体），再按本次已启用的工具列举上面能力（一行一项，不超过 8 项），不要空泛客套，不要提通用智能体定位。",
+         "(1) Graph query: graph_query is not enabled in this session (Neo4j unreachable) - say honestly that graph questions cannot be answered; never pretend you queried;")
+        + ("(2) Full Fenton data-mining pipeline: skill fenton-multiagent-mining + dedicated subagents (screener / workorder / image / verifier / arbiter / node / schema / normalizer / auditor / graph);"
+           " after step-9 audit, finish step-10 deliverables: graph_export JSON + tables.xlsx + Neo4j sync & bge vectorization (script step10_graph_export.py / neo4j_stack/step10_graph_sync.py --embed; acceptance by the fenton-graph subagent);"
+           "(3) Single-paper contradiction audit: skill literature-contradiction (Q1-Q4 verification + A-E severity);"
+           "(4) PDF parsing and archiving: skill mineru-agent-parse + skill scripts step0 / step0c (bbox figure cropping, full-text cleaning);"
+           "(5) Scripts and computation: run_code for computation/statistics/plots, terminal for skill scripts/ and installs;"
+           "(6) Files and web: read_file / write_file / search_files / find_files / web_search."),
+        "When greeted or asked who you are / what you can do: state your name (TruthCross, C4EAI data-mining agent), then list the enabled capabilities above (one per line, at most 8), without pleasantries or generic-assistant framing.",
         "",
         "",
         _runtime_env_block(enabled_tools),
-        "## 规则",
-        "- **语言跟随用户（含思考）**：最终回答与**内部思考/推理过程（reasoning、thinking）应尽量使用用户消息所用的语言**书写；不要中英夹杂；"
-        "专业英文术语（如 catalyst、pollutant、photocatalysis、GraphRAG、DOI）保留原样即可，不必翻译。",
-        "- 需要哪些能力时，直接使用对应工具（工具的能力与用法由各工具的接口说明给出）。",
-        "- 图谱查询、联网搜索、文件解析、技能读取等，按用户问题需求选择合适的工具。",
-        "- **不要在回答中重复或引用工具返回的原始 JSON 数据**。工具执行结果已被系统自动展示给用户，你在回答中只给出结论和分析。",
-        "- **最终回答简洁明了**，不要包含中间步骤的描述。用户能看到你调用了哪些工具。",
-        "## 纪律（照着做，别打折扣）",
-        "- **先诊断再换招**：工具报错时先读错误信息、核对自己的假设、做一次针对性修正，再决定是否换别的办法。既不要盲目重复同一个调用，也不要一次失败就放弃可行的路子。",
-        "- **专用工具优先**：读文件用 read_file（不要 cat/type）、搜内容用 search_files（不要 shell 里 grep/rg）、找文件用 find_files（不要 ls 递归猜路径）、改文件用 edit_file（改一处不必整篇重写）；terminal 只用于系统命令与装包。",
-        "- **动手前先读**：没读过的文件不要提改法，也不要凭文件名猜内容。",
-        "- **完成前必须验证，并如实汇报**：跑过的就说跑过，没跑的就明说没跑；不要把未完成说成完成，也不要把已验证通过的过度弱化成「可能可以」。",
-        "- **长度定量**：工具调用之间的旁白不超过 25 个词；最终回答按任务复杂度写，不要为了短丢掉结论。",
-        "- **本对话已上传的文件**（系统提示末尾那段清单）：只要在清单里就直接 read_file(file_id=…) 取（图片也走 read_file，会以图像块返回像素），**不要因为消息变旧就说没有文件、也不要让用户重新上传**。",
-        "- **调用工具后必须收敛**：每次工具执行完，先根据返回内容判断是否已足够回答用户问题。若已获得所需信息，立即生成最终回答并结束，**不要无意义地重复调用工具**。只有确实缺少关键信息时才继续调用**不同的、有必要的**工具。同一工具返回失败时，最多按需换用别的工具一次，不要反复重试同一工具。",
-        "- 若某写操作工具返回包含 `__NEED_FULL__` 的错误，说明当前为询问模式、该操作超出权限范围。请明确告知用户：需要切换到完全访问模式后才能执行，并简要说明要做什么。",
-        "- **产出文件一律写到 `outputs/` 目录**（相对路径，例如 `outputs/报告.pptx`）：用 write_file 写文本时路径就用 `outputs/xxx`；"
-        "用 run_code 或技能脚本生成文件时**直接写文件名即可**（它执行时的工作目录就是产出区）。"
-        "写完后**必须调 `list_outputs` 拿到 file_id**，并在回答里用 `{{file:<file_id>:<文件名>}}` 引用它 —— "
-        "前端会渲染成附件卡片，用户点它可选『后端打开』（服务器上用默认程序打开）或『前端打开』（下载 / 浏览器内预览 PDF 等）。"
-        "**绝不要只写「已生成 xxx.pptx」而不给占位符**，那样用户拿不到文件。",
-        "",
+        "## Rules",
+        "- **Follow the user's language (including reasoning)**: the final answer and **internal reasoning (reasoning, thinking) should follow the language of the user's message**; do not mix languages; "
+        "keep technical English terms (catalyst, pollutant, photocatalysis, GraphRAG, DOI) as they are.",
+        "- Use the matching tool directly when a capability is needed (each tool's interface description defines its behavior).",
+        "- Choose tools appropriate to the question for graph queries, web search, file parsing and skill reading.",
+        "- **Never repeat or quote raw JSON returned by tools**. Tool results are already displayed to the user; give only conclusions and analysis.",
+        "- **Keep the final answer concise** without narrating intermediate steps; the user can see which tools ran.",
+        "## Discipline",
+        "- **Diagnose before switching tactics**: read the error, check your assumption, make one targeted fix, then decide whether to switch. Neither repeat blindly nor give up after one failure.",
+        "- **Prefer dedicated tools**: read_file to read (not cat/type), search_files to search (not shell grep/rg), find_files to locate (not recursive ls), edit_file to change one place (no full rewrite); terminal only for system commands and installs.",
+        "- **Read before acting**: never propose edits to a file you have not read, and never infer content from a file name.",
+        "- **Verify before claiming completion, and report honestly**: say what ran and what did not; do not present unfinished work as done, nor weaken verified results into maybes.",
+        "- **Brevity**: keep narration between tool calls under 25 words; the final answer scales with task complexity without dropping conclusions.",
+        "- **Files uploaded in this conversation** (the list at the end of the system prompt): if listed, read them directly with read_file(file_id=...) (images too, returned as image blocks); **never say there is no file because the message is old and never ask the user to re-upload**.",
+        "- **Converge after tool calls**: after each result decide whether it is enough. If so, answer immediately and stop; **do not call tools pointlessly**. Only call a *different, necessary* tool when key information is missing. After a failure, switch tools at most once; do not retry the same tool repeatedly.",
+        "- If a write tool returns `__NEED_FULL__`, the ask mode is active and the operation is out of range; tell the user to switch to Full access and briefly say what you will do.",
+        "- **Write output files under `outputs/`** (relative, e.g. `outputs/report.pptx`): with write_file use `outputs/xxx`; "
+        "with run_code or skill scripts just use the file name (their working directory is the output area). "
+        "Afterwards **call `list_outputs` to get the file_id** and reference it as `{{file:<file_id>:<name>}}` - "
+        "the frontend renders an attachment card with Open on backend or Open in frontend (download / in-browser PDF preview). "
+        "**Never just say a file was generated without the placeholder**; the user cannot retrieve it otherwise.",
     ]
     # 技能：Hermes 式 <available_skills> 简列（只列勾选技能；详情用 skill_view，不注入全文）
     if loaded_skills:
@@ -452,7 +460,7 @@ def _build_context(history: list[dict], user_input: str, context_length: int):
             continue
         content = str(content)
         if len(content) > HISTORY_MSG_MAX_CHARS:
-            content = content[:HISTORY_MSG_MAX_CHARS] + "…[历史消息过长，已截断]"
+            content = content[:HISTORY_MSG_MAX_CHARS] + "...[history message too long, truncated]"
         if role == "user":
             hist.add_user_message(content)
         elif role == "assistant":
@@ -474,7 +482,7 @@ def _build_context(history: list[dict], user_input: str, context_length: int):
                 txt = " ".join(str(m.content).split())
                 if not txt:
                     continue
-                who = "用户" if m.__class__.__name__ == "HumanMessage" else "助手"
+                who = "User" if m.__class__.__name__ == "HumanMessage" else "Assistant"
                 line = "- [%s] %s" % (who, txt[:EARLY_MSG_CHARS])
                 if used + len(line) > EARLY_DIGEST_MAX_CHARS:
                     break
@@ -482,8 +490,8 @@ def _build_context(history: list[dict], user_input: str, context_length: int):
                 used += len(line)
             if lines:
                 lines.reverse()
-                digest = ("[系统·早期对话要点]（早于最近 %d 轮的原文已省略，以下是逐条摘录，"
-                          "其中的事实/数值/路径仍有效，可直接引用；不要因为看不到原文就说「没有」）\n%s"
+                digest = ("[System · early conversation digest] (originals older than the last %d turns are omitted; the excerpts below"
+                          "remain valid and citable; do not say something is missing just because the original is not shown)\n%s"
                           % (context_length, "\n".join(lines)))
     # 总量兜底：从最早的开始丢，保证历史字符数在预算内（保留当前 user_input）
     total = sum(len(str(m.content)) for m in msgs) + len(user_input or "") + (len(digest) if digest else 0)
@@ -536,17 +544,17 @@ async def _build_file_manifest(file_ids: list) -> str:
         _, meta, _ = _resolve_upload(fid)
         name = (meta or {}).get("name") or fid
         if await image_to_base64(fid):
-            rows.append("- [图片] %s（file_id: %s）" % (name, fid))
+            rows.append("- [Image] %s (file_id: %s)" % (name, fid))
         else:
             text = await get_upload_text(fid)
             if text:
-                rows.append("- [文档] %s（file_id: %s，已解析 %d 字）" % (name, fid, len(text)))
+                rows.append("- [Document] %s (file_id: %s, parsed %d characters)" % (name, fid, len(text)))
             else:
-                rows.append("- [文档] %s（file_id: %s，无可用文本：扫描版请用 mineru_parse 解析）" % (name, fid))
-    return ("[本对话已上传的文件] —— 这些文件在本会话里**一直可用**，"
-            "不要因为消息变旧就说「没有文件」或者要求用户重新上传。\n"
+                rows.append("- [Document] %s (file_id: %s, no usable text: for scanned PDFs use mineru_parse)" % (name, fid))
+    return ("[Files uploaded in this conversation] - these files are **available for the whole session**;"
+            "never say there is no file because the message is old, and never ask the user to re-upload.\n"
             + "\n".join(rows) +
-            "\n取正文/取图片一律 read_file(file_id=…)（图片返回图像块，可直接看像素）；清单里有的就不要问用户要。")
+            "\nRead text or images with read_file(file_id=...) (images return image blocks with real pixels); never ask the user for anything already listed.")
 
 
 
@@ -610,7 +618,7 @@ async def run_agent(
     # 4. 工具（只取前端启用的）
     tools = get_tools(enabled_tools)
     if not tools:
-        return {"final_answer": "没有可用工具", "reasoning_steps": []}
+        return {"final_answer": "No tools available", "reasoning_steps": []}
 
     # 如果没有加载技能，移除 skill_list 和 skill_view 工具
     if not loaded_skills:
@@ -654,11 +662,11 @@ async def run_agent(
         _save_to_history(branch_id, user_input, final_answer, msg_id)
         _trigger_vector_index()
 
-        return {"final_answer": final_answer or "Agent 未能生成回答", "reasoning_steps": reasoning_steps}
+        return {"final_answer": final_answer or "The agent produced no answer", "reasoning_steps": reasoning_steps}
 
     except Exception as e:
         import traceback
-        return {"final_answer": f"Agent 执行失败: {str(e)}", "reasoning_steps": [], "error": str(e), "traceback": traceback.format_exc()}
+        return {"final_answer": f"Agent run failed: {str(e)}", "reasoning_steps": [], "error": str(e), "traceback": traceback.format_exc()}
 
 
 # ── 流式 Agent ────────────────────────────────────
@@ -780,7 +788,7 @@ async def stream_agent(
                     enabled_tools = [t for t in enabled_tools
                                      if t != "graph_query"]
                     yield {"type": "reasoning",
-                           "text": f"（图谱未连接，已跳过图谱工具继续回答：{_n4_err}）\n"}
+                           "text": f"(Graph not connected; skipped graph tools and continued: {_n4_err})\n"}
 
     # System prompt
     system_prompt = await _build_system_prompt(enabled_tools, loaded_skills)
@@ -795,7 +803,7 @@ async def stream_agent(
     # Tools (LangChain StructuredTool)
     tools = get_tools(enabled_tools)
     if not tools:
-        yield {"type": "error", "message": "没有可用工具"}
+        yield {"type": "error", "message": "No tools available"}
         return
     if not loaded_skills:
         tools = [t for t in tools if t.name not in ("skill_list", "skill_view")]
@@ -872,6 +880,7 @@ async def stream_agent(
     # context_budget = 前端可显式指定的清理触发线；0/缺失 → 自动 (窗口 − 输出预留) × 75%
     _ctx = ContextBudget(window_tokens=int(model_config.get("context_window") or DEFAULT_CONTEXT_WINDOW),
                          max_output_tokens=max_tokens,
+                         keep_recent_tokens=int(model_config.get("tool_keep_tokens") or 0),
                          trigger_override=int(model_config.get("context_budget") or 0))
     _overflow_retried = False
     try:
@@ -880,7 +889,7 @@ async def stream_agent(
             for _step in range(1, cap + 1):  # 工具循环（步数可配，0=无限）
                 if generation_cancelled():
                     _turn_finish("interrupted", all_content)
-                    yield {"type": "stopped", "text": "已停止"}
+                    yield {"type": "stopped", "text": "Stopped"}
                     return
 
                 # ── 用户点「催促回答」：注入催促让模型马上收尾（独立于超时保护的通道）──
@@ -888,26 +897,26 @@ async def stream_agent(
                     reset_immediate_answer()
                     messages.append({"role": "user", "content": _IMMEDIATE_ANSWER_TEXT})
                     yield {"type": "timeout_notice", "level": "immediate",
-                           "text": "已按你的「催促回答」注入催促：请它马上收尾出答案。",
+                           "text": "Nudge injected: asking the model to wrap up and answer now.",
                            "elapsed": int(time.time() - _t_start)}
-                    _turn_notice("immediate", "已按你的「催促回答」注入催促：请它马上收尾出答案。",
+                    _turn_notice("immediate", "Nudge injected: asking the model to wrap up and answer now.",
                                  int(time.time() - _t_start))
 
                 # ── 超时保护：只剩一级强制中断（2026-10-13 删催促/警告两级）──
                 _elapsed = time.time() - _t_start
                 if _T.get("abort") and _elapsed >= _T["abort"]:
                     yield {"type": "timeout_notice", "level": "abort",
-                           "text": f"已达终止时限 {_T['abort']}s（实际 {int(_elapsed)}s），强制结束本轮生成。",
+                           "text": f"Reached the abort timeout ({_T['abort']} s, actual {int(_elapsed)} s); forced to end this turn.",
                            "elapsed": int(_elapsed)}
-                    _turn_notice("abort", f"已达终止时限 {_T['abort']}s（实际 {int(_elapsed)}s），强制结束本轮生成。",
+                    _turn_notice("abort", f"Reached the abort timeout ({_T['abort']} s, actual {int(_elapsed)} s); forced to end this turn.",
                                  int(_elapsed))
                     final_answer = all_content or final_answer
                     _turn_final(final_answer)
                     _turn_finish("timeout", final_answer)
                     yield {"type": "final",
-                           "text": (final_answer + f"\n\n---\n⏱️ **超时终止**：本次生成用时超过 {_T['abort']} 秒上限，已强制结束（未完成的探索被中断）。"
-                                                f"可继续追问让它收尾，或在设置里调大「超时终止」时限。") if final_answer
-                                   else f"⏱️ **超时终止**：本次生成超过 {_T['abort']} 秒上限且没有产出内容，已强制结束。"}
+                           "text": (final_answer + f"\n\n---\n⏱️ **Timeout**: this turn exceeded {_T['abort']} s and was forced to stop (unfinished exploration was interrupted)."
+                                                f"Ask again to let it wrap up, or raise the abort timeout in Settings.") if final_answer
+                                   else f"⏱️ **Timeout**: this turn exceeded {_T['abort']} s with no output and was forced to stop."}
 
                 cur_reasoning = ""
                 cur_content = ""
@@ -932,16 +941,19 @@ async def stream_agent(
                             k in _low for k in ("context", "token", "too long", "maximum", "length", "exceed"))
                         if _overflow and not _overflow_retried:
                             _overflow_retried = True
-                            _cleared = prune_tool_results_only(messages, keep_recent=2)
+                            _cleared = prune_tool_results_only(
+                                messages,
+                                keep_recent_tokens=max(4000, _ctx.keep_recent_tokens // 4),
+                            )
                             _ctx.record_compress_result(_cleared > 0)
                             yield {"type": "context_pruned", "cleared": _cleared,
-                                   "reason": "模型报上下文溢出，已清理旧工具结果并重试一次"}
+                                   "reason": "Model reported context overflow; pruned old tool results and retried once"}
                             if _cleared > 0:
                                 continue
-                        _hint = ("（上下文溢出：可清的工具结果已全部清理，仍超出窗口 —— "
-                                 "请缩小本次任务范围或新开对话）") if _overflow else ""
+                        _hint = ("(Context overflow: all prunable tool results were removed and it still exceeds the window - "
+                                 "narrow the task or start a new conversation)") if _overflow else ""
                         yield {"type": "error",
-                               "message": f"模型接口错误 {resp.status_code}: {body[:300]}{_hint}"}
+                               "message": f"Model API error {resp.status_code}: {body[:300]}{_hint}"}
                         return
                     async for line in resp.aiter_lines():
                         if generation_cancelled():
@@ -950,15 +962,15 @@ async def stream_agent(
                         # 流式中途的硬终止（长回答不会因为循环顶部检查而失守）
                         if _T.get("abort") and (time.time() - _t_start) >= _T["abort"]:
                             yield {"type": "timeout_notice", "level": "abort",
-                                   "text": f"已达终止时限 {_T['abort']}s，流式输出中断。",
+                                   "text": f"Reached the abort timeout ({_T['abort']} s); streaming stopped.",
                                    "elapsed": int(time.time() - _t_start)}
-                            _turn_notice("abort", f"已达终止时限 {_T['abort']}s，流式输出中断。",
+                            _turn_notice("abort", f"Reached the abort timeout ({_T['abort']} s); streaming stopped.",
                                          int(time.time() - _t_start))
                             _turn_final(all_content + cur_content)
                             _turn_finish("timeout", all_content + cur_content)
                             yield {"type": "final",
                                    "text": (all_content + cur_content) +
-                                           f"\n\n---\n⏱️ **超时终止**：生成超过 {_T['abort']} 秒上限，已中断本次输出。"}
+                                           f"\n\n---\n⏱️ **Timeout**: generation exceeded {_T['abort']} s; output was interrupted."}
                             return
                         if not line or not line.startswith("data: "):
                             continue
@@ -1007,8 +1019,8 @@ async def stream_agent(
                 # 与其静默执行残缺参数（写入残缺笔记等），不如明确告知并终止
                 if round_finish == "length" and tool_acc:
                     yield {"type": "error", "message":
-                           "模型输出因达到“最大输出 Token”上限被截断，工具调用参数不完整。"
-                           "请在设置中调大最大输出 Token，或让 AI 分多次写入（例如笔记分卷 / 追加写入）。"}
+                           "Model output was truncated at the max output token limit, so the tool arguments are incomplete."
+                           "Raise the max output tokens in Settings, or have the AI write in several passes (e.g. split notes / append)."}
                     return
 
                 # 本轮结束
@@ -1017,10 +1029,10 @@ async def stream_agent(
                     answer_text = cur_content.strip() if cur_content.strip() else all_content
                     final_answer = _clean_final(answer_text)
                     if round_finish == "length" and final_answer:
-                        final_answer += "\n\n> ⚠️ 回答因达到最大输出 Token 上限被截断，可点击「继续生成」续写。"
-                    _turn_final(final_answer or "Agent 未能生成回答")
+                        final_answer += "\n\n> ⚠️ The answer was truncated at the max output token limit; click Continue to extend it."
+                    _turn_final(final_answer or "The agent produced no answer")
                     _turn_finish("complete", final_answer)
-                    yield {"type": "final", "text": final_answer or "Agent 未能生成回答"}
+                    yield {"type": "final", "text": final_answer or "The agent produced no answer"}
                     # 保存历史 + 触发向量索引
                     try:
                         msg_id = f"msg-{int(time.time() * 1000)}"
@@ -1097,10 +1109,10 @@ async def stream_agent(
                             try:
                                 _sa_results = await _sa_task
                             except asyncio.CancelledError:
-                                _sa_results = [{"index": i, "ok": False, "error": "已停止",
+                                _sa_results = [{"index": i, "ok": False, "error": "Stopped",
                                                 "goal": _valid[i].get("goal", "")} for i in range(len(_valid))]
                             except Exception as _e:
-                                _sa_results = [{"index": i, "ok": False, "error": f"子智能体异常：{_e}",
+                                _sa_results = [{"index": i, "ok": False, "error": f"Subagent error: {_e}",
                                                 "goal": _valid[i].get("goal", "")} for i in range(len(_valid))]
                             for _r in _sa_results:
                                 yield {"type": "subagent_end",
@@ -1117,18 +1129,18 @@ async def stream_agent(
                             result = json.dumps({"status": "ok", "count": len(_sa_results),
                                                  "results": _slim(_sa_results)}, ensure_ascii=False)
                     elif not args_ok:
-                        result = json.dumps({"error": f"工具 {name} 的调用参数不是合法 JSON（可能被输出长度截断）。请重新调用并简化参数。"}, ensure_ascii=False)
+                        result = json.dumps({"error": f"Arguments for tool {name} are not valid JSON (possibly truncated by the output limit). Call it again with simpler arguments."}, ensure_ascii=False)
                     else:
                         tool = tool_map.get(name)
                         if tool is None:
-                            result = json.dumps({"error": f"工具 {name} 不存在"})
+                            result = json.dumps({"error": f"Tool {name} does not exist"})
                         else:
                             try:
                                 res = await tool.ainvoke(args)
                                 # 结构化内容块（图像通道）原样保留；其余序列化成 JSON 文本
                                 result = res if isinstance(res, (str, list)) else json.dumps(res, ensure_ascii=False)
                             except Exception as e:
-                                result = json.dumps({"error": f"工具执行失败: {str(e)}"})
+                                result = json.dumps({"error": f"Tool execution failed: {str(e)}"})
                     # ── image_read：图提升为独立的 user 图像块，工具消息里只留文字桩 ──
                     # （OpenAI 系 role=tool 只收字符串，base64 留在 tool 消息里等于喂 token 乱码）
                     _img_u, _img_txt = _split_img(result)
@@ -1136,7 +1148,7 @@ async def stream_agent(
                         if len(pending_images) < 3:      # 单步最多 3 张，防上下文爆炸
                             pending_images.append(_img_u)
                         result = json.dumps({"ok": True, "mode": "image",
-                                             "note": "图片已作为图像附加，可直接查看像素",
+                                             "note": "The image is attached as an image block; inspect the pixels directly",
                                              "meta": _img_txt},
                                             ensure_ascii=False)
                     elif isinstance(result, list):
@@ -1146,7 +1158,7 @@ async def stream_agent(
                     _turn_step(name, args, result, round_no=_step)
                     if generation_cancelled():
                         _turn_finish("interrupted", all_content + cur_content)
-                        yield {"type": "stopped", "text": "已停止"}
+                        yield {"type": "stopped", "text": "Stopped"}
                         return
                     call_id = tc["id"] or f"call_{_step}_{len(assistant_tc)}"
                     assistant_tc.append({
@@ -1167,14 +1179,18 @@ async def stream_agent(
                 _pt = max(_ctx.last_prompt_tokens, estimate_tokens(messages))
                 _need, _why = _ctx.should_compress_info(_pt)
                 if _need:
-                    _cleared = prune_tool_results_only(messages, keep_recent=_ctx.keep_recent)
+                    # 按 token 目标从最早的工具结果开始清，清到回落到目标线为止；
+                    # 不按“保留最近 N 条”处理，也不在未超线时做无谓清理。
+                    _target = max(_ctx.keep_recent_tokens, int(_ctx.trigger_tokens * 0.75))
+                    _cleared = prune_tool_results_to_target(
+                        messages, _target, keep_recent_tokens=_ctx.keep_recent_tokens)
                     _ctx.pruned_total += _cleared
                     if _cleared:
                         yield {"type": "context_pruned", "cleared": _cleared,
                                "tokens_est": _pt, "reason": _why}
 
                 if pending_images:
-                    _vis = [{"type": "text", "text": "[系统] 上一步工具返回的图片如下，可直接读取像素："}]
+                    _vis = [{"type": "text", "text": "[System] The previous tool returned the following images; inspect the pixels directly:"}]
                     _vis += [{"type": "image_url", "image_url": {"url": _u}} for _u in pending_images]
                     messages.append({"role": "user", "content": _vis})
 
@@ -1185,17 +1201,26 @@ async def stream_agent(
             # 用户看到的就是「忙了半天什么也没给」。改成再要一次【不带 tools 字段】的请求：
             # 协议层面它无法再发起工具调用，只能就已有信息收敛出结论。
             yield {"type": "timeout_notice", "level": "cap",
-                   "text": f"已达最大工具循环步数({cap})，改为基于已获得信息强制收尾。",
+                   "text": f"Reached the tool-call limit ({cap}); wrapping up from the information gathered.",
                    "elapsed": int(time.time() - _t_start)}
-            _turn_notice("cap", f"已达最大工具循环步数({cap})，改为基于已获得信息强制收尾。",
+            _turn_notice("cap", f"Reached the tool-call limit ({cap}); wrapping up from the information gathered.",
                          int(time.time() - _t_start))
+            # 强制收尾前只在确实超出触发线时清理，且按 token 目标从最早的工具结果开始清；
+            # 达到循环上限本身不是清理理由，未超线就原样进入收尾。
+            if estimate_tokens(messages) > _ctx.trigger_tokens:
+                _cleared_cap = prune_tool_results_to_target(
+                    messages, _ctx.trigger_tokens, keep_recent_tokens=_ctx.keep_recent_tokens)
+                if _cleared_cap:
+                    _ctx.pruned_total += _cleared_cap
+                    yield {"type": "context_pruned", "cleared": _cleared_cap,
+                           "reason": "Tool-call limit reached and context budget exceeded; pruned older tool results to the token target before wrapping up"}
             forced = ""
             try:
                 _fmsg = messages + [{"role": "user", "content":
-                    "[系统·步数上限] 工具调用次数已用完，这次回答【不能再调用工具】。"
-                    "请只依据上面已获得的信息给出最终答复："
-                    "① 先给结论；② 列出关键依据（带文件路径 / 数据出处）；"
-                    "③ 明确写出「还没查到的部分」和「下一步该做什么」。"}]
+                    "[System · step limit] The tool budget is exhausted; you **cannot call any more tools** in this answer."
+                    "Answer only from the information above:"
+                    "(1) state the conclusion; (2) list the key evidence (file paths / data sources);"
+                    "(3) state clearly what is still unknown and what to do next."}]
                 _fpayload = {"model": model, "messages": _fmsg,
                              "temperature": temperature, "max_tokens": max_tokens,
                              "stream": True}
@@ -1229,13 +1254,13 @@ async def stream_agent(
                 forced = all_content  # 兜底：把前面各轮已写出的正文还给用户，别让它凭空消失
             final_answer = _clean_final(forced)
             _turn_final(final_answer)
-            _tail = (f"\n\n---\n⏳ **步数上限**：本次工具循环达 {cap} 步上限，以上结论由已获得的"
-                     "信息收敛而来，可能不完整。可继续追问让它接着做，"
-                     "或在「设置」里调大「最大工具步数」。")
+            _tail = (f"\n\n---\n⏳ **Step limit**: the tool loop reached {cap} steps; the conclusions above are from the"
+                     "information gathered so far and may be incomplete. Ask again to continue,"
+                     "or raise the maximum tool steps in Settings.")
             _turn_finish("complete", final_answer)
             yield {"type": "final", "text": (final_answer + _tail) if final_answer.strip() else (
-                f"已达最大工具循环步数({cap})，且没有可总结的内容。"
-                "可尝试精简问题或拆分任务。")}
+                f"Reached the tool-call limit ({cap}) with nothing to summarize."
+                "Try simplifying the question or splitting the task.")}
 
     except Exception as e:
         import traceback
@@ -1344,7 +1369,7 @@ async def stream_agent_lc(
                     enabled_tools = [t for t in enabled_tools
                                      if t != "graph_query"]
                     yield {"type": "reasoning",
-                           "text": f"（图谱未连接，已跳过图谱工具继续回答：{_n4_err}）\n"}
+                           "text": f"(Graph not connected; skipped graph tools and continued: {_n4_err})\n"}
 
     system_prompt = await _build_system_prompt(enabled_tools, loaded_skills)
     _manifest = await _build_file_manifest(file_ids)
@@ -1357,7 +1382,7 @@ async def stream_agent_lc(
 
     tools = get_tools(enabled_tools)
     if not tools:
-        yield {"type": "error", "message": "没有可用工具"}
+        yield {"type": "error", "message": "No tools available"}
         return
     if not loaded_skills:
         tools = [t for t in tools if t.name not in ("skill_list", "skill_view")]
@@ -1387,7 +1412,10 @@ async def stream_agent_lc(
     )
     # 上下文护栏：与 custom 引擎的 prune/cap 策略对齐（lc 路径 2026-10-14 前无治理）
     from agent.lc_middleware import make_context_guard
-    _lc_guard = make_context_guard(int(model_config.get("context_window") or 200000))
+    _lc_guard = make_context_guard(
+        int(model_config.get("context_window") or 200000),
+        keep_recent_tokens=int(model_config.get("tool_keep_tokens") or 0),
+    )
     agent = create_agent(model=llm, tools=tools, system_prompt=system_prompt,
                          middleware=[_lc_guard])
 
@@ -1407,32 +1435,32 @@ async def stream_agent_lc(
             if generation_cancelled():
                 _turn_final(final_answer)
                 _turn_finish("interrupted", final_answer)
-                yield {"type": "stopped", "text": "已停止"}
+                yield {"type": "stopped", "text": "Stopped"}
                 return
             # 用户点「⚡立即回答」：LangChain 图内无法安全注入提示 → 直接用已有内容收尾作答
             if immediate_answer_requested():
                 reset_immediate_answer()
                 yield {"type": "timeout_notice", "level": "immediate",
-                       "text": "已按「立即回答」收尾（LangChain 引擎无法中途注入提示，直接用已有内容作答）。"}
-                _turn_notice("immediate", "已按「立即回答」收尾（LangChain 引擎无法中途注入提示，直接用已有内容作答）。")
+                       "text": "Wrapped up for Answer now (the LangChain engine cannot inject mid-run prompts; answering from what exists)."}
+                _turn_notice("immediate", "Wrapped up for Answer now (the LangChain engine cannot inject mid-run prompts; answering from what exists).")
                 _turn_final(final_answer)
                 _turn_finish("complete", final_answer)
                 yield {"type": "final",
-                       "text": (final_answer.strip() + "\n\n---\n⚡ **立即回答**：按你的要求提前收尾，以上是已有内容。")
-                               if final_answer.strip() else "⚡ **立即回答**：按你的要求收尾，但本轮还没有产出内容，可继续追问。"}
+                       "text": (final_answer.strip() + "\n\n---\n⚡ **Answer now**: wrapped up early as requested; the above is what exists.")
+                               if final_answer.strip() else "⚡ **Answer now**: wrapped up as requested, but nothing was produced this turn; ask again to continue."}
                 return
             # 超时终止（LangChain 引擎：图内无法安全注入催促/警告提示，故只做硬终止级保护）
             if _T.get("abort") and (time.time() - _t_start) >= _T["abort"]:
                 yield {"type": "timeout_notice", "level": "abort",
-                       "text": f"已达终止时限 {_T['abort']}s，强制结束本轮生成（LangChain 引擎仅支持终止级）。",
+                       "text": f"Reached the abort timeout ({_T['abort']} s); forced to end this turn (the LangChain engine supports only the abort level).",
                        "elapsed": int(time.time() - _t_start)}
-                _turn_notice("abort", f"已达终止时限 {_T['abort']}s，强制结束本轮生成（LangChain 引擎仅支持终止级）。",
+                _turn_notice("abort", f"Reached the abort timeout ({_T['abort']} s); forced to end this turn (the LangChain engine supports only the abort level).",
                              int(time.time() - _t_start))
                 _turn_final(final_answer)
                 _turn_finish("timeout", final_answer)
                 yield {"type": "final",
-                       "text": (final_answer.strip() + f"\n\n---\n⏱️ **超时终止**：生成超过 {_T['abort']} 秒上限，已强制结束。")
-                               if final_answer.strip() else f"⏱️ **超时终止**：超过 {_T['abort']} 秒上限且无产出，已强制结束。"}
+                       "text": (final_answer.strip() + f"\n\n---\n⏱️ **Timeout**: generation exceeded {_T['abort']} s and was forced to stop.")
+                               if final_answer.strip() else f"⏱️ **Timeout**: exceeded {_T['abort']} s with no output; forced to stop."}
                 return
             e = ev.get("event")
             _parents = ev.get("parent_ids") or []
@@ -1508,7 +1536,7 @@ async def stream_agent_lc(
                 _u, _t = _split_img(out.content if hasattr(out, "content") else out)
                 if _u:
                     out = json.dumps({"ok": True, "mode": "image",
-                                      "note": "图片已随工具消息一并发送给模型（LangChain 原生 image_url 内容块）",
+                                      "note": "Images were sent to the model with the tool message (native LangChain image_url blocks)",
                                       "meta": _t}, ensure_ascii=False)
                 elif not isinstance(out, str):
                     try:
@@ -1529,12 +1557,12 @@ async def stream_agent_lc(
             # 告诉用户怎么办，而不是只报"失败了"。
             _turn_finish("complete", "")
             yield {"type": "final", "text":
-                   f"⏳ **步数上限**：本次工具循环达 {cap} 步上限，仍未收敛出可展示的正文。"
-                   "可继续追问让它基于已有信息作答，或在「设置」里调大「最大工具步数」；"
-                   "本引擎（LangChain）为批处理，长任务建议改用 custom 引擎。"}
+                   f"⏳ **Step limit**: the tool loop reached {cap} steps without producing displayable text."
+                   "Ask again to answer from existing information, or raise the maximum tool steps in Settings;"
+                   "The LangChain engine is request-oriented; use the custom engine for long tasks."}
         else:
             if saw_length:
-                final_answer += "\n\n> ⚠️ 检测到模型输出曾因达到最大输出 Token 上限被截断；若结果不完整，请在设置中调大 Token 或让 AI 分多次写入。"
+                final_answer += "\n\n> ⚠️ Model output was truncated at the max output tokens; if incomplete, raise the limit in Settings or have the AI write in several passes."
             _turn_final(final_answer)
             _turn_finish("complete", final_answer)
             yield {"type": "final", "text": final_answer}
@@ -1548,4 +1576,4 @@ async def stream_agent_lc(
     except Exception as e:
         import traceback
         _turn_finish("error", final_answer if isinstance(final_answer, str) else "")
-        yield {"type": "error", "message": f"LangChain Agent 执行失败: {str(e)}", "traceback": traceback.format_exc()}
+        yield {"type": "error", "message": f"LangChain agent failed: {str(e)}", "traceback": traceback.format_exc()}

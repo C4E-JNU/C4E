@@ -99,7 +99,7 @@ async def auth_no_cache_middleware(request, call_next):
             _tok = request.query_params.get("token", "")
         user = _auth.user_by_token(_tok)
         if not user:
-            return JSONResponse({"error": "未登录或会话已过期"}, status_code=401)
+            return JSONResponse({"error": "Not signed in or session expired"}, status_code=401)
         request.state.user = user
     response = await call_next(request)
     # 页面与静态资源一律禁缓存（含 "/" 入口页——之前漏掉它导致浏览器用旧版 index.html，
@@ -225,8 +225,8 @@ async def _hub_api(method: str, path: str, payload: dict = None, token: str = ""
             return r.status_code, r.text
     except Exception as e:
         # ★ 连接失败必须和"密码错误"分开：以前这里直接抛异常 → 上层把任何非 200 都当成
-        #   "用户名或密码错误"，密码对的人也会被误导。用 -1 作为"连不上"的哨兵。
-        return -1, f"连接共享库失败：{e}"
+        #   "Wrong username or password"，密码对的人也会被误导。用 -1 作为"连不上"的哨兵。
+        return -1, f"Failed to connect to the shared library: {e}"
 
 class LoginReq(BaseModel):
     username: str; password: str
@@ -251,10 +251,10 @@ async def api_auth_login(req: LoginReq):
         # 本地实例：代理到共享库验证（同一套账号）
         res = await _hub_api("POST", "/api/auth/login", {"username": req.username, "password": req.password})
         if res is None:
-            return JSONResponse({"error": "本地实例未连接共享服务器（未设 C4EAI_HUB），无需登录"}, status_code=400)
+            return JSONResponse({"error": "This local instance has no shared server (C4EAI_HUB is unset); no sign-in needed"}, status_code=400)
         code, text = res
         if code == -1:
-            return JSONResponse({"error": "连不上共享库服务器（网络不通或服务未启动），请稍后重试"},
+            return JSONResponse({"error": "Cannot reach the shared library server (network down or service not running); try again later"},
                                 status_code=502)
         if code != 200:
             # 只有共享库明确说账号/密码不对时才归到密码错；其它情况照实报
@@ -263,8 +263,8 @@ async def api_auth_login(req: LoginReq):
             except Exception:
                 msg = ""
             if code in (400, 401, 403):
-                return JSONResponse({"error": msg or "用户名或密码错误"}, status_code=401)
-            return JSONResponse({"error": f"登录失败（共享库返回 {code}）{('：' + msg) if msg else ''}"},
+                return JSONResponse({"error": msg or "Wrong username or password"}, status_code=401)
+            return JSONResponse({"error": f"Sign-in failed (shared library returned {code}){(': ' + msg) if msg else ''}"},
                                 status_code=502)
         d = json.loads(text)
         _save_hub_session({"token": d["token"], "username": d["username"],
@@ -275,7 +275,7 @@ async def api_auth_login(req: LoginReq):
         return d
     token = _auth.login(req.username, req.password)
     if not token:
-        return JSONResponse({"error": "用户名或密码错误"}, status_code=401)
+        return JSONResponse({"error": "Wrong username or password"}, status_code=401)
     u = _auth.user_by_token(token)
     # ⚠️ 必须返回 level：前端登录后把身份存进 localStorage（顶栏芯片据此上色），
     #    漏掉 level 会导致芯片只能按 approved 兜底显示蓝色（与用户管理面板不一致）。
@@ -289,10 +289,10 @@ async def api_auth_register(req: RegisterReq):
     if not _AUTH_ENABLED:
         res = await _hub_api("POST", "/api/auth/register", {"username": req.username, "password": req.password})
         if res is None:
-            return JSONResponse({"error": "共享服务器不可达，无法注册"}, status_code=502)
+            return JSONResponse({"error": "Shared server unreachable; cannot register"}, status_code=502)
         code, text = res
         if code == -1:
-            return JSONResponse({"error": "连不上共享库服务器（网络不通或服务未启动），请稍后重试"},
+            return JSONResponse({"error": "Cannot reach the shared library server (network down or service not running); try again later"},
                                 status_code=502)
         try:
             return JSONResponse(json.loads(text) if text else {}, status_code=code)
@@ -301,7 +301,7 @@ async def api_auth_register(req: RegisterReq):
     ok, msg = _auth.register_user(req.username, req.password)
     if not ok:
         return JSONResponse({"error": msg}, status_code=400)
-    return {"status": "ok", "message": "注册成功，可用自己的数据库"}
+    return {"status": "ok", "message": "Registered successfully; your own database is available"}
 
 @app.post("/api/auth/logout")
 async def api_auth_logout(request: Request):
@@ -388,10 +388,10 @@ async def _proxy_admin_api(method: str, path: str, payload: dict = None):
     """本地实例把用户管理接口代理给共享库（用本地保存的会话 token）"""
     s = _load_hub_session()
     if not s.get("token"):
-        return JSONResponse({"error": "请先用管理员账号登录本地实例"}, status_code=403)
+        return JSONResponse({"error": "Sign in to the local instance as an administrator first"}, status_code=403)
     res = await _hub_api(method, path, payload, token=s["token"])
     if res is None:
-        return JSONResponse({"error": "共享服务器不可达"}, status_code=502)
+        return JSONResponse({"error": "Shared server unreachable"}, status_code=502)
     code, text = res
     return JSONResponse(json.loads(text) if text else {}, status_code=code)
 
@@ -400,7 +400,7 @@ async def api_auth_users(request: Request):
     if not _AUTH_ENABLED:
         return await _proxy_admin_api("GET", "/api/auth/users")
     if not _require_admin(request):
-        return JSONResponse({"error": "需要管理员权限"}, status_code=403)
+        return JSONResponse({"error": "Administrator rights required"}, status_code=403)
     usage = _RP.all_usage()
     users = _auth.list_users()
     for u in users:
@@ -418,7 +418,7 @@ async def api_auth_users_create(req: CreateUserReq, request: Request):
     if not _AUTH_ENABLED:
         return await _proxy_admin_api("POST", "/api/auth/users", _req_dump(req))
     if not _require_admin(request):
-        return JSONResponse({"error": "需要管理员权限"}, status_code=403)
+        return JSONResponse({"error": "Administrator rights required"}, status_code=403)
     cu = _cur_user(request)
     # 等级：仅主管理员可创建 L5(金)；金色(L5) 最多创建 L4
     want_lv = req.level if isinstance(req.level, int) else 0
@@ -442,7 +442,7 @@ async def api_auth_users_level(req: LevelReq, request: Request):
         return await _proxy_admin_api("POST", "/api/auth/users/level", _req_dump(req))
     cu = _cur_user(request)
     if not _require_admin(request):
-        return JSONResponse({"error": "需要管理员或金色等级权限"}, status_code=403)
+        return JSONResponse({"error": "Administrator or gold-level rights required"}, status_code=403)
     ok, msg = _RP.can_set_level(cu, req.username, req.level)
     if not ok:
         return JSONResponse({"error": msg}, status_code=403 if "权限" in msg else 400)
@@ -458,12 +458,12 @@ async def api_auth_levels():
     return {"status": "ok", "levels": [
         {"level": i, "name": _RP.LEVEL_NAMES[i], "color": _RP.LEVEL_COLORS[i],
          "desc": [
-             "游客：聊天可用；工具受限；不可用云端数据库；本地千问限量",
-             "蓝色：可用自己数据库（上传/查询/改/删）；工具全开；本地千问限量",
-             "紫色：同蓝色，颜色区分身份；本地千问限量",
-             "橙色：可查询所有人的数据库；仅能改/删自己的；本地千问限量",
-             "红色：同橙色权限，且本地千问**不限量**",
-             "金色：同橙色权限；可调整他人身份等级（不可授予金色）",
+             "Guest: chat available; tools limited; no cloud database; local Qwen quota limited",
+             "Blue: own database (upload/query/edit/delete); all tools; local Qwen quota limited",
+             "Purple: same as blue, different color; local Qwen quota limited",
+             "Orange: query everyone's database; edit/delete only your own; local Qwen quota limited",
+             "Red: same as orange, with **unlimited** local Qwen",
+             "Gold: same as orange; may change other users' levels (cannot grant gold)",
          ][i]} for i in range(6)]}
 
 
@@ -474,7 +474,7 @@ async def api_auth_users_role(req: RoleReq, request: Request):
         return await _proxy_admin_api("POST", "/api/auth/users/role", _req_dump(req))
     cu = _cur_user(request)
     if cu.get("username") != "admin":
-        return JSONResponse({"error": "仅主管理员可调整账号角色"}, status_code=403)
+        return JSONResponse({"error": "Only the root administrator can change account roles"}, status_code=403)
     ok, msg = _auth.set_role(req.username, req.role, cu.get("username"))
     if not ok:
         return JSONResponse({"error": msg}, status_code=400)
@@ -485,7 +485,7 @@ async def api_auth_users_pw(req: SetPwReq, request: Request):
     if not _AUTH_ENABLED:
         return await _proxy_admin_api("POST", "/api/auth/users/password", _req_dump(req))
     if not _require_admin(request):
-        return JSONResponse({"error": "需要管理员权限"}, status_code=403)
+        return JSONResponse({"error": "Administrator rights required"}, status_code=403)
     ok, msg = _auth.set_password(req.username, req.password)
     if not ok:
         return JSONResponse({"error": msg}, status_code=400)
@@ -496,7 +496,7 @@ async def api_auth_users_approve(req: ApproveReq, request: Request):
     if not _AUTH_ENABLED:
         return await _proxy_admin_api("POST", "/api/auth/users/approve", _req_dump(req))
     if not _require_admin(request):
-        return JSONResponse({"error": "需要管理员权限"}, status_code=403)
+        return JSONResponse({"error": "Administrator rights required"}, status_code=403)
     ok, msg = _auth.set_approved(req.username, req.approved)
     if not ok:
         return JSONResponse({"error": msg}, status_code=400)
@@ -511,7 +511,7 @@ async def api_auth_users_delete(req: DeleteUserReq, request: Request):
     if not _AUTH_ENABLED:
         return await _proxy_admin_api("POST", "/api/auth/users/delete", _req_dump(req))
     if not _require_root(request):
-        return JSONResponse({"error": "只有主管理员可以删除账号"}, status_code=403)
+        return JSONResponse({"error": "Only the root administrator can delete accounts"}, status_code=403)
     ok, msg = _auth.delete_user(req.username)
     if not ok:
         return JSONResponse({"error": msg}, status_code=400)
@@ -557,7 +557,7 @@ def _tool_gate(request, tool):
         return u
     u = _cur_user(request)
     if _RP.tool_denied(u, tool):
-        return JSONResponse({"error": "该功能需注册并由管理员开通权限后使用（未授权账号仅可使用聊天）。"}, status_code=403)
+        return JSONResponse({"error": "This feature needs a registered account with access granted by an administrator (unauthorized accounts can only chat)."}, status_code=403)
     _spm(_RP.enforce_mode(u, "safe"))
     _set_user_scope(_RP.user_sandbox(u))   # 文件类端点也按身份沙盒
     _scu(u["username"])
@@ -587,7 +587,7 @@ async def tool_cypher(req: CypherRequest, request: Request):
     g = _tool_gate(request, "cypher")
     if isinstance(g, JSONResponse): return g
     if _RP.cypher_denied(g, req.cypher):
-        return JSONResponse({"error": "图谱删除类语句（DELETE/DETACH/DROP）需管理员权限。"}, status_code=403)
+        return JSONResponse({"error": "Graph deletion statements (DELETE/DETACH/DROP) require administrator rights."}, status_code=403)
     return json.loads(await execute_cypher(req.cypher, req.params))
 @app.post("/api/tool/search")
 async def tool_web_search(req: SearchRequest):
@@ -658,7 +658,7 @@ def _check_file_access(meta: dict, user: dict):
         return True
     if (user or {}).get("role") == "admin":
         return True
-    raise HTTPException(403, "无权访问他人的私人文件")
+    raise HTTPException(403, "No permission to access another user's private files")
 
 
 @app.post("/api/file/upload")
@@ -696,12 +696,12 @@ async def api_file_upload(file: UploadFile = File(...), request: Request = None,
             # 本地实例：数据库唯一在云端 → 用本地登录会话代理上传
             s = _load_hub_session()
             if not s.get("token"):
-                return JSONResponse({"error": "数据库在共享服务器上：请先点击右上角「登录」；"
-                                              "新账号需等管理员开通数据库权限后再上传"},
+                return JSONResponse({"error": "The database lives on the shared server: click Sign in at the top right first;"
+                                              "New accounts can upload once an administrator grants database access"},
                                     status_code=401)
             base = _hub_base()
             if not base:
-                return JSONResponse({"error": "本地实例未配置共享服务器（C4EAI_HUB），无法使用数据库"},
+                return JSONResponse({"error": "This local instance has no shared server configured (C4EAI_HUB); the database is unavailable"},
                                     status_code=400)
             import httpx as _httpx
             try:
@@ -722,10 +722,10 @@ async def api_file_upload(file: UploadFile = File(...), request: Request = None,
                 except json.JSONDecodeError:
                     return JSONResponse({"error": r.text}, status_code=r.status_code)
             except Exception as e:
-                return JSONResponse({"error": f"上传到共享服务器失败: {e}"}, status_code=502)
+                return JSONResponse({"error": f"Upload to the shared server failed: {e}"}, status_code=502)
         # 云端共享库：数据库需 admin 已授权
         if not _is_authorized(user):
-            return JSONResponse({"error": "已注册，等待管理员开通数据库权限后即可上传"},
+            return JSONResponse({"error": "Registered; uploads unlock once an administrator grants database access"},
                                 status_code=403)
 
     # upload_file 是 async 但内部无 await（纯 CPU 密集文本提取），在线程池执行避免阻塞事件循环
@@ -825,17 +825,17 @@ async def api_pool_list(request: Request):
     if not _AUTH_ENABLED:
         s = _load_hub_session()
         if not s.get("token"):
-            return JSONResponse({"error": "请先登录"}, status_code=401)
+            return JSONResponse({"error": "Please sign in first"}, status_code=401)
         res = await _hub_api("GET", "/api/pool/list", token=s["token"])
         if res is None:
-            return JSONResponse({"error": "共享服务器不可达"}, status_code=502)
+            return JSONResponse({"error": "Shared server unreachable"}, status_code=502)
         code, text = res
         try:
             return JSONResponse(json.loads(text) if text else {}, status_code=code)
         except Exception:
             return JSONResponse({"error": text}, status_code=code)
     if not _is_authorized(user):
-        return JSONResponse({"error": "已注册，等待管理员开通数据库权限"}, status_code=403)
+        return JSONResponse({"error": "Registered; waiting for an administrator to grant database access"}, status_code=403)
     from tools.file_tools import _pool_uploads_dir
     items = []
     root = _pool_uploads_dir()
@@ -862,7 +862,7 @@ async def api_file_delete(req: FileIdRequest, request: Request):
     if d:
         owner = (meta or {}).get("owner", "admin")
         if not _owns_or_root(user, owner):
-            return JSONResponse({"error": "只能删除自己的文件"}, status_code=403)
+            return JSONResponse({"error": "You can only delete your own files"}, status_code=403)
     return json.loads(await _delete_upload(req.file_id))
 
 
@@ -901,7 +901,7 @@ async def api_file_download(file_id: str, request: Request):
     user = _cur_user(request)
     d, meta, file_path = _resolve_upload(file_id)
     if not d:
-        # 本地实例：共享库文件只在云端 → 代理到 hub（与 /raw 一致），避免前端「文件不存在」
+        # 本地实例：共享库文件只在云端 → 代理到 hub（与 /raw 一致），避免前端「File not found」
         if not _AUTH_ENABLED:
             s = _load_hub_session()
             base = _hub_base()
@@ -918,25 +918,25 @@ async def api_file_download(file_id: str, request: Request):
                                      media_type=r.headers.get("content-type", "application/octet-stream"),
                                      headers={"Content-Disposition": r.headers.get("content-disposition", "inline")})
                     if r.status_code in (401, 403):
-                        return JSONResponse({"error": "共享库文件需要登录：请点击右上角「登录」后重试"}, status_code=401)
+                        return JSONResponse({"error": "Shared-library files require sign-in: click Sign in at the top right and retry"}, status_code=401)
                 except Exception as _e:
-                    return JSONResponse({"error": f"共享库连接失败：{str(_e)[:120]}"}, status_code=502)
-        raise HTTPException(404, "文件不存在")
+                    return JSONResponse({"error": f"Shared library connection failed: {str(_e)[:120]}"}, status_code=502)
+        raise HTTPException(404, "File not found")
     _check_file_access(meta, user)
     filename = meta.get("name", "file")
     if not os.path.isfile(file_path):
-        raise HTTPException(404, "文件数据不存在")
+        raise HTTPException(404, "File data not found")
     ext = os.path.splitext(filename)[1].lower()
     if ext in (".docx", ".doc"):
         # 动态取本机地址：本机用 127.0.0.1，局域网/服务器部署用请求的 Host（客户端 Word 经 http 来取文件）
         host = request.headers.get("host", "127.0.0.1:8080")
         scheme = request.url.scheme
         base = f"{scheme}://{host}"
-        html = f'''<!DOCTYPE html><html><head><meta charset="utf-8"><title>打开文件</title>
+        html = f'''<!DOCTYPE html><html><head><meta charset="utf-8"><title>Open file</title>
 <style>body{{font-family:sans-serif;text-align:center;padding:60px 20px;}}
 .btn{{display:inline-block;padding:14px 32px;font-size:16px;background:#185ab4;color:#fff;border-radius:6px;text-decoration:none;}}</style></head><body>
 <h2>📄 {filename}</h2>
-<a class="btn" href="ms-word:ofe|u|{base}/api/file/{file_id}/raw">在 Word 中打开</a></body></html>'''
+<a class="btn" href="ms-word:ofe|u|{base}/api/file/{file_id}/raw">Open in Word</a></body></html>'''
         from fastapi.responses import HTMLResponse; return HTMLResponse(html)
     from fastapi.responses import FileResponse
     from urllib.parse import quote; import mimetypes
@@ -950,17 +950,17 @@ async def api_file_open(file_id: str, request: Request):
     from tools.file_tools import _resolve_upload
     user = _cur_user(request)
     if sys.platform != "win32":
-        return JSONResponse({"status": "unsupported", "message": "当前部署在 Linux/服务器，无法用本机默认应用打开文件；请用「浏览器新标签」或「应用内浮窗」打开"},
+        return JSONResponse({"status": "unsupported", "message": "This deployment runs on Linux/server and cannot open files with a local default app; use a browser tab or the in-app window"},
                             status_code=200)
     d, meta, file_path = _resolve_upload(file_id)
     if not d:
-        raise HTTPException(404, "文件不存在")
+        raise HTTPException(404, "File not found")
     _check_file_access(meta, user)
     filename = meta.get("name", "file")
     if not os.path.isfile(file_path):
-        raise HTTPException(404, "文件数据不存在")
+        raise HTTPException(404, "File data not found")
     os.startfile(file_path)
-    return {"status": "ok", "message": f"已用默认应用打开: {filename}"}
+    return {"status": "ok", "message": f"Opened with the default app: {filename}"}
 
 @app.get("/api/file/{file_id}/raw")
 async def api_file_raw(file_id: str, request: Request):
@@ -969,7 +969,7 @@ async def api_file_raw(file_id: str, request: Request):
     user = _cur_user(request)
     d, meta, file_path = _resolve_upload(file_id)
     if not d:
-        # 本地实例：共享库文件只在云端 → 用本地登录会话代理到 hub（否则前端拿到 404「文件不存在」）
+        # 本地实例：共享库文件只在云端 → 用本地登录会话代理到 hub（否则前端拿到 404「File not found」）
         if not _AUTH_ENABLED:
             s = _load_hub_session()
             base = _hub_base()
@@ -986,16 +986,16 @@ async def api_file_raw(file_id: str, request: Request):
                         return Response(content=r.content, media_type=ctype,
                                         headers={"Content-Disposition": cdisp})
                     if r.status_code in (401, 403):
-                        return JSONResponse({"error": "共享库文件需要登录：请点击右上角「登录」后重试"},
+                        return JSONResponse({"error": "Shared-library files require sign-in: click Sign in at the top right and retry"},
                                             status_code=401)
                     # 云端也 404 → 透传
                 except Exception as _e:
-                    return JSONResponse({"error": f"共享库连接失败：{str(_e)[:120]}"}, status_code=502)
-        raise HTTPException(404, "文件不存在")
+                    return JSONResponse({"error": f"Shared library connection failed: {str(_e)[:120]}"}, status_code=502)
+        raise HTTPException(404, "File not found")
     _check_file_access(meta, user)
     filename = meta.get("name", "file")
     if not os.path.isfile(file_path):
-        raise HTTPException(404, "文件数据不存在")
+        raise HTTPException(404, "File data not found")
     from urllib.parse import quote; import mimetypes
     media_type, _ = mimetypes.guess_type(filename)
     return FileResponse(file_path, media_type=media_type or "application/octet-stream",
@@ -1008,17 +1008,17 @@ async def api_file_open_location(file_id: str, request: Request):
     from tools.file_tools import _resolve_upload
     user = _cur_user(request)
     if sys.platform != "win32":
-        return JSONResponse({"status": "unsupported", "message": "当前部署在 Linux/服务器，无资源管理器可打开"},
+        return JSONResponse({"status": "unsupported", "message": "This deployment runs on Linux/server; no file explorer is available"},
                             status_code=200)
     d, meta, file_path = _resolve_upload(file_id)
     if not d:
-        raise HTTPException(404, "文件不存在")
+        raise HTTPException(404, "File not found")
     _check_file_access(meta, user)
     filename = meta.get("name", "file")
     if not os.path.isfile(file_path):
-        raise HTTPException(404, "文件数据不存在")
+        raise HTTPException(404, "File data not found")
     subprocess.Popen(r'explorer /select,"' + file_path + '"')
-    return {"status": "ok", "message": f"已在资源管理器中打开: {filename}"}
+    return {"status": "ok", "message": f"Opened in the file explorer: {filename}"}
 
 # ── 笔记 CRUD（按身份物理分文件；admin 可见全部）────────────────
 # 本地实例特例：branch_id=__db__（数据库条目）转发到共享库，与云端数据一致；
@@ -1032,10 +1032,10 @@ async def _notes_proxy(method: str, path: str, payload: dict = None):
         return None
     s = _load_hub_session()
     if not s.get("token"):
-        return JSONResponse({"error": "数据库在共享服务器上：请先点击右上角「登录」"}, status_code=401)
+        return JSONResponse({"error": "The database lives on the shared server: click Sign in at the top right first"}, status_code=401)
     r = await _hub_api(method, path, payload, s["token"])
     if r is None:
-        return JSONResponse({"error": "共享库不可达"}, status_code=502)
+        return JSONResponse({"error": "Shared library unreachable"}, status_code=502)
     status, text = r
     try:
         body = json.loads(text)
@@ -1049,16 +1049,16 @@ async def api_notes_publish(req: NotePublishReq, request: Request):
     权限：需已登录且管理员已开通数据库权限（approved）；仅能上传自己的笔记。"""
     user = _cur_user(request)
     if user["username"] == "guest" or user.get("role") == "guest":
-        return JSONResponse({"error": "请先登录（右上角「登录」）后再上传数据库"}, status_code=401)
+        return JSONResponse({"error": "Please sign in (top right) before uploading to the database"}, status_code=401)
     if not _is_authorized(user):
-        return JSONResponse({"error": "已注册，等待管理员开通数据库权限后即可上传"}, status_code=403)
+        return JSONResponse({"error": "Registered; uploads unlock once an administrator grants database access"}, status_code=403)
 
     from tools import file_tools as _ft
     note, _okey = _ft._find_note(user["username"], req.note_id)
     if note is None:
-        return JSONResponse({"error": "笔记不存在"}, status_code=404)
+        return JSONResponse({"error": "Note not found"}, status_code=404)
     if not _owns_or_root(user, note.get("owner", "admin")):
-        return JSONResponse({"error": "只能上传自己的笔记"}, status_code=403)
+        return JSONResponse({"error": "You can only upload your own notes"}, status_code=403)
 
     if _AUTH_ENABLED:
         # 云端实例：目标是它自己；用当前请求的 token 走同一套鉴权
@@ -1143,11 +1143,11 @@ async def api_notes_get(note_id: str, request: Request, source: Optional[str] = 
     """取**单条**条目（含正文）。配合列表的 with_content=0 —— 展开/编辑时才取这一条。"""
     if (source == "cloud" or source == DB_BRANCH_ID) and not _AUTH_ENABLED:
         p = await _notes_proxy("GET", f"/api/notes/{note_id}")
-        return p if p is not None else JSONResponse({"error": "共享库不可达"}, status_code=502)
+        return p if p is not None else JSONResponse({"error": "Shared library unreachable"}, status_code=502)
     user = _cur_user(request)
     n = get_note(note_id, user["username"])
     if not n:
-        return JSONResponse({"error": "条目不存在"}, status_code=404)
+        return JSONResponse({"error": "Entry not found"}, status_code=404)
     return {"status": "ok", "note": n}
 def _notify_notes(branch_id: Optional[str], username: str):
     """条目变了 → 推事件。共享库（branch=__db__）是所有人在看的 → 通知所有人；
@@ -1180,9 +1180,9 @@ async def api_notes_move(req: NoteMoveReq, request: Request):
     user = _cur_user(request)
     if (req.branch_id or "") == DB_BRANCH_ID and not _AUTH_ENABLED:
         p = await _notes_proxy("POST", "/api/notes/move", {"note_id": req.note_id, "direction": req.direction})
-        return p if p is not None else JSONResponse({"error": "共享库不可达"}, status_code=502)
+        return p if p is not None else JSONResponse({"error": "Shared library unreachable"}, status_code=502)
     if not _owns_or_root(user, get_note_owner(req.note_id, user["username"])):
-        return JSONResponse({"error": "只能调整自己的笔记"}, status_code=403)
+        return JSONResponse({"error": "You can only reorder your own notes"}, status_code=403)
     out = json.loads(await move_note(req.note_id, req.direction, user["username"]))
     if out.get("status") == "ok":
         _notify_notes(req.branch_id, user["username"])
@@ -1197,9 +1197,9 @@ async def api_notes_update(req: NoteUpdateReq, request: Request):
                                {"note_id": req.note_id, "title": req.title,
                                 "content": req.content, "kind": _kd,
                                 "folder_id": req.folder_id})
-        return p if p is not None else JSONResponse({"error": "共享库不可达"}, status_code=502)
+        return p if p is not None else JSONResponse({"error": "Shared library unreachable"}, status_code=502)
     if not _owns_or_root(user, get_note_owner(req.note_id, user["username"])):
-        return JSONResponse({"error": "只能修改自己的笔记"}, status_code=403)
+        return JSONResponse({"error": "You can only edit your own notes"}, status_code=403)
     out = json.loads(await update_note(req.note_id, req.title, req.content,
                                        user["username"], kind=_kd,
                                        folder_id=req.folder_id))
@@ -1212,9 +1212,9 @@ async def api_notes_delete(note_id: str, request: Request, source: Optional[str]
     # 来源显式分流：source=cloud（数据库条目）→ 本地实例直接转发云端，不做本地扫描
     if (source == "cloud" or source == DB_BRANCH_ID) and not _AUTH_ENABLED:
         p = await _notes_proxy("DELETE", f"/api/notes/{note_id}")
-        return p if p is not None else JSONResponse({"error": "共享库不可达"}, status_code=502)
+        return p if p is not None else JSONResponse({"error": "Shared library unreachable"}, status_code=502)
     if not _owns_or_root(user, get_note_owner(note_id, user["username"])):
-        return JSONResponse({"error": "只能删除自己的笔记"}, status_code=403)
+        return JSONResponse({"error": "You can only delete your own notes"}, status_code=403)
     out = json.loads(await delete_note(note_id, user["username"]))
     # 删除只知道 note_id、拿不到 branch_id → 走广播（删除是低频操作，多刷一次无害）
     if out.get("status") == "ok":
@@ -1233,7 +1233,7 @@ async def api_xiaoe_ask(req: XiaoeAskReq, request: Request):
     import httpx as _httpx
     q = (req.question or "").strip()
     if not q:
-        return JSONResponse({"error": "问题为空"}, status_code=400)
+        return JSONResponse({"error": "Question is empty"}, status_code=400)
 
     # 1) 技能清单（让小e 知道系统有哪些技能）
     skills_txt = ""
@@ -1340,7 +1340,7 @@ async def api_xiaoe_ask(req: XiaoeAskReq, request: Request):
         ans = ans or "（小e 没想出来…再问一次？）"
         return {"answer": ans}
     except Exception as e:
-        return JSONResponse({"error": f"小e 连不上模型：{str(e)[:120]}"}, status_code=200)
+        return JSONResponse({"error": f"The assistant cannot reach the model: {str(e)[:120]}"}, status_code=200)
 
 
 @app.post("/api/search/knowledge")
@@ -1348,7 +1348,7 @@ async def api_search_knowledge(req: SearchQueryReq, request: Request):
     """共享池语义检索（仅云端；需已授权）。"""
     user = _cur_user(request)
     if _AUTH_ENABLED and not _is_authorized(user):
-        return JSONResponse({"error": "已注册，等待管理员开通数据库权限"}, status_code=403)
+        return JSONResponse({"error": "Registered; waiting for an administrator to grant database access"}, status_code=403)
     return json.loads(await search_knowledge(req.query, req.top_k or 3))
 
 
@@ -1373,7 +1373,7 @@ async def api_groups(req: GroupOpReq, request: Request):
     """
     user = _cur_user(request)
     if _AUTH_ENABLED and not _is_authorized(user):
-        return JSONResponse({"error": "已注册，等待管理员开通数据库权限"}, status_code=403)
+        return JSONResponse({"error": "Registered; waiting for an administrator to grant database access"}, status_code=403)
 
     import tools.folder_tree as FT
     FT.ensure_roots()      # 幂等：确保「笔记」「文档」两个根文件夹存在
@@ -1390,7 +1390,7 @@ async def api_groups(req: GroupOpReq, request: Request):
         return json.loads(FT.move_group(req.group_id, req.parent_id or ""))
     if action == "delete_group":
         return json.loads(FT.delete_group(req.group_id, req.mode or "move_up"))
-    return JSONResponse({"error": f"未知 action: {action}"}, status_code=400)
+    return JSONResponse({"error": f"Unknown action: {action}"}, status_code=400)
 
 
 # ── 个人设置（后端存储）──────────────────────────
@@ -1580,7 +1580,7 @@ async def api_work_areas_post(req: WorkAreaReq, request: Request):
     user = _cur_user(request)
     pd = (req.project_dir or "").strip()
     if not pd or not os.path.isdir(pd):
-        return {"status": "error", "error": "项目文件夹不存在：%s" % pd}
+        return {"status": "error", "error": "Project folder does not exist: %s" % pd}
     area = WA.save_area(user["username"], req.name, pd, (req.output_dir or "").strip())
     return {"status": "ok", "area": area}
 
@@ -1626,7 +1626,7 @@ async def api_user_chat_ops(req: ChatOpsReq, request: Request):
     user = _cur_user(request)
     uname = user["username"]
     if not req.branch_id:
-        return {"status": "error", "error": "缺少 branch_id"}
+        return {"status": "error", "error": "Missing branch_id"}
     applied = 0
     for op in (req.ops or []):
         if not isinstance(op, dict):
@@ -1654,7 +1654,7 @@ async def api_user_chats_branch(request: Request, id: str = ""):
             for k, v in br.items() if isinstance(v, dict)]}
     b = br.get(id)
     if b is None:
-        return JSONResponse({"status": "error", "error": "对话不存在"}, status_code=404)
+        return JSONResponse({"status": "error", "error": "Conversation not found"}, status_code=404)
     return {"status": "ok", "branch": b}
 
 
@@ -1699,13 +1699,13 @@ async def _resolve_refs(refs: list, owner: str) -> str:
 @app.post("/api/agent/run")
 async def agent_run(req: AgentRunRequest, request: Request):
     if not req.model or not req.model.get("model"):
-        return {"final_answer": "错误: 缺少模型配置"}
+        return {"final_answer": "Error: model configuration missing"}
     u = _policy_for(request, req)
     mc = _build_model_config(req)
     if _RP.HUB and _RP.is_local_qwen(mc):
         used, limit, ok = _RP.qwen_usage(u)
         if not ok:
-            return {"final_answer": f"⛔ 今日本地千问额度已用完（{used:,}/{limit:,} token）。请明日再试、切换你自己配置的模型，或联系管理员开通数据库权限。"}
+            return {"final_answer": f"⛔ The local Qwen quota is exhausted for today ({used:,}/{limit:,} tokens). Try tomorrow, switch to your own configured model, or ask an administrator for database access."}
     _ans = await run_agent(history=req.history, user_input=await _resolve_refs(req.note_refs, u["username"]) + req.input,
         enabled_tools=req.enabled_tools, loaded_skills=req.loaded_skills,
         model_config=mc, neo4j_config=req.neo4j_config,
@@ -1749,7 +1749,7 @@ async def agent_stream(req: AgentRunRequest, request: Request = None):
     if not req.model or not req.model.get("model"):
         # 必须走 HTTP 错误而非普通 JSON：前端按 SSE 解析流，
         # 普通 JSON 不是 data: 帧会被静默跳过，用户看到的就是「发出去没反应」。
-        raise HTTPException(400, "缺少模型配置：请先在设置中选择模型并填写 API Key")
+        raise HTTPException(400, "Model configuration missing: choose a model and enter an API key in Settings")
 
     from agent.agent import (cancel_active_generation, reset_generation_cancel,
                             reset_immediate_answer)
@@ -1768,7 +1768,7 @@ async def agent_stream(req: AgentRunRequest, request: Request = None):
         if _qwen:
             _used, _limit, _ok = _RP.qwen_usage(user)
             if not _ok:
-                msg = f"⛔ 今日本地千问额度已用完（{_used:,}/{_limit:,} token）。请明日再试、切换你自己配置的模型，或联系管理员开通数据库权限。"
+                msg = f"⛔ The local Qwen quota is exhausted for today ({_used:,}/{_limit:,} tokens). Try tomorrow, switch to your own configured model, or ask an administrator for database access."
                 yield f"data: {json.dumps({'type':'error','message':msg}, ensure_ascii=False)}\n\n"
                 return
 
@@ -1814,7 +1814,7 @@ async def agent_stream(req: AgentRunRequest, request: Request = None):
             # 生成器异常不许静默：打全量 traceback 并让前端收到错误事件（排查 lc 引擎静默断流的 mask 问题）
             import traceback as _tb
             _tb.print_exc()
-            yield f"data: {json.dumps({'type':'error','message':f'生成中断：{_gen_err}'}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type':'error','message':f'Generation interrupted: {_gen_err}'}, ensure_ascii=False)}\n\n"
         finally:
             stop_flag.set()
             w.cancel()

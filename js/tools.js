@@ -115,7 +115,7 @@
                     btn.innerHTML = originalText;
                 }, 2000);
             }).catch(err => {
-                console.error('复制失败:', err);
+                                console.error('Copy failed:', err);
                 showToast(t('tool.copyFail'), 'error');
             });
         }

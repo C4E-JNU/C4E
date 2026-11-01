@@ -38,6 +38,10 @@ class Neo4jClient:
     @classmethod
     def connect(cls, uri, user, password):
         try:
+            # 2026-10-26: 已有健康连接且目标库未变时直接复用，避免每次请求重建驱动、
+            # 反复做 DNS 解析（Aura 域名解析偶发失败会打断整轮对话）。
+            if cls._driver is not None and cls._uri == uri and cls._user == user:
+                return {"success": True}
             if cls._driver:
                 cls._driver.close()
                 cls._driver = None

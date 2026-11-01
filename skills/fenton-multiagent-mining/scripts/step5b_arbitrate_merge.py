@@ -1,28 +1,28 @@
 # -*- coding: utf-8 -*-
-"""step5b_arbitrate_merge.py — 步骤 5B（图文互证补充）收口：把 fenton-arbiter 的裁决回写篇级台账
+"""step5b_arbitrate_merge.py — end of Step 5B (verification supplement): write the fenton-arbiter adjudication back into the per-paper ledgers
 
-背景：步骤五（fenton-verifier）只产**候选矛盾**（severity 留空）；严重程度 A/B/C/D/E 由批次级裁决员
-fenton-arbiter 在**步骤 5B**（图文互证的补充步骤，紧随步骤五）判定（跨文献矛盾篇内判不出、定级需统一口径）。
-本脚本是**纯确定性 IO**：把裁决结果按 (paper, figure, field) 合并回
-`<论文夹>/datamining/07_contradiction_ledger.json`，并导出报告输入。
+Background: Step 5 (fenton-verifier) produces **candidate contradictions only** (severity left empty); severity A/B/C/D/E is decided by the cross-paper arbiter
+fenton-arbiter in **Step 5B** (the supplement of cross-modal verification, immediately after Step 5), because cross-paper contradictions cannot be decided intra-paper and grading needs one consistent caliber.
+This script is **pure deterministic IO**: it merges the adjudication by (paper, figure, field) back into
+`<paper folder>/datamining/07_contradiction_ledger.json` and exports the report inputs.
 
-用法：
-  python step5b_arbitrate_merge.py <批次根或论文夹> [--arbitration <裁决 JSON 路径>]
-默认裁决文件：<批次>/_ledgers/矛盾裁决.json（单篇：<论文夹>/datamining/_ledgers/矛盾裁决.json）
-兼容旧名：同目录下的 09_arbitration.json 会被自动发现（旧批次无需改名）。
+Usage:
+  python step5b_arbitrate_merge.py <corpus root or paper folder> [--arbitration <adjudication JSON path>]
+Default adjudication file: <corpus>/_ledgers/contradiction_adjudication.json (single paper: <paper folder>/datamining/_ledgers/contradiction_adjudication.json)
+Legacy name support: a 09_arbitration.json in the same directory is discovered automatically (old runs need no renaming).
 
-产出：
-  ① 回写各篇 07_contradiction_ledger.json（severity / cross_paper / caliber_variance / 定案 / 复核标记）
-  ② <批次>/_ledgers/全部矛盾条目.json   —— build_report.py 的矛盾清单输入（新字段名）
-  ③ <批次>/_ledgers/跨文献矛盾对.json   —— 跨文献矛盾对 + 口径差备注
+Products:
+  ① writes back each paper's 07_contradiction_ledger.json (severity / cross_paper / caliber_variance / decision / review flags)
+  ② <corpus>/_ledgers/all_contradiction_entries.json   — the contradiction list consumed by build_report.py (new field names)
+  ③ <corpus>/_ledgers/cross_paper_contradiction_pairs.json   — cross-paper pairs + caliber-difference notes
 """
 import argparse
 import json
 import os
 import sys
 
-SEV_OK = ("A", "B", "C", "D", "E")     # E = 其他（无法归类），兼「判不了/待裁决」兜底；unknown 已退场
-ARB_NAMES = ("矛盾裁决.json", "09_arbitration.json")   # 前者为准，后者兼容旧批次
+SEV_OK = ("A", "B", "C", "D", "E")     # E = other (unclassifiable), also the fallback for "cannot grade / pending"; unknown is retired
+ARB_NAMES = ("contradiction_adjudication.json", "09_arbitration.json")   # the first is canonical, the second is legacy
 
 
 def wf_of(paper):
@@ -36,7 +36,7 @@ def _is_paper_dir(d):
 
 
 def papers_of(root):
-    """三态自适应：① root 自身是论文夹 ② root 下直接是论文夹 ③ root/<Bxx>/论文夹。"""
+    """Three-way auto-detection: ① root itself is a paper folder ② root holds paper folders directly ③ root/<Bxx>/paper folders."""
     root = os.path.abspath(root)
     if _is_paper_dir(root):
         return [root]
@@ -68,13 +68,13 @@ def _load(fp, default=None):
 
 
 def _clean_sev(v):
-    """裁决给的值：合法值 A–E 原样；`unknown` / 空 / 非法 → E（其他·无法归类，兜底）。"""
+    """The adjudicated value: legal A–E kept as-is; `unknown` / empty / illegal → E (other · unclassifiable, the fallback)."""
     s = str(v or "").strip().upper()
     return s if s in SEV_OK else "E"
 
 
 def merge_paper(led, entries, stats):
-    """把裁决 entries 合并进一篇台账（原地改 led['entries']）。"""
+    """Merge the adjudication entries into one ledger (mutating led['entries'] in place)."""
     idx = {}
     for e in led.get("entries", []):
         idx.setdefault(_key(led.get("paper"), e), e)
@@ -85,10 +85,10 @@ def merge_paper(led, entries, stats):
     for a in entries:
         k = _key(a.get("paper"), a)
         e = idx.get(k)
-        if e is None:                                    # 宽松：同篇同图且台账字段为空时对齐
+        if e is None:                                    # lenient: same paper, same figure, and the ledger field is empty
             cand = [x for x in byfig.get((k[0], k[1]), []) if not str(x.get("field") or "").strip()]
             e = cand[0] if len(cand) == 1 else None
-        if e is None:                                    # 裁决里有、台账没有 → 追加
+        if e is None:                                    # present in the adjudication but absent from the ledger → append
             e = {"figure": a.get("figure", "-"), "field": a.get("field", ""),
                  "text_value": a.get("text_value", ""), "image_value": a.get("image_value", ""),
                  "source": "arbiter", "added_by": "step5b_arbitrate_merge.py"}
@@ -118,7 +118,7 @@ def rebuild_stats(led):
     by_sev = {}
     for e in led.get("entries", []):
         if str(e.get("severity") or "").strip().upper() in ("", "UNKNOWN"):
-            # 未被裁决 / 旧口径 unknown → 回填 E（其他·无法归类，兜底）；台账不得留空值
+            # not adjudicated / legacy unknown → backfill E (other · unclassifiable, the fallback); the ledger must never keep an empty value
             e["severity"] = "E"
             e.setdefault("needs_human_review", True)
         s = e["severity"]
@@ -128,7 +128,7 @@ def rebuild_stats(led):
     led["cross_paper_count"] = sum(1 for e in led.get("entries", []) if e.get("cross_paper"))
     led["needs_human_review_count"] = sum(1 for e in led.get("entries", [])
                                           if e.get("needs_human_review"))
-    led["arbitrated_by"] = "fenton-arbiter（步骤 5B）+ step5b_arbitrate_merge.py"
+    led["arbitrated_by"] = "fenton-arbiter (Step 5B) + step5b_arbitrate_merge.py"
 
 
 def _find_arb(_ld, explicit):
@@ -148,7 +148,7 @@ def main():
     a = ap.parse_args()
     ps = papers_of(a.root)
     if not ps:
-        print(f"未找到论文夹：{a.root}")
+        print(f"No paper folder found: {a.root}")
         return 1
     single = len(ps) == 1
     bname = os.path.basename(os.path.abspath(ps[0])) if single else os.path.basename(os.path.normpath(a.root))
@@ -156,7 +156,7 @@ def main():
     arb_fp = _find_arb(_ld, a.arbitration)
     arb = _load(arb_fp)
     if arb is None:
-        print(f"[error] 缺裁决文件：{arb_fp}\n（需先派 fenton-arbiter 并把它的 JSON 原样存为此文件，名：{ARB_NAMES[0]}）")
+        print(f"[error] adjudication file missing: {arb_fp}\n(dispatch fenton-arbiter first and save its JSON verbatim as this file, name: {ARB_NAMES[0]})")
         return 1
     entries = arb.get("entries") if isinstance(arb, dict) else []
     entries = entries if isinstance(entries, list) else []
@@ -172,47 +172,47 @@ def main():
         fp = os.path.join(wf_of(paper), "07_contradiction_ledger.json")
         led = _load(fp)
         if led is None:
-            print(f"[skip] 无台账：{fp}")
+            print(f"[skip] no ledger: {fp}")
             continue
         merge_paper(led, by_paper.get(p, []), stats)
         rebuild_stats(led)
         json.dump(led, open(fp, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
         stats["papers"] += 1
-        print(f"merged {p[:42]:44s} 台账 {led['total']} 条 {led['by_severity']} "
-              f"| 跨文献 {led['cross_paper_count']} | 待复核 {led['needs_human_review_count']}")
+        print(f"merged {p[:42]:44s} ledger {led['total']} entries {led['by_severity']} "
+              f"| cross-paper {led['cross_paper_count']} | pending review {led['needs_human_review_count']}")
         for e in led.get("entries", []):
             all_rows.append({
-                "批次": bname, "文献": p,
-                "图号/位置": e.get("figure", ""), "字段": e.get("field", ""),
-                "严重度": e.get("severity") or "E",
-                "载体来源": e.get("evidence_source", ""),
-                "跨文献": bool(e.get("cross_paper")),
-                "口径差": bool(e.get("caliber_variance")),
-                "正文值": e.get("text_value", ""), "图值/冲突值": e.get("image_value", ""),
-                "裁决/采纳值": e.get("adopted_value", ""),
-                "置信度": e.get("confidence", ""),
-                "正文引文": e.get("text_quote", ""), "理由": e.get("adopt_reason", ""),
-                "待人工复核": bool(e.get("needs_human_review")),
+                "group": bname, "paper": p,
+                "figure_location": e.get("figure", ""), "field": e.get("field", ""),
+                "severity": e.get("severity") or "E",
+                "evidence_source": e.get("evidence_source", ""),
+                "cross_paper": bool(e.get("cross_paper")),
+                "caliber_variance": bool(e.get("caliber_variance")),
+                "text_value": e.get("text_value", ""), "conflict_value": e.get("image_value", ""),
+                "adopted_value": e.get("adopted_value", ""),
+                "confidence": e.get("confidence", ""),
+                "text_quote": e.get("text_quote", ""), "reason": e.get("adopt_reason", ""),
+                "needs_human_review": bool(e.get("needs_human_review")),
             })
 
     unmatched = [e for e in entries if str(e.get("paper") or "").strip() not in
                  {os.path.basename(x) for x in ps}]
     if unmatched:
-        print(f"[warn] {len(unmatched)} 条裁决的 paper 与批次内篇名对不上，已忽略："
+        print(f"[warn] {len(unmatched)} adjudication entries have a paper name that does not match any paper here and were ignored: "
               f"{sorted({e.get('paper') for e in unmatched})[:5]}")
 
     os.makedirs(_ld, exist_ok=True)
-    cts = os.path.join(_ld, "全部矛盾条目.json")
+    cts = os.path.join(_ld, "all_contradiction_entries.json")
     json.dump(all_rows, open(cts, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     cross = {"cross_paper_pairs": (arb.get("cross_paper_pairs") if isinstance(arb, dict) else []) or [],
              "caliber_only": (arb.get("caliber_only") if isinstance(arb, dict) else []) or []}
-    cross_fp = os.path.join(_ld, "跨文献矛盾对.json")
+    cross_fp = os.path.join(_ld, "cross_paper_contradiction_pairs.json")
     json.dump(cross, open(cross_fp, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
-    print(f"裁决 {stats['entries_in']} 条 → 命中 {stats['applied']} / 新增 {stats['added']}"
-          f" | 篇 {stats['papers']}")
-    print(f"报告输入 → {cts}（build_report.py 的矛盾清单；同目录需放 全局成绩汇总.json）")
-    print(f"跨文献对 {len(cross['cross_paper_pairs'])} | 口径差备注 {len(cross['caliber_only'])} → {cross_fp}")
-    print("下一步：步骤六 节点搭建与实体对齐（07 台账 severity 已回填）")
+    print(f"adjudication {stats['entries_in']} entries → matched {stats['applied']} / added {stats['added']}"
+          f" | papers {stats['papers']}")
+    print(f"report input → {cts} (the contradiction list for build_report.py; global_score_summary.json must sit in the same directory)")
+    print(f"cross-paper pairs {len(cross['cross_paper_pairs'])} | caliber notes {len(cross['caliber_only'])} → {cross_fp}")
+    print("next: Step 6 node construction and entity alignment (severity in the 07 ledger is backfilled)")
     return 0
 
 

@@ -1,6 +1,6 @@
 {
-  "title": "Fenton 成品终检员",
-  "description": "多智能体 Fenton 挖掘步骤九：提取完成后换独立主体复核成品（字段合规 / 值-源一致 / 曲线合理 / 账目完整 / 图谱预检），产出 08_audit.json。五类查法、抽样纪律与回报 schema 全部内联在 system.md、不挂技能。只读不写，修复决定权在主控。",
+  "title": "Fenton Final Inspector",
+  "description": "Multi-agent Fenton mining, step 9: after extraction, an independent body reviews the product (field compliance, value-versus-source, curve sanity, ledger completeness, graph pre-check) and returns 08_audit.json. The five checks, sampling discipline, and report schema are inlined in system.md with no skills attached. Read-only; the main agent decides the fixes.",
   "skills": [],
   "tools": [
     "read_file",
@@ -18,7 +18,10 @@
     "read_file_max_chars": 100000,
     "tool_result_max_chars": 120000,
     "tool_result_preview_chars": 2500,
-    "user_context_max_chars": 10000,
-    "max_images": 0
+    "user_context_max_chars": 10000
+  },
+  "model": {
+    "model": "deepseek-flash",
+    "base_url": "https://api.deepseek.com/v1"
   }
 }

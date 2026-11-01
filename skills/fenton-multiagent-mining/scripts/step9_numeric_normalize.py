@@ -1,22 +1,22 @@
 # -*- coding: utf-8 -*-
-"""step9_numeric_normalize.py — 步骤八：数值标准化与单位统一
+"""step9_numeric_normalize.py — Step 8: numeric standardization and unit unification
 
-分工（2026-10-07 定，见 references/步骤八_数值标准化与单位统一.md）：
-  · 机械初判：本脚本把 06_schema 的数值字段解析成 {value, unit, raw} 草案（确定性规则、可复现）；
-  · 语义定稿：难串（条件从句抢值、化学式数字、多口径并存、缺单位、需换算）交
-    `fenton-normalizer` 子智能体逐条裁定（值/单位/原文/依据）；
-  · 校验落盘：本脚本按回报合并 + 逐项校验（键名、单位白名单、结构一致、无裸串）后写 06b。
+Division of labour (fixed 2026-10-07; see references/step8_unit_normalization.md):
+  · mechanical first pass: this script parses the numeric fields of 06_schema into {value, unit, raw} drafts (deterministic, reproducible);
+  · semantic finalization: hard strings (conditional clauses stealing the value, digits in formulas, several calibers, missing units, conversions) go to the
+    `fenton-normalizer` subagent for a per-entry decision (value/unit/source text/basis);
+  · validation and persistence: this script merges the returns and validates each item (key name, unit whitelist, structural consistency, no bare strings) before writing 06b.
 
-三态用法：
-  python step9_numeric_normalize.py <论文夹|批次根> --prepare
-        → 产 <dm>/06b_numeric_tasks.json（待判清单 + 机械草案）交 fenton-normalizer
-  python step9_numeric_normalize.py <论文夹|批次根> --from-agent <回报.json>
-        → 校验 + 合并 + 落 06b_numeric_schema.json（+ stats + review）
-  python step9_numeric_normalize.py <论文夹|批次根>
-        → 纯机械落盘（兜底 / 快速路径；同时产 tasks 供复核）
+Three usage modes:
+  python step9_numeric_normalize.py <paper folder|corpus root> --prepare
+        → produces <dm>/06b_numeric_tasks.json (pending list + mechanical draft) for fenton-normalizer
+  python step9_numeric_normalize.py <paper folder|corpus root> --from-agent <return.json>
+        → validate + merge + write 06b_numeric_schema.json (+ stats + review)
+  python step9_numeric_normalize.py <paper folder|corpus root>
+        → pure mechanical persistence (fallback / fast path; also produces tasks for review)
 
-目标字段**必须带单位**：`{value, unit, raw}` 三键齐全；raw 原样保留（含单位、±、>、范围），
-下游 step10 把它扁平成 `<field>` / `<field>_unit` / `<field>_raw` 写进图谱。
+Target fields **must carry a unit**: all three keys `{value, unit, raw}` present; raw is preserved verbatim (including units, ±, >, ranges),
+downstream step10 flattens it into `<field>` / `<field>_unit` / `<field>_raw` for the graph.
 """
 import argparse
 import json
@@ -25,8 +25,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-# ────────────────────────── 单位归一（唯一权威表） ──────────────────────────
-# (单位正则, 归一化单位, 正则标志)；标志缺省 re.I；第三位传 0 表示区分大小写
+# ────────────────────────── unit normalization (the single authoritative table) ──────────────────────────
+# (unit regex, normalized unit, regex flags); flags default to re.I, and a third value of 0 means case-sensitive
 UNIT_RULES = [
     (r'at\s*%|atom\s*%', 'At%'),
     (r'mg\s*/?\s*L|mgl-1|mg·L-1', 'mg/L'), (r'g\s*/?\s*L|gl-1|g·L-1', 'g/L'),
@@ -39,11 +39,11 @@ UNIT_RULES = [
     (r'mg\s*/?\s*kg', 'mg/kg'), (r'g\s*/?\s*kg', 'g/kg'),
     (r'mg\s*g-1|mg\s*/?\s*g(?![a-z])', 'mg/g'), (r'm2\s*/?\s*g|m2g-1', 'm²/g'),
     (r'cm3\s*/?\s*g|cc/g|cm3g-1', 'cm³/g'),
-    (r'\bppm\b', 'mg/L'),                                  # ppm 视同 mg/L（无密度校验，注明）
-    # 「度符号 + C」或「数字/空格后的 C 且其后不是字母」（旧 `°?\s*c\b` 会把 'cm-1' 截出的 'c' 判成 °C）
+    (r'\bppm\b', 'mg/L'),                                  # ppm treated as mg/L (no density check; annotated)
+    # "degree sign + C" or "C after a digit/space and not followed by a letter" (the old `°?\s*c\b` read the 'c' in 'cm-1' as °C)
     (r'°C|(?<=[\d\s])[cC](?![A-Za-z])|摄氏度', '°C'),
     (r'开尔文|\bK\b', 'K'),
-    (r'\bmin\b|分钟', 'min'), (r'(?<![A-Za-z0-9])h(?![A-Za-z0-9])|小时|hour', 'h', 0),
+    (r'\bmin\b|分钟', 'min'), (r'(?<![A-Za-z0-9])h(?![A-Za-z0-9])|hour', 'h', 0),
     (r'(?<![A-Za-z0-9])s(?![A-Za-z0-9])|秒', 's', 0),
     (r'min-1|min⁻¹|/min', 'min⁻¹'), (r'h-1|h⁻¹|/h', 'h⁻¹'), (r's-1|s⁻¹|/s', 's⁻¹'),
     (r'°C\s*/\s*min|℃/min', '°C/min'),
@@ -54,16 +54,16 @@ UNIT_RULES = [
     (r'nm\b', 'nm'), (r'μm\b|µm\b', 'μm'),
     (r'ev\b', 'eV'), (r'emu\s*/?\s*g', 'emu/g'),
 ]
-# 匹配前字符归一（仅用于匹配，raw 原样保留）：上标、全角符号
+# character normalization before matching (matching only; raw is preserved): superscripts and full-width symbols
 _SUPMAP = str.maketrans({'²': '2', '³': '3', '¹': '1', '⁻': '-', '·': '', 'μ': 'u', 'µ': 'u', '℃': '°C'})
-# 单位白名单（落盘前的硬校验：unit 必须在此表内或 None）
+# unit whitelist (hard validation before persistence: unit must be in this table or None)
 UNIT_CANON = {
     'At%', 'wt%', 'vol%', 'mg/L', 'g/L', 'μg/L', 'mg/kg', 'g/kg', 'mM', 'M', 'μM',
     'mg/g', 'm²/g', 'cm³/g', 'mg', 'g', 'mL', 'L', 'μL', 'kg',
     '°C', 'K', 'min', 'h', 's', 'd', 'min⁻¹', 'h⁻¹', 's⁻¹', 'cm⁻¹', 'eV',
     'emu/g', 'nm', 'μm', 'rpm', 'Ω', 'mV', 'kV', 'V', 'mA', 'W', 'Hz', '%', '°C/min',
 }
-# 字段 → 规范单位（schema 层填的必须是它；不一致时按 SCALE 换算，无换算则标 note）
+# field → canonical unit (the schema layer must use it; mismatches are converted via SCALE, and flagged with a note when no conversion exists)
 CANON_UNIT = {
     'initial_pollutant_conc': 'mg/L', 'catalyst_dosage': 'g/L', 'oxidant_concentration': 'mM',
     'temperature': '°C', 'calcination_temp': '°C',
@@ -74,7 +74,7 @@ CANON_UNIT = {
     'band_gap': 'eV', 'saturation_magnetization': 'emu/g', 'eis_Rct': 'Ω',
     'zeta_potential': 'mV', 'adsorption_capacity': 'mg/g', 'metal_content': 'wt%',
 }
-# 已知换算（from, to）→ 倍率；K→°C 特殊处理（减 273.15）
+# known conversions (from, to) → factor; K→°C is handled specially (subtract 273.15)
 SCALE = {
     ('h', 'min'): 60.0, ('s', 'min'): 1 / 60.0, ('d', 'min'): 1440.0,
     ('min', 'h'): 1 / 60.0, ('h', 's'): 3600.0, ('s', 'h'): 1 / 3600.0,
@@ -86,14 +86,14 @@ SCALE = {
 
 NUM = r'[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?'
 NUM_G = r'([-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)'
-# 多值：标签须以字母/汉字开头（旧版允纯数字标签，会把 "99.5%（60 min）" 拆错）
+# multi-value: the label must start with a letter or a CJK character (the old version allowed numeric labels and split "99.5% (60 min)" wrongly)
 MULTI = re.compile(r'([A-Za-z\u4e00-\u9fff][A-Za-z\u4e00-\u9fff0-9\-]*)\s*' + NUM_G + r'\s*%')
 UNC = re.compile(r'[±±]\s*' + NUM_G)
 QUALIFIER = re.compile(r'([><≥≤])\s*(?=' + NUM + r')')
-# 范围：两侧都必须是无符号数（旧版 NUM 带符号会把 "17-20" 的 "-20" 读成负数）
+# range: both sides must be unsigned numbers (the old signed NUM read the "-20" in "17-20" as negative)
 UINT_RANGE = re.compile(r'(?<![\d.])(\d+(?:\.\d+)?)\s*[-–~]\s*(\d+(?:\.\d+)?)(?![\d.])')
 
-# 字段注册表（键名与步骤七 45 / 41 + stability 6 清单逐字一致）
+# field registry (key names identical, character for character, to the Step 7 45 / 41 + stability 6 lists)
 CATALYST_NUM_KEYS = [
     'metal_content', 'calcination_temp', 'calcination_time', 'calcination_heating_rate',
     'lattice_a', 'lattice_c', 'crystallite_size', 'lattice_spacing_nm', 'particle_size',
@@ -115,10 +115,10 @@ STABILITY_NUM_KEYS = [
     'metal_leaching_conc',
 ]
 VARIABLE_NUM_KEYS = ['metric_value', 'new_value', 'old_value', 'optimum_value']
-# 【2026-10-07 v2】变量水平项（variable_experiments[].levels[]）内的数值键：
-#   一个水平 = 一个 id（C1.E1.V1.L2），level_value 与该水平的 metric_value 同层、一一对应
+# 【2026-10-07 v2】numeric keys inside variable level items (variable_experiments[].levels[]):
+#   one level = one id (C1.E1.V1.L2); level_value and that level's metric_value sit at the same level and correspond one-to-one
 LEVEL_NUM_KEYS = ['level_value', 'metric_value']
-# 注意：x_unit / y_unit 是**单位本身**，不进数值注册表（旧版误登，会把 "min" 解析成数值）
+# note: x_unit / y_unit are **the unit itself** and never enter the numeric registry (the old version registered them and parsed "min" as a number)
 
 UNITLESS = {'initial_pH', 'rate_constant_R2', 'ph', 'raman_ID_IG', 'cycle_count',
             'oxidant_pollutant_molar_ratio', 'catalyst_pollutant_mass_ratio'}
@@ -126,7 +126,7 @@ PERCENT = {'removal_efficiency', 'decolorization_efficiency', 'toc_removal', 'co
            'mineralization_rate', 'metal_content', 'metal_loading', 'wt',
            'adsorption_contribution', 'efficiency_retention', 'initial_efficiency',
            'final_efficiency'}
-# 字段 → 优先单位（串里混着条件从句时，先挑语义相符的那个数值）
+# field → preferred unit (when a string mixes a conditional clause, pick the semantically matching value first)
 PREFER_UNITS = {
     'metal_content': ['wt%', 'At%', '%'], 'metal_loading': ['wt%', '%'],
     'specific_surface_area': ['m²/g'], 'pore_volume': ['cm³/g'], 'pore_size': ['nm'],
@@ -158,7 +158,7 @@ def _ut(s):
 
 
 def _can_convert(u, target):
-    """u 是否可换算到 target（用于优先单位匹配：K→°C、h→min、s⁻¹→min⁻¹）。"""
+    """Whether u can be converted to target (used for preferred-unit matching: K→°C, h→min, s⁻¹→min⁻¹)."""
     if u == target:
         return True
     if u == 'K' and target == '°C':
@@ -167,8 +167,8 @@ def _can_convert(u, target):
 
 
 def _near_unit(t, end, field=''):
-    """数值后取就近单位：24 / 60 字符窗口里取位置最靠前、**同位置取最长**的命中；
-    都没有则按字段语义兜底（标 inferred）。"""
+    """Take the nearest unit after the number: within a 24 / 60 character window, prefer the earliest hit and, at the same position, the longest match;
+    when nothing matches, fall back to the field semantics (flagged inferred)."""
     for span in (24, 60):
         seg = t[end:end + span]
         best = None
@@ -178,7 +178,7 @@ def _near_unit(t, end, field=''):
             mm = re.search(pat, seg, fl)
             if not mm:
                 continue
-            score = (mm.start(), -len(mm.group()))       # 同起点取更长匹配（"min-1" 胜 "min"）
+            score = (mm.start(), -len(mm.group()))       # longer match wins at the same start ("min-1" beats "min")
             if best is None or score < best[0]:
                 best = (score, u)
         if best:
@@ -188,7 +188,7 @@ def _near_unit(t, end, field=''):
 
 
 def parse_value(raw, field):
-    """机械初判：raw → {value, unit, raw, ...flags}；无法解析 → unparsed（证据不丢）。"""
+    """Mechanical first pass: raw → {value, unit, raw, ...flags}; when unparsable → unparsed (evidence is never lost)."""
     if raw is None:
         return None
     if isinstance(raw, (int, float)) and not isinstance(raw, bool):
@@ -200,7 +200,7 @@ def parse_value(raw, field):
     s = str(raw).strip()
     if not s:
         return None
-    # 多值：仅限短串，且排除「图读/对照」这类非主值的第二项
+    # multi-value: short strings only, and exclude second items such as "figure-read/control" that are not the primary value
     ms = MULTI.findall(s)
     if len(ms) >= 2 and len(s) <= 40 and not any(w in s for w in _MULTI_STOP):
         vals = []
@@ -217,14 +217,14 @@ def parse_value(raw, field):
         g = mm.group()
         prev = t[st - 1] if st > 0 else ''
         if g[0] in '+-':
-            if prev.isdigit() or prev in '-–~.':          # 范围上界（"17-20"）→ 按无符号处理
+            if prev.isdigit() or prev in '-–~.':          # range upper bound ("17-20") → treat as unsigned
                 g, st = g.lstrip('+-'), st + 1
             elif prev in ('±', '±'):
-                continue                                  # ± 后是不确定度，由 UNC 单独捕获
+                continue                                  # after ± comes an uncertainty, captured separately by UNC
             elif prev.isalpha():
                 continue
         elif prev.isalpha():
-            continue                                      # 化学式/编号里的数字：N2 / Fe3O4 / R2 / H2O2
+            continue                                  # digits inside formulas/identifiers: N2 / Fe3O4 / R2 / H2O2
         elif prev in ('±', '±'):
             continue
         pre = t[max(0, st - 10):st].lower()
@@ -242,7 +242,7 @@ def parse_value(raw, field):
     chosen = None
     if prefer:
         for _, v, u, inf in cands:
-            if u and any(_can_convert(u, p) for p in prefer):   # 含可换算单位（K→°C / h→min）
+            if u and any(_can_convert(u, p) for p in prefer):   # a convertible unit is present (K→°C / h→min)
                 chosen = (v, u, inf)
                 break
     if chosen is None and prefer and cands[0][2] not in COND_UNITS:
@@ -253,12 +253,12 @@ def parse_value(raw, field):
                 chosen = (v, u, inf)
                 break
     if chosen is None:
-        # 字段本应是 %/nm 等，串里只有条件类值 → 不硬填
+        # the field should be %/nm etc. while the string holds only condition-type values → do not force a fill
         return {'value': None, 'unit': None, 'raw': s, 'multi': False, 'unparsed': True}
     val, unit, inferred = chosen
-    pick_val = val                                        # 换算前的选中值（供冲突判定）
+    pick_val = val                                        # the selected value before conversion (for conflict detection)
     extra = {}
-    # 单位换算到字段规范单位（可换算则换算；不可换算保留原单位并标 note）
+    # convert the unit to the field's canonical unit (convert when possible; otherwise keep the original unit and add a note)
     canon = CANON_UNIT.get(field)
     if unit and canon and unit != canon:
         if unit == 'K' and canon == '°C':
@@ -301,8 +301,20 @@ def parse_value(raw, field):
     return out
 
 
+def _experiments_of(schema, cat):
+    """Tolerate three formats of 06 experiment nodes (top-level experiments finalized 2026-10-23):
+    new — top-level experiments[] grouped by catalyst_id (tid kept identical to the legacy nested caliber);
+    intermediate — top-level variable_experiments[] (the daytime key name, fallback);
+    legacy — catalysts[].experiments[] nested fallback."""
+    top = schema.get('experiments') or schema.get('variable_experiments')
+    if top:
+        cid = cat.get('catalyst_id')
+        return [e for e in top if isinstance(e, dict) and e.get('catalyst_id') == cid]
+    return cat.get('experiments', []) or []
+
+
 def _iter_targets(schema):
-    """(tid, 容器dict, 键名, 节点类型) —— tid 形如 C1.pore_size / C1.E1.removal_efficiency。"""
+    """(tid, container dict, key name, node type) — tid looks like C1.pore_size / C1.E1.removal_efficiency."""
     seen = set()
     for ci, cat in enumerate(schema.get('catalysts', []) or []):
         if not isinstance(cat, dict):
@@ -316,7 +328,7 @@ def _iter_targets(schema):
                         seen.add(tid)
                         yield tid, cont, key, 'catalyst'
                     break
-        for ei, e in enumerate(cat.get('experiments', []) or []):
+        for ei, e in enumerate(_experiments_of(schema, cat)):
             if not isinstance(e, dict):
                 continue
             en = f'{cn}.E{ei + 1}'
@@ -346,7 +358,7 @@ def _iter_targets(schema):
                         if tid not in seen:
                             seen.add(tid)
                             yield tid, v, key, 'variable'
-                # 【2026-10-07 v2】水平项：一个水平一个 id（{vn}.L{k}），level_value 与 metric_value 同层
+                # 【2026-10-07 v2】level items: one id per level ({vn}.L{k}); level_value and metric_value sit at the same level
                 for li, lv in enumerate(v.get('levels', []) or []):
                     if not isinstance(lv, dict):
                         continue
@@ -360,7 +372,7 @@ def _iter_targets(schema):
 
 
 def build_draft(schema):
-    """机械初判全量数值字段 → (draft_schema, tasks)。不修改入参。"""
+    """Mechanical first pass over all numeric fields → (draft_schema, tasks). The input is never modified."""
     draft = json.loads(json.dumps(schema, ensure_ascii=False))
     tasks = []
     idx = 0
@@ -368,7 +380,7 @@ def build_draft(schema):
     for tid, cont, key, typ in tids:
         raw = cont.get(key)
         if isinstance(raw, dict):
-            continue                                # 已经标准化过
+            continue                                # already standardized
         idx += 1
         d = parse_value(raw, key)
         if d is None:
@@ -377,7 +389,7 @@ def build_draft(schema):
                       'draft': {k: v for k, v in d.items() if k != 'raw'},
                       'flags': sorted(k for k in ('unparsed', 'ambiguous', 'unit_inferred',
                                                   'converted', 'multi') if d.get(k))})
-    # 按 tid 定位写回草案（复用同一遍历顺序，保证一一对应）
+    # write the draft back by tid (reusing the same traversal order guarantees one-to-one correspondence)
     draft_iter = list(_iter_targets(draft))
     src_iter = list(_iter_targets(schema))
     for (tid_d, cont_d, key_d, _), (tid_s, cont_s, key_s, _) in zip(draft_iter, src_iter):
@@ -392,7 +404,7 @@ def build_draft(schema):
 
 
 def _load_agent_fields(path):
-    """子智能体回报 → [{id, value, unit, raw, basis}]；容忍 fields / items / 裸 list。"""
+    """Subagent return → [{id, value, unit, raw, basis}]; tolerates fields / items / a bare list."""
     obj = json.loads(Path(path).read_text(encoding='utf-8'))
     if isinstance(obj, dict):
         rows = obj.get('fields') or obj.get('items') or obj.get('data') or []
@@ -406,7 +418,7 @@ def _load_agent_fields(path):
 
 
 def apply_agent(schema, tasks, items):
-    """按 tid 合并子智能体回报 → (schema, report)。校验：id 存在 / 键名合法 / 单位白名单 / 值型合法。"""
+    """Merge the subagent return by tid → (schema, report). Validates: id exists / key legal / unit whitelisted / value type legal."""
     tmap = {t['id']: t for t in tasks}
     idx = {tid: (cont, key, typ) for tid, cont, key, typ in _iter_targets(schema)}
     rep = {'accepted': 0, 'by_agent': 0, 'unknown_id': [], 'bad_field': [], 'bad_unit': [],
@@ -444,7 +456,7 @@ def apply_agent(schema, tasks, items):
             continue
         if val is None and not it.get('unparsed'):
             rep['missing_value'].append(tid)
-        src_raw = cont.get(key)                    # 【2026-10-07】raw 以源串为准（LLM 不得改写原文）
+        src_raw = cont.get(key)                    # 【2026-10-07】raw follows the source string (the LLM may not rewrite the source text)
         if isinstance(src_raw, dict):
             src_raw = src_raw.get('raw')
         raw = src_raw if src_raw is not None else it.get('raw')
@@ -470,18 +482,18 @@ def apply_agent(schema, tasks, items):
 
 def _structure_sig(schema):
     cats = schema.get('catalysts', []) or []
-    exps = sum(len(c.get('experiments', []) or []) for c in cats if isinstance(c, dict))
-    var_containers = [e for c in cats if isinstance(c, dict)
-                      for e in (c.get('experiments', []) or []) if isinstance(e, dict)]
-    vars_ = sum(len(e.get('variable_experiments', []) or []) for e in var_containers)
-    # 【2026-10-07 v2】水平项数也计入结构签名（水平丢失 = 结构不一致，必须拦住）
-    lvls = sum(len(v.get('levels') or []) for e in var_containers
+    exp_containers = [e for c in cats if isinstance(c, dict)
+                      for e in _experiments_of(schema, c) if isinstance(e, dict)]
+    exps = len(exp_containers)
+    vars_ = sum(len(e.get('variable_experiments', []) or []) for e in exp_containers)
+    # 【2026-10-07 v2】the number of level items also enters the structural signature (a lost level = structural mismatch, which must be blocked)
+    lvls = sum(len(v.get('levels') or []) for e in exp_containers
                for v in (e.get('variable_experiments', []) or []) if isinstance(v, dict))
     return {'catalysts': len(cats), 'experiments': exps, 'variables': vars_, 'levels': lvls}
 
 
 def verify_out(out_schema, src_schema, unit_check=True):
-    """落盘前硬校验：结构一致 + 无裸串 + 单位白名单 + 三键齐全。"""
+    """Hard validation before persistence: structural consistency + no bare strings + unit whitelist + all three keys present."""
     bad = {'structure': None, 'bare': [], 'bad_unit': [], 'missing_raw': []}
     if _structure_sig(out_schema) != _structure_sig(src_schema):
         bad['structure'] = {'src': _structure_sig(src_schema), 'out': _structure_sig(out_schema)}
@@ -549,7 +561,7 @@ def do_finalize(pdir, agent_file=None):
         tasks = tasks_mech
         rep = {'accepted': len(tasks), 'by_agent': 0, 'unknown_id': [], 'bad_field': [],
                'bad_unit': [], 'bad_value': [], 'missing_value': [], 'not_canonical': []}
-        # 机械路径同样标 source
+        # the mechanical path also records source
         for tid, cont, key, _ in _iter_targets(out):
             if isinstance(cont.get(key), dict):
                 cont[key].setdefault('source', 'mechanical')
@@ -576,7 +588,7 @@ def do_finalize(pdir, agent_file=None):
             'verify': bad, 'output': str(out_p)}
     (dm / '06b_numeric_stats.json').write_text(
         json.dumps(stat, ensure_ascii=False, indent=1), encoding='utf-8')
-    # 交终检的复核清单
+    # review list handed to the final inspection
     review = {'unparsed': [], 'ambiguous': [], 'unit_not_canonical': [], 'unit_inferred': []}
     for tid, cont, key, _ in _iter_targets(out):
         v = cont.get(key)
@@ -605,13 +617,13 @@ def do_finalize(pdir, agent_file=None):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('target')
-    ap.add_argument('--prepare', action='store_true', help='只产待判清单 06b_numeric_tasks.json')
+    ap.add_argument('--prepare', action='store_true', help='only produce the pending list 06b_numeric_tasks.json')
     ap.add_argument('--from-agent', default=None, metavar='JSON',
-                    help='合并 fenton-normalizer 回报后落盘 06b_numeric_schema.json')
+                    help='merge the fenton-normalizer return and write 06b_numeric_schema.json')
     a = ap.parse_args()
     papers = collect_papers(a.target)
     if not papers:
-        print('✗ 没找到含 datamining/06_schema.json 的论文目录：%s' % a.target)
+        print('FAIL no paper directory containing datamining/06_schema.json: %s' % a.target)
         return 1
     if a.prepare:
         for p in papers:
@@ -624,7 +636,7 @@ def main():
               'issues=%s' % r['issues'] if r['issues'] else '')
         if r['gate'] != 'PASS':
             failed += 1
-            print('      ✗ 校验未过：', json.dumps(r, ensure_ascii=False)[:600])
+            print('      FAIL validation: ', json.dumps(r, ensure_ascii=False)[:600])
     print('done: %d papers, %d FAIL' % (len(papers), failed))
     return 1 if failed else 0
 

@@ -27,7 +27,7 @@ SUPER_USER = "admin"
 
 # ── 等级常量 ──
 L_GUEST, L_BLUE, L_PURPLE, L_ORANGE, L_RED, L_GOLD = 0, 1, 2, 3, 4, 5
-LEVEL_NAMES = {0: "游客", 1: "蓝色", 2: "紫色", 3: "橙色", 4: "红色", 5: "金色"}
+LEVEL_NAMES = {0: "Guest", 1: "Blue", 2: "Purple", 3: "Orange", 4: "Red", 5: "Gold"}
 LEVEL_COLORS = {0: "#9aa9be", 1: "#3b82f6", 2: "#a855f7", 3: "#f59e0b", 4: "#ef4444", 5: "#eab308"}
 
 # 本地千问日限额（token 估算；None=不限）
@@ -176,7 +176,7 @@ def is_local_qwen(model_config: dict) -> bool:
         return False
     base = (model_config.get("base_url") or "")
     model = (model_config.get("model") or "")
-    return (":8080" in base) or ("c4eai" in base and "8080" in base) or ("本地" in model) \
+    return (":8080" in base) or ("c4eai" in base and "8080" in base) or (("local" in model.lower()) or ("本地" in model)) \
         or ("qwen3-local" in model.lower()) or ("Qwen3.6" in model)
 
 
@@ -279,16 +279,16 @@ def can_set_level(actor: dict, target_username: str, new_level: int) -> tuple[bo
     if not HUB:
         return True, "ok"
     if not isinstance(new_level, int) or not (0 <= new_level <= 5):
-        return False, "等级必须是 0-5 的整数"
+        return False, "Level must be an integer from 0 to 5"
     if target_username == SUPER_USER:
-        return False, "主管理员不可被调整"
+        return False, "The root administrator cannot be changed"
     if is_root(actor):
         return True, "ok"                       # 主管理员：可授任何等级（含 L5）
     if can_manage_levels(actor):
         if new_level >= L_GOLD:
-            return False, "金色等级只能由主管理员授予"
+            return False, "Gold can only be granted by the root administrator"
         return True, "ok"                       # 金色：可调 L0-L4
-    return False, "你没有调整他人等级的权限"
+    return False, "You cannot change other users' levels"
 
 
 def default_level_for_new_user() -> int:

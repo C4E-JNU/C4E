@@ -77,7 +77,7 @@
             if (r.status !== 404) throw new Error('HTTP ' + r.status);
             return new Promise(function (resolve, reject) {
                 _hubBase(function (base) {
-                    if (!base) { reject(new Error('文件不在本实例')); return; }
+                                        if (!base) { reject(new Error('File is not on this instance')); return; }
                     var tok = _authTok();
                     fetch(base + '/api/file/' + encodeURIComponent(fileId) + '/raw', {
                         headers: tok && tok !== 'guest' ? { 'Authorization': 'Bearer ' + tok } : {}

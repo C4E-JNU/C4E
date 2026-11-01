@@ -1,24 +1,24 @@
 # -*- coding: utf-8 -*-
-"""step5b1_pollutant_align.py — 步骤六② 实体对齐（污染物三源 + 催化剂 Neo4j）
+"""step5b1_pollutant_align.py — Step 6② entity alignment (pollutants from three sources + catalysts from Neo4j)
 
-【2026-10-05 改造】对齐分两类，口径不同：
+【reworked 2026-10-05】Alignment splits into two classes with different calibers:
 
-  污染物（种类有限、跨文献同一物质）——**以合并节点为目标**：
-    ① 先查 Neo4j 已有 Pollutant 节点（名字/英文名/缩写展开后归一化匹配）
-       → 命中即复用其 CID/CAS/InChIKey（跨文献一致、省联网；Aura 空闲会断连，本脚本自动重试）
-    ② 未命中 → PubChem 两步法（name→cids→cid属性）；PubChem 连续故障 → NCI CACTUS 兜底
-    `graph_hits` > 1 表示库内该物质已裂成多个节点（待合并的债，不是错误）。
+  Pollutants (finite set, the same substance across papers) — **the goal is to merge nodes**:
+    ① query existing Pollutant nodes in Neo4j first (normalized match on name/English name/expanded abbreviation)
+       → on a hit, reuse its CID/CAS/InChIKey (consistent across papers and saving network calls; Aura drops idle connections, so this script retries automatically)
+    ② on a miss → the two-step PubChem lookup (name→cids→cid properties); if PubChem fails repeatedly → NCI CACTUS as fallback
+    `graph_hits` > 1 means the substance has already split into several nodes in the database (merge debt, not an error).
 
-  催化剂（变体极多：负载量/掺杂比/载体各不同）——**不合并节点**：
-    只按 `material_family`（材料族骨架，算法与 step10_graph_export.py 严格一致）算族键，
-    记录同族已入库节点，供跨文献「按族聚合、按变体区分」查询。
+  Catalysts (extremely varied: loading / doping ratio / support all differ) — **nodes are never merged**:
+    only `material_family` (the family skeleton, with an algorithm strictly identical to step10_graph_export.py) is computed as the family key,
+    and same-family nodes already in the graph are recorded for cross-paper queries that "aggregate by family, distinguish by variant".
 
-用法：
-  python step5b1_pollutant_align.py <论文夹 或 批次根>
-  python step5b1_pollutant_align.py <路径> --no-net     # 只用 Neo4j，不联网
-  python step5b1_pollutant_align.py <路径> --dry-run    # 只匹配、不写产物
-台账目录：单篇 → <篇>/datamining/_ledgers；批次 → <批次根>/_ledgers
-产物：<批次>_污染物对齐表.json（step10 join 用）、<批次>_催化剂对齐表.json、<批次>_实体对齐表.json
+Usage:
+  python step5b1_pollutant_align.py <paper folder or corpus root>
+  python step5b1_pollutant_align.py <path> --no-net     # Neo4j only, no network
+  python step5b1_pollutant_align.py <path> --dry-run    # match only, write nothing
+Ledger directory: single paper → <paper>/datamining/_ledgers; multi-paper → <corpus root>/_ledgers
+Products: <corpus>_pollutant_alignment.json (joined by step10), <corpus>_catalyst_alignment.json, <corpus>_entity_alignment.json
 """
 import argparse
 import json
@@ -31,7 +31,7 @@ import urllib.request
 H = {"User-Agent": "Mozilla/5.0 (research script)"}
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# 缩写 → 全名候选（依次尝试；首查词放最前）
+# abbreviation → full-name candidates (tried in order; the first lookup term comes first)
 SYNONYMS = {
     "ao7": ["Acid Orange 7", "Orange II", "4-[(2-hydroxynaphthyl)azo]benzenesulfonic acid"],
     "acid orange 7": ["Orange II", "4-[(2-hydroxynaphthyl)azo]benzenesulfonic acid"],
@@ -49,12 +49,12 @@ SYNONYMS = {
     "rb19": ["Reactive Blue 19"], "atz": ["Atrazine"], "dbp": ["Dibutyl phthalate"],
     "cfx": ["Cefalexin"],
 }
-
+# legacy Chinese mineral aliases are kept so historical Chinese-written names still map
 _MINERAL = {"goethite": "FeOOH", "针铁矿": "FeOOH", "hematite": "Fe2O3", "赤铁矿": "Fe2O3",
             "magnetite": "Fe3O4", "磁铁矿": "Fe3O4", "ferrihydrite": "FeOOH", "水铁矿": "FeOOH"}
 
 
-# ────────────────────────── 基础工具 ──────────────────────────
+# ────────────────────────── basic helpers ──────────────────────────
 def load_env(path):
     cfg = {}
     if os.path.exists(path):
@@ -72,7 +72,7 @@ def wf_of(paper):
 
 
 def papers_of(root):
-    """单篇（root 自身是论文夹）或批次（root 下若干论文夹）自适应。"""
+    """Auto-adapt: one paper (root itself is a paper folder) or several (paper folders under root)."""
     root = os.path.abspath(root)
     if os.path.isdir(os.path.join(root, "datamining")) or os.path.exists(
             os.path.join(root, "00_full_cleaned.md")):
@@ -89,7 +89,7 @@ def papers_of(root):
 
 
 def norm(s):
-    """实体名归一化：小写 → 去括号注释 → 去浓度/剂量 → 去标点 → 压空白。"""
+    """Normalize an entity name: lowercase → drop parenthetical notes → drop concentration/dosage → drop punctuation → collapse whitespace."""
     s = str(s or "").strip().lower()
     s = re.sub(r"[（(][^）)]*[）)]", " ", s)
     s = re.sub(r"\d+(?:\.\d+)?\s*(?:mg|ml|l|g|μg|ug|nm|μm|um|mm|mol|mM|%)\b", " ", s)
@@ -98,14 +98,14 @@ def norm(s):
 
 
 def english_of(raw):
-    """节点名（常为「中文 (English, ABBR)」）→ 英文查询词；剥掉结尾逗号+缩写后缀。"""
+    """Node name (often "Chinese (English, ABBR)") → an English query term; strip a trailing comma plus abbreviation suffix."""
     m = re.search(r"[A-Za-z][A-Za-z0-9 ,\.\-']+", raw)
     en = m.group(0).strip(" ,.-") if m else raw
     return re.sub(r",\s*[A-Z][A-Z0-9\-]{0,5}\s*$", "", en).strip(" ,.-")
 
 
 def material_family(name):
-    """催化剂名 → 材料族骨架。**必须与 step10_graph_export.py 的算法一致**。"""
+    """Catalyst name → material family skeleton. **Must match the algorithm in step10_graph_export.py**."""
     s = str(name or "").strip()
     if not s:
         return ""
@@ -121,7 +121,7 @@ def material_family(name):
     return s.replace("α-FeOOH", "FeOOH").replace("γ-Fe2O3", "Fe2O3")
 
 
-# ────────────────────────── 联网查询（PubChem → CACTUS） ──────────────────────────
+# ────────────────────────── network lookup (PubChem → CACTUS) ──────────────────────────
 def get(url, timeout=20):
     req = urllib.request.Request(url, headers=H)
     with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -134,13 +134,13 @@ def get_text(url, timeout=25):
         return r.read().decode("utf-8", "replace").strip()
 
 
-pubchem_fail = 0  # 连续故障计数，>=2 熔断
+pubchem_fail = 0  # consecutive failure counter; the circuit breaker trips at >=2
 
 
 def lookup_pubchem(name):
     global pubchem_fail
     if pubchem_fail >= 2:
-        raise RuntimeError("PubChem 熔断中（连续故障）")
+        raise RuntimeError("PubChem circuit breaker open (consecutive failures)")
     try:
         cids = get("https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/"
                    f"{urllib.parse.quote(name)}/cids/JSON")["IdentifierList"]["CID"]
@@ -174,11 +174,11 @@ def cactus_props(query_name, cand):
             "formula": formula, "mw": mw, "inchikey": ik, "cas": cas,
             "source": "NCI_CACTUS", "synonym_used": cand if cand != query_name else "",
             "status": "ok",
-            "note": "PubChem 不可达；formula/mw/InChIKey 来自 NCI CACTUS，CID 留空待补"}
+            "note": "PubChem unreachable; formula/mw/InChIKey come from NCI CACTUS and the CID is left empty pending"}
 
 
 def lookup(name):
-    """PubChem 优先（缩写先换全名）→ CACTUS → 抛异常。"""
+    """PubChem first (expand abbreviations to full names) → CACTUS → raise."""
     cands = [name] + SYNONYMS.get(name.lower(), [])
     pub_err = None
     for q in dict.fromkeys(cands):
@@ -200,19 +200,19 @@ def lookup(name):
         except Exception:
             time.sleep(0.5)
             continue
-    raise RuntimeError(f"PubChem+CACTUS 均失败：{pub_err}")
+    raise RuntimeError(f"both PubChem and CACTUS failed: {pub_err}")
 
 
-# ────────────────────────── 图谱读取与索引 ──────────────────────────
+# ────────────────────────── graph read and index ──────────────────────────
 def fetch_graph(env_path, tries=3):
-    """拉全量 Pollutant / Catalyst（一次读完，避免逐条往返）；Aura 空闲断连自动重试。"""
+    """Fetch all Pollutant / Catalyst nodes (read once to avoid per-record round trips); Aura idle disconnects are retried."""
     cfg = load_env(env_path)
     if not cfg.get("NEO4J_URI"):
-        return None, f"读不到 NEO4J_URI（--env 指向 neo4j.env，默认 {env_path}）"
+        return None, f"cannot read NEO4J_URI (--env points to neo4j.env, default {env_path})"
     try:
         from neo4j import GraphDatabase
     except Exception as e:
-        return None, f"未安装 neo4j 驱动：{e}"
+        return None, f"neo4j driver not installed: {e}"
     last = ""
     for i in range(tries):
         try:
@@ -221,8 +221,8 @@ def fetch_graph(env_path, tries=3):
                                              cfg.get("NEO4J_PASSWORD", "")),
                                        connection_timeout=30)
             with drv.session(database=cfg.get("NEO4J_DATABASE") or None) as s:
-                # 污染物节点是 :Entity {label:'Pollutant'}（不是独立的 :Pollutant 标签），
-                # 用 properties(n) 一次取全，避免引用图谱里尚不存在的属性键（cas/inchikey）。
+                # pollutant nodes are :Entity {label:'Pollutant'} (not a standalone :Pollutant label),
+                # so properties(n) fetches everything at once, avoiding references to property keys (cas/inchikey) that may not exist yet.
                 raw = s.run("MATCH (n:Entity {label:'Pollutant'}) "
                             "RETURN properties(n) AS props").data()
                 pol = []
@@ -240,7 +240,7 @@ def fetch_graph(env_path, tries=3):
         except Exception as e:
             last = str(e)[:120]
             time.sleep(1.5)
-    return None, f"Neo4j 连接失败（已重试 {tries} 次）：{last}"
+    return None, f"Neo4j connection failed (retried {tries} times): {last}"
 
 
 def index_graph(g):
@@ -256,7 +256,7 @@ def index_graph(g):
 
 
 def match_pollutant(entry, pol_by):
-    """① 归一化精确 → ② 双向子串（长度≥4）。返回 (match_type, rows)。"""
+    """① normalized exact → ② bidirectional substring (length ≥4). Returns (match_type, rows)."""
     cands = [norm(entry["query"])]
     cands += [norm(x) for x in SYNONYMS.get(str(entry["query"]).lower(), [])]
     cands += [norm(x) for x in entry.get("raw_names", [])]
@@ -277,7 +277,7 @@ def match_pollutant(entry, pol_by):
 
 
 def match_catalyst(name, cat_by_name, cat_by_fam):
-    """① 全名精确 → ② material_family 命中。返回 (match_type, family, exact_rows, fam_rows)。"""
+    """① exact full-name → ② material_family hit. Returns (match_type, family, exact_rows, fam_rows)."""
     n = norm(name)
     fam = material_family(name)
     rows = cat_by_name.get(n, [])
@@ -287,18 +287,18 @@ def match_catalyst(name, cat_by_name, cat_by_fam):
     return ("family" if frows else "none"), fam, [], frows
 
 
-# ────────────────────────── 主流程 ──────────────────────────
+# ────────────────────────── main flow ──────────────────────────
 def collect(papers):
     pol, cat = {}, {}
     for paper in papers:
         inv = os.path.join(wf_of(paper), "05_node_inventory.json")
         if not os.path.exists(inv):
-            print(f"⚠ 无 05_node_inventory.json：{paper}")
+            print(f"! no 05_node_inventory.json: {paper}")
             continue
         try:
             d = json.load(open(inv, encoding="utf-8"))
         except Exception as e:
-            print(f"✗ 解析失败 {inv}: {str(e)[:60]}")
+            print(f"FAIL parse error {inv}: {str(e)[:60]}")
             continue
         pname = os.path.basename(os.path.normpath(paper))[:25]
         for e in d.get("pollutants", []) or []:
@@ -312,7 +312,8 @@ def collect(papers):
             if pname not in it["papers"]:
                 it["papers"].append(pname)
         for e in d.get("catalysts", []) or []:
-            name = str(e.get("name", "")).strip()
+            # tolerate two fenton-node key names: the current schema uses catalyst_name, older ones use name
+            name = str(e.get("name") or e.get("catalyst_name") or "").strip()
             if not name:
                 continue
             it = cat.setdefault(name, {"name": name, "papers": [], "role": e.get("role", "")})
@@ -323,40 +324,40 @@ def collect(papers):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("path", help="论文夹 或 批次根（自适应）")
+    ap.add_argument("path", help="paper folder or corpus root (auto-detected)")
     ap.add_argument("--env", default=os.path.join(_SCRIPT_DIR, "neo4j.env"))
-    ap.add_argument("--no-net", action="store_true", help="只用 Neo4j，不联网")
-    ap.add_argument("--dry-run", action="store_true", help="只匹配，不写产物")
+    ap.add_argument("--no-net", action="store_true", help="Neo4j only, no network")
+    ap.add_argument("--dry-run", action="store_true", help="match only, write no products")
     a = ap.parse_args()
 
     root = os.path.abspath(a.path)
     if not os.path.isdir(root):
-        print(f"✗ 不是目录：{root}")
+        print(f"FAIL not a directory: {root}")
         return 1
     papers = papers_of(root)
     if not papers:
-        print(f"✗ 未找到论文夹（需含 datamining/05_node_inventory.json）：{root}")
+        print(f"FAIL no paper folder found (must contain datamining/05_node_inventory.json): {root}")
         return 1
     single = os.path.isdir(os.path.join(root, "datamining"))
     batch = os.path.basename(os.path.normpath(root))
     ledger = os.path.join(root, "datamining", "_ledgers") if single else os.path.join(root, "_ledgers")
 
-    print(f"论文 {len(papers)} 篇（{'单篇' if single else '批次'}）｜台账 → {ledger}")
+    print(f"{len(papers)} papers ({'single' if single else 'multiple'}) | ledger → {ledger}")
     pol, cat = collect(papers)
-    print(f"待对齐：污染物 {len(pol)} 个 / 催化剂 {len(cat)} 个")
+    print(f"to align: {len(pol)} pollutants / {len(cat)} catalysts")
 
     g, err = fetch_graph(a.env)
     if err:
         print(f"✗ {err}")
-        print("  提示：图谱跑在远端 Neo4j Aura，空闲会被回收连接——本脚本已自动重试 3 次；"
-              "仍失败请稍后再跑，**不要据此断言图谱没数据**")
+        print("  note: the graph runs on a remote Neo4j Aura instance and idle connections are reclaimed — this script already retries 3 times;"
+              "still failing means rerun later, **never conclude from that failure that the graph holds no data**")
         return 1
     n_retry = g.pop("n_retry")
-    print(f"图谱读取：Pollutant {len(g['pollutant'])} / Catalyst {len(g['catalyst'])}"
-          f"（连接重试 {n_retry} 次）")
+    print(f"graph read: Pollutant {len(g['pollutant'])} / Catalyst {len(g['catalyst'])}"
+          f" (connection retries {n_retry})")
     pol_by, cat_by_name, cat_by_fam = index_graph(g)
 
-    # ── 污染物 ──
+    # ── pollutants ──
     pout = {}
     for en, entry in sorted(pol.items()):
         mt, rows = match_pollutant(entry, pol_by)
@@ -368,13 +369,13 @@ def main():
                    "graph_hits": len(rows),
                    "graph_node_ids": [x.get("nid") for x in rows][:8],
                    "raw_names": entry["raw_names"], "papers": entry["papers"]}
-            print(f"OK  {en:30s} [图谱 {mt}] {r0.get('name','')[:34]}"
-                  f"{'  ⚠ 库内' + str(len(rows)) + '个同名节点(待合并)' if len(rows) > 1 else ''}")
+            print(f"OK  {en:30s} [graph {mt}] {r0.get('name','')[:34]}"
+                  f"{'  ! in-graph ' + str(len(rows)) + ' same-named nodes (pending merge)' if len(rows) > 1 else ''}")
         elif a.no_net:
             rec = {"query": en, "status": "unresolved", "source": "graph_only",
-                   "error": "未命中 Neo4j，且 --no-net 跳过联网",
+                   "error": "no Neo4j hit, and --no-net skipped the network lookup",
                    "raw_names": entry["raw_names"], "papers": entry["papers"]}
-            print(f"MISS {en:30s} 图谱未命中（--no-net，未联网）")
+            print(f"MISS {en:30s} no graph hit (--no-net, network skipped)")
         else:
             try:
                 rec = lookup(en)
@@ -389,7 +390,7 @@ def main():
         if rec.get("source") != "neo4j":
             time.sleep(0.4)
 
-    # ── 催化剂（不合并节点，只算族键 + 找同族） ──
+    # ── catalysts (nodes are not merged; only compute the family key + find same-family nodes) ──
     cout = {}
     for name, entry in sorted(cat.items()):
         mt, fam, exact_rows, fam_rows = match_catalyst(name, cat_by_name, cat_by_fam)
@@ -400,24 +401,24 @@ def main():
                       "graph_same_name": len(exact_rows), "graph_same_family": len(fam_rows),
                       "matched_papers": len({x.get("pid") for x in hit if x.get("pid")}),
                       "papers": entry["papers"],
-                      "note": "催化剂不合并节点；跨文献聚合用 family（=material_family）"}
-        print(f"{'CAT ' if hit else 'NEW '} {name[:46]:46s} 族={fam[:22]:22s} {mt}"
-              f"{'  同族 ' + str(len(hit)) + ' 节点/' + str(cout[name]['matched_papers']) + ' 篇' if hit else ''}")
+                      "note": "catalysts are never merged; cross-paper aggregation uses family (=material_family)"}
+        print(f"{'CAT ' if hit else 'NEW '} {name[:46]:46s} family={fam[:22]:22s} {mt}"
+              f"{'  same family ' + str(len(hit)) + ' nodes/' + str(cout[name]['matched_papers']) + ' papers' if hit else ''}")
 
     n_pol_ok = sum(1 for v in pout.values() if v.get("status") == "ok")
     n_pol_graph = sum(1 for v in pout.values() if v.get("source") == "neo4j")
     n_pol_dup = sum(1 for v in pout.values() if v.get("graph_hits", 0) > 1)
     n_cat_hit = sum(1 for v in cout.values() if v["action"] == "reuse_family")
-    print(f"=== 污染物对齐 {n_pol_ok}/{len(pout)}（其中图谱命中 {n_pol_graph}，"
-          f"库内多节点待合并 {n_pol_dup}）｜催化剂 {n_cat_hit}/{len(cout)} 命中已有族")
+    print(f"=== pollutant alignment {n_pol_ok}/{len(pout)} (graph hits {n_pol_graph},"
+          f" multi-node pending merge {n_pol_dup}) | catalysts {n_cat_hit}/{len(cout)} matched an existing family")
 
     if a.dry_run:
-        print("（--dry-run，未写产物）")
+        print("(--dry-run, no products written)")
         return 0
     os.makedirs(ledger, exist_ok=True)
-    f_pol = os.path.join(ledger, f"{batch}_污染物对齐表.json")
-    f_cat = os.path.join(ledger, f"{batch}_催化剂对齐表.json")
-    f_all = os.path.join(ledger, f"{batch}_实体对齐表.json")
+    f_pol = os.path.join(ledger, f"{batch}_pollutant_alignment.json")
+    f_cat = os.path.join(ledger, f"{batch}_catalyst_alignment.json")
+    f_all = os.path.join(ledger, f"{batch}_entity_alignment.json")
     json.dump(pout, open(f_pol, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     json.dump(cout, open(f_cat, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     json.dump({"batch": batch, "papers": len(papers), "ledger": ledger,

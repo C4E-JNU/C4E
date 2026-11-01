@@ -34,7 +34,7 @@ backend/agents/
 | `tools` | 全局工具白名单（只读类）。`null`=默认只读全集；`[]`=无工具 | `null` |
 | `tools_dir` | 私有工具目录名（相对本档案目录） | `tools` |
 | `allow_write` | 是否解锁写类工具（默认关闭，见 `write_tools`） | `false` |
-| `status_line` | 结论末尾附 `【STATUS】/【MISSING】/【CONFIDENCE】` 状态行 | `true` |
+| `status_line` | 结论末尾附 `[STATUS]/[MISSING]/[CONFIDENCE]` 状态行 | `true` |
 | `model.model` / `base_url` / `api_key` / `temperature` / `max_tokens` | 档案独立模型；只写其中几项时其余沿用主控 | 全空白=沿用主控 |
 | `params.max_rounds` | 轮次；不写=沿用设置里的子智能体轮次 | `null` |
 | `params.timeout` / `nudge` / `warn` / `abort` | 三级超时（秒）；不写=沿用设置 | `null` |
@@ -42,7 +42,6 @@ backend/agents/
 | `params.tool_result_max_chars` | 单条工具结果灌进子智能体上下文的封顶 | `4000` |
 | `params.tool_result_preview_chars` | 推给前端的预览长度 | `2000` |
 | `params.user_context_max_chars` | 主控传进来的 context 截断长度 | `6000` |
-| `params.max_images` | 单步最多内联几张图 | `3` |
 
 ## 工具白名单的两个来源
 

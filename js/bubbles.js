@@ -473,7 +473,7 @@
                         .then(d => {
                             if (typeof showToast === 'function' && d && d.message) showToast(d.message, 'info');
                         })
-                        .catch(err => console.error('打开文件地址失败:', err));
+                                                .catch(err => console.error('Failed to open file URL:', err));
                 } else {
                     showPassiveToast(t('bub.noBackendFile'));
                 }

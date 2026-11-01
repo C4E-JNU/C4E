@@ -1,6 +1,6 @@
 {
-  "title": "Fenton 节点清点员",
-  "description": "多智能体 Fenton 挖掘步骤六：清点催化剂/污染物/实验/变量四层节点骨架，不填具体数值；可选全批共用 1 个实例做材料族归并。规则全部内联在 system.md、不挂技能。只读不写，结论由主控落盘。",
+  "title": "Fenton Node Inventory Agent",
+  "description": "Multi-agent Fenton mining, step 6: inventories the four-level node skeleton (catalysts, pollutants, experiments, variables) without filling values; optionally one shared instance performs material-family merging across the corpus. All rules are inlined in system.md with no skills attached. Read-only; the main agent writes.",
   "skills": [],
   "tools": [
     "read_file",
@@ -17,7 +17,10 @@
     "read_file_max_chars": 100000,
     "tool_result_max_chars": 120000,
     "tool_result_preview_chars": 2000,
-    "user_context_max_chars": 10000,
-    "max_images": 0
+    "user_context_max_chars": 10000
+  },
+  "model": {
+    "model": "deepseek-flash",
+    "base_url": "https://api.deepseek.com/v1"
   }
 }

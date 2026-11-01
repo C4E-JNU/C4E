@@ -11,9 +11,9 @@
   B 列覆盖：节点**每个键**必须落到某列（白名单字段 → 其表头列；白名单外 → 兜底列 {key}(其他|var)）
   C 曲线三方（需 --root）：06 源曲线（按「图号含子图 + 图例」去重）↔ nodes_curve.json ↔ 曲线 sheet 行数
   D 点位对账：带 xs 的 Curve 数 ↔ 曲线 sheet 点位非空行数；n_points 总和一致
-  E 实库（可选 --neo4j）：本批（全类 node_id ∪ paper_id）回查 —— 节点存在性 / Paper 数 /
+  E 实库（可选 --neo4j）：本次（全类 node_id ∪ paper_id）回查 —— 节点存在性 / Paper 数 /
     关系数 / 带属性边数（与 edges.json 期望值对账）/ 属性 key 数。
-    边按**任一端**归属本批判定（另一端允许是共享 Entity / Figure 占位）——
+    边按**任一端**归属本次判定（另一端允许是共享 Entity / Figure 占位）——
     旧版要求两端都命中，导致连向 Entity 的 DEGRADES 边被整片漏统计（假阴性）。
 
 用法：
@@ -29,8 +29,8 @@ import re
 import sys
 from pathlib import Path
 
-SHEET_OF = {'paper': '论文', 'catalyst': '催化剂', 'experiment': '实验',
-            'variable': '变量水平', 'curve': '曲线', 'contradiction': '矛盾'}
+SHEET_OF = {'paper': 'Papers', 'catalyst': 'Catalysts', 'experiment': 'Experiments',
+            'variable': 'Variable levels', 'curve': 'Curves', 'contradiction': 'Contradictions'}
 # 首列已承载的键（不作为「未成列」计）
 LEAD_KEYS = {
     'paper': {'paper_id', 'dir_name', 'batch', 'title'},
@@ -149,15 +149,15 @@ def collect_sigs06(root, papers, issues):
 
 
 def check_neo4j(env, g, papers, nodes, issues, out):
-    """按「本批归属」回查实库：节点存在性 / 关系数 / 带属性边数 / 属性 key 数。
+    """按「本次归属」回查实库：节点存在性 / 关系数 / 带属性边数 / 属性 key 数。
 
     【2026-10-10 修·自检假阴性】旧版有两处写窄：
-      ① 本批 ids 只取 curve + variable 的 node_id；
-      ② 边过滤写成「**两端**都要命中本批」(`(a…) AND (b…)`)。
+      ① 本次 ids 只取 curve + variable 的 node_id；
+      ② 边过滤写成「**两端**都要命中本次」(`(a…) AND (b…)`)。
     而 DEGRADES 的终点是 Entity（跨论文共享污染物实体：**无 paper_id**，node_id 也不在
-    旧 ids 内）→ 所有连向 Entity 的边被整片排除。实测 B101：导出 368 条边只报 331，
+    旧 ids 内）→ 所有连向 Entity 的边被整片排除。实测（旧版重导出）：导出 368 条边只报 331，
     34 条带 `pollutant` 的 DEGRADES 一条不剩 —— 等于「边属性是否写入」这道门形同虚设。
-    现改为：本批集合 = 全部类别 node_id 全集 ∪ paper_id 全集；边按**任一端**归属本批计入
+    现改为：本次集合 = 全部类别 node_id 全集 ∪ paper_id 全集；边按**任一端**归属本次计入
     （另一端允许是共享 Entity / Figure 占位）。并对账 edges.json 的期望边数/带属性边数。
     """
     cfg = {}
@@ -176,7 +176,7 @@ def check_neo4j(env, g, papers, nodes, issues, out):
         return
     drv = GraphDatabase.driver(cfg['NEO4J_URI'],
                                auth=(cfg.get('NEO4J_USERNAME', ''), cfg.get('NEO4J_PASSWORD', '')))
-    # 本批集合：全部类别 node_id 全集（旧版只放 curve+variable）+ paper_id 全集
+    # 本次集合：全部类别 node_id 全集（旧版只放 curve+variable）+ paper_id 全集
     ids = sorted({q.get('node_id') for arr in (nodes or {}).values() for q in (arr or [])
                   if isinstance(q, dict) and q.get('node_id')})
     pids = [p.get('paper_id') for p in papers if p.get('paper_id')]
@@ -202,33 +202,33 @@ def check_neo4j(env, g, papers, nodes, issues, out):
         nb = out['neo4j']
         nb['_expected'] = {'node_ids': len(ids), 'papers': len(pids),
                            'edges': exp_edges, 'edges_with_props': exp_props}
-        # 节点存在性：本批每个 node_id 至少命中 1 个节点
+        # 节点存在性：本次每个 node_id 至少命中 1 个节点
         nb['_nodes_found'] = s.run(
             "MATCH (n) WHERE n.node_id IN $ids RETURN count(DISTINCT n.node_id) AS c",
             ids=ids).single()['c']
         if nb['_nodes_found'] != len(ids):
-            issues.append('E: 本批 node_id 实库命中 %d / %d（差 %d：未写入，或旧节点已清后的口径差）'
+            issues.append('E: 本次 node_id 实库命中 %d / %d（差 %d：未写入，或旧节点已清后的口径差）'
                           % (nb['_nodes_found'], len(ids), len(ids) - nb['_nodes_found']))
         nb['_papers_found'] = s.run(
             "MATCH (p:Paper) WHERE p.paper_id IN $pids RETURN count(p) AS c",
             pids=pids).single()['c']
         if nb['_papers_found'] != len(pids):
-            issues.append('E: 本批 Paper 实库 %d / 导出 %d —— 有节点未写入'
+            issues.append('E: 本次 Paper 实库 %d / 导出 %d —— 有节点未写入'
                           % (nb['_papers_found'], len(pids)))
         # 「同篇两套并存」门：按 dir_name 反查库里该篇的**全部** paper_id（paper_id 是内容哈希，
-        # 步骤十规则一变即换 id，唯一键 MERGE 挡不住 —— 只按本批 pids 查是查不出来的）
+        # 步骤十规则一变即换 id，唯一键 MERGE 挡不住 —— 只按本次 pids 查是查不出来的）
         dirs = sorted({p.get('dir_name') for p in papers if p.get('dir_name')})
         allp = sorted({r['pid'] for r in (s.run(
             "MATCH (p:Paper) WHERE p.dir_name IN $dirs RETURN DISTINCT p.paper_id AS pid",
             dirs=dirs).data() if dirs else []) if r.get('pid')})
         nb['_papers_all_pids'] = len(allp)
         if len(allp) > len(pids):
-            issues.append('E: 同篇论文在库中有 %d 个 paper_id（本批导出 %d）—— 新旧两套并存，'
+            issues.append('E: 同篇论文在库中有 %d 个 paper_id（本次导出 %d）—— 新旧两套并存，'
                           '入库前需 step11 --purge-export' % (len(allp), len(pids)))
         nb['_rels'] = s.run("MATCH (a)-[r]->(b) WHERE " + mine + " RETURN count(r) AS c",
                             pids=pids, ids=ids).single()['c']
         if exp_edges and nb['_rels'] != exp_edges:
-            issues.append('E: 本批关系数 实库 %d ≠ 导出 %d（%+d）'
+            issues.append('E: 本次关系数 实库 %d ≠ 导出 %d（%+d）'
                           % (nb['_rels'], exp_edges, nb['_rels'] - exp_edges))
         ewp = s.run("MATCH (a)-[r]->(b) WHERE " + mine + " AND size(keys(r)) > 0 "
                     "RETURN type(r) AS t, count(r) AS c", pids=pids, ids=ids).data()
@@ -326,13 +326,13 @@ def main():
             print('  ~ 图号差异提示 %d 条（标签在图谱中、图号写法不同）：%s'
                   % (len(hints), hints[:3]))
     n_xs = sum(1 for q in cur if q.get('xs'))
-    pts_rows = len(sheet_rows(g / 'tables.xlsx', '曲线', '点位'))
+    pts_rows = len(sheet_rows(g / 'tables.xlsx', 'Curves', 'Points'))
     out['curves']['with_xs'] = n_xs
     out['curves']['sheet_pts_rows'] = pts_rows
     if n_xs != pts_rows:
         issues.append('D: 带点位 Curve %d 条 ≠ 曲线表点位非空行 %d 条' % (n_xs, pts_rows))
     npt_graph = sum(q.get('n_points') or 0 for q in cur)
-    npt_sheet = sum(v for v in sheet_rows(g / 'tables.xlsx', '曲线', '点数') if isinstance(v, (int, float)))
+    npt_sheet = sum(v for v in sheet_rows(g / 'tables.xlsx', 'Curves', 'Point count') if isinstance(v, (int, float)))
     out['curves']['points_graph'] = npt_graph
     out['curves']['points_sheet'] = npt_sheet
     if npt_graph != npt_sheet:
@@ -354,7 +354,7 @@ def main():
     if a.neo4j and 'neo4j' in out:
         nb = out['neo4j']
         ex = nb.get('_expected', {})
-        print('  实库回查（本批/期望）：节点 %s/%s · Paper %s/%s · 关系 %s/%s · 带属性边 %s/%s'
+        print('  实库回查（本次/期望）：节点 %s/%s · Paper %s/%s · 关系 %s/%s · 带属性边 %s/%s'
               % (nb.get('_nodes_found'), ex.get('node_ids'), nb.get('_papers_found'), ex.get('papers'),
                  nb.get('_rels'), ex.get('edges'), nb.get('_edge_with_props_n'), ex.get('edges_with_props')))
         print('    带属性边明细：', json.dumps(nb.get('_edge_with_props') or [], ensure_ascii=False))

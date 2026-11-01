@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-"""step2_split.py — V5 步骤② 子图分割（白线脚本）
-读取 datamining/01_work_order.json，对「多面板且含 needs_xy_extraction=true 子图」的图分割
-（子图级判定；单面板 xy 图不分割，直接提取），
-写 datamining/split/<图号>/ 与 datamining/02_image_match.json（分割数校验）。
-分割失败（数量不符/缺原图）的图会在汇总中列出 → 转智能体裁切或 PDF 补提后重跑本步。
-用法：python step2_split.py <批次根目录>
+"""step2_split.py — Step 4, subfigure splitting (a plain script, no LLM)
+Reads datamining/01_work_order.json and splits figures that are multi-panel and contain at least one subfigure with needs_xy_extraction=true
+(decided at subfigure level; a single-panel xy figure is not split and is extracted directly),
+writing datamining/split/<figure id>/ and datamining/02_image_match.json (with a split-count check).
+Figures that fail to split (count mismatch / original image missing) are listed in the summary → re-run this step after agent-side cropping or PDF re-extraction.
+Usage: python step2_split.py <corpus root directory>
 """
 import json
 import os
@@ -31,7 +31,7 @@ def find_image(wf: Path, figure_id: str):
     for cand in {str(figure_id).strip(), norm}:
         d = img_dir / cand
         if d.is_dir():
-            full = d / (cand + "_full.jpg")   # 新归档：多子图纵向拼接整图优先
+            full = d / (cand + "_full.jpg")   # new archiving: prefer the whole figure stitched vertically from several subfigures
             if full.exists():
                 return full
             for ext in ("*.jpg", "*.jpeg", "*.png"):
@@ -42,12 +42,12 @@ def find_image(wf: Path, figure_id: str):
 
 
 def read_panel_list(wf: Path, figure_id: str):
-    """读 images/FigureN/FigureN.txt 的「[-] <file> page=N」有序面板清单。
+    """Read the ordered panel list '[-] <file> page=N' from images/FigureN/FigureN.txt.
 
-    【2026-10-05 修】归档阶段 MinerU 已把多面板图各自独立成图，
-    此时 FigureN.txt 是权威且有序的面板清单（顺序 = 图注 a/b/c），
-    无需再做白线切割。旧版无条件调 split_figure 去切「单张面板图」，
-    必然 0 张 → 误报「分割失败」（B202 wen-et-al-2021 的 Fig.5/6/10 实测）。
+    【fixed 2026-10-05】During archiving MinerU has already rendered each panel of a multi-panel figure as its own image,
+    so FigureN.txt is the authoritative and ordered panel list (order = caption a/b/c) and no white-line cutting is needed.
+    The old version unconditionally called split_figure to cut a "single-panel image",
+    which always produced 0 pieces → a false "split failed" (measured on Fig.5/6/10 of B202 wen-et-al-2021).
     """
     img_dir = wf / "images"
     if not img_dir.is_dir():
@@ -67,9 +67,9 @@ def read_panel_list(wf: Path, figure_id: str):
             continue
         if not txt.strip():
             continue
-        # 【2026-10-05 修】兼容两种面板行格式：新 step0c 归档「  [1] <file> page=N bbox=…」
-        # 与旧 MinerU 归档「  [-] <file>」。旧版只认 [-] 且要求正文含「子图」二字，
-        # 对 [n] 格式必然读空 → 整图降级为单包、面板全部对不上（实测 Fig.7 4 块读成 0 块）。
+        # 【fixed 2026-10-05】tolerate two panel-line formats: the new step0c archive uses "  [1] <file> page=N bbox=…"
+        # and the old MinerU archive uses "  [-] <file>". The old version accepted only [-] and required the literal word "subfigure" in the line,
+        # so an [n] format always read as empty → the whole figure degraded to a single pack and no panel matched (measured: Fig.7 read 4 blocks as 0).
         names = re.findall(r"^\s*\[[-\d]+\]\s+(\S+\.(?:jpg|jpeg|png))", txt, re.M)
         out = [d / n for n in names if (d / n).exists()]
         if out:
@@ -78,10 +78,10 @@ def read_panel_list(wf: Path, figure_id: str):
 
 
 def xy_subs_of(task):
-    """该图的 XY 子图清单（子图级判定，唯一真源 = subfigures[].needs_xy_extraction）。
+    """The list of XY subfigures of this figure (subfigure-level decision; the single source of truth = subfigures[].needs_xy_extraction).
 
-    兼容旧工单：子图内一个该字段都没有时，回退读图级布尔（旧 schema 图级 true = 全部子图当 XY），
-    只在完全没有子图级信息时生效，新工单不会走到这里。
+    Tolerates old work orders: when no subfigure carries the field, fall back to the figure-level boolean (old schema figure-level true = all subfigures are XY),
+    which applies only when no subfigure-level information exists at all; new work orders never reach this branch.
     """
     subs = task.get("subfigures", [])
     if any("needs_xy_extraction" in s for s in subs):
@@ -96,7 +96,7 @@ def split_paper(root: Path, paper: str, log=print):
         return None
     data = json.loads(wo_path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
-        return None  # 旧版 list 格式工单(如 C4EAI 残留)跳过
+        return None  # skip legacy list-format work orders (e.g. leftovers from C4EAI)
     out_root = wf / "02_split"
     if out_root.exists():
         shutil.rmtree(out_root)
@@ -104,15 +104,15 @@ def split_paper(root: Path, paper: str, log=print):
     results = []
     for task in data.get("figures", []):
         subs = task.get("subfigures", [])
-        # 【2026-10-05 改】XY 判定下沉到子图级：以 subfigures[].needs_xy_extraction 为准。
-        # 多面板图里只要有 1 个 XY 子图就要分割（同一图可能混装 xy/basic 面板）。
+        # 【changed 2026-10-05】the XY decision moved down to subfigure level: subfigures[].needs_xy_extraction is authoritative.
+        # A multi-panel figure must be split if even one subfigure is XY (one figure may mix xy and basic panels).
         xy_subs = xy_subs_of(task)
         if not (xy_subs and len(subs) > 1):
-            continue  # 单面板 xy 图直接提取，无需分割
+            continue  # a single-panel xy figure is extracted directly and needs no split
         fid = task["figure_id"]
         expected = task.get("total_subfigures") or len(subs)
-        # 归档已分幅（FigureN.txt 有序面板清单）→ 直接采纳，不做白线切割。
-        # 判据：面板数 > 1 且 ≥ 工单收录子图数（多出的面板属 excluded 子图，按字母取用时不受影响）。
+        # The archive is already split into panels (ordered FigureN.txt list) → accept it directly, no white-line cutting.
+        # Criterion: panel count > 1 and ≥ the number of subfigures included by the work order (extra panels are excluded subfigures and do not affect picking by letter).
         panels = read_panel_list(wf, fid)
         if len(panels) > 1 and len(panels) >= len(subs):
             expected = len(panels)
@@ -128,13 +128,13 @@ def split_paper(root: Path, paper: str, log=print):
                             "split_count": len(saved), "split_success": True,
                             "source": "archive_panel",
                             "xy_subfigure_ids": [s["subfigure_id"] for s in xy_subs]})
-            log(f"✓ {paper[:30]} {fid}: 归档已分幅 {len(saved)}/{expected}（直接采纳）")
+            log(f"OK {paper[:30]} {fid}: archive already split {len(saved)}/{expected} (accepted directly)")
             continue
         img = find_image(wf, fid)
         if img is None:
-            results.append({"figure_id": fid, "error": "找不到原图",
+            results.append({"figure_id": fid, "error": "original image not found",
                             "expected_total": expected, "split_success": False})
-            log(f"✗ {paper[:30]} {fid}: 找不到原图（转 PDF 补提）")
+            log(f"FAIL {paper[:30]} {fid}: original image not found (switch to PDF re-extraction)")
             continue
         out_dir = out_root / fid
         saved = split_figure(str(img), str(out_dir), fid)
@@ -159,7 +159,7 @@ def main(root):
         for it in r:
             ok += 1 if it.get("split_success") else 0
             bad += 0 if it.get("split_success") else 1
-    print(f"=== 脚本分割 {ok} 张成功，{bad} 张待处理（智能体裁切/PDF补提后重跑） ===")
+    print(f"=== script split: {ok} succeeded, {bad} pending (rerun after agent-side cropping / PDF re-extraction) ===")
 
 
 if __name__ == "__main__":

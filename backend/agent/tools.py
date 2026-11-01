@@ -1,6 +1,6 @@
 """
-LangChain 工具包装 — 将后端的工具函数包装为 LangChain @tool
-每个工具包含：name, description, args_schema, func
+LangChain tool wrappers - expose backend tool functions as LangChain @tools.
+Each tool has: name, description, args_schema, func.
 """
 import json
 import os
@@ -9,7 +9,7 @@ from langchain_core.tools import StructuredTool
 from typing import Optional, Type
 from pydantic import BaseModel, Field
 
-# ── 导入后端工具函数 ──────────────────────────────
+# -- Import backend tool functions --
 from tools.neo4j_tools import (
     execute_graph_schema as _exec_graph_schema,
     execute_cypher as _exec_cypher,
@@ -30,185 +30,185 @@ from tools.xwiki_tools import (
 )
 
 
-# ── Pydantic 参数模型（提供给 LLM 的 JSON Schema） ──
+# -- Pydantic parameter models (JSON Schema given to the LLM) --
 
 class GraphQueryParams(BaseModel):
-    """图谱查询的唯一入口参数（schema / cypher / search 三合一）。"""
-    action: str = Field(description="动作：schema=先看图谱结构（首次调用）｜cypher=执行 Cypher｜search=自然语言语义检索")
-    cypher: str = Field(default="", description="action=cypher 时填：Cypher 语句。例: MATCH (p:Pollutant {name:$name})-[:DEGRADES]->(c) RETURN c.name LIMIT 10")
-    params: dict = Field(default={}, description="action=cypher 时的查询参数（可选）。例: {'name': 'Ciprofloxacin'}")
-    query: str = Field(default="", description="action=search 时填：自然语言查询。例: '镍掺杂四氧化三铁降解DDT'")
-    scope: str = Field(default="catalyst", description="action=search 的检索对象：catalyst(催化剂)/category(催化剂类别)/pollutant(污染物)/experiment(实验)/contradiction(矛盾)")
-    top_k: int = Field(default=8, description="action=search 返回条数 1-25")
+    """Single entry point for graph queries (schema / cypher / search)."""
+    action: str = Field(description="Action: schema=inspect graph structure (call first) | cypher=run Cypher | search=natural-language semantic search")
+    cypher: str = Field(default="", description="For action=cypher: the Cypher statement. Example: MATCH (p:Pollutant {name:$name})-[:DEGRADES]->(c) RETURN c.name LIMIT 10")
+    params: dict = Field(default={}, description="For action=cypher: optional query parameters. Example: {'name': 'Ciprofloxacin'}")
+    query: str = Field(default="", description="For action=search: natural-language query. Example: 'nickel-doped magnetite degrading DDT'")
+    scope: str = Field(default="catalyst", description="For action=search: catalyst / category / pollutant / experiment / contradiction")
+    top_k: int = Field(default=8, description="For action=search: number of results, 1-25")
 
 
 class SearchParams(BaseModel):
-    query: str = Field(description="搜索关键词，例如: '向量数据库 Qdrant 用法'")
-    limit: int = Field(default=5, description="返回结果数量 1-10")
+    query: str = Field(description="Search keywords, e.g. 'vector database Qdrant usage'")
+    limit: int = Field(default=5, description="Number of results, 1-10")
 
 class FetchParams(BaseModel):
-    url: str = Field(description="要抓取的网页完整 URL，必须以 http:// 或 https:// 开头")
+    url: str = Field(description="Full URL to fetch; must start with http:// or https://")
 
 class SkillViewParams(BaseModel):
-    name: str = Field(description="技能名称，例如: 'literature-translate'")
-    file_path: str = Field(default="SKILL.md", description="技能内的文件路径，不传则读 SKILL.md")
+    name: str = Field(description="Skill name, e.g. 'literature-translate'")
+    file_path: str = Field(default="SKILL.md", description="Path inside the skill; defaults to SKILL.md")
 
 class CodeParams(BaseModel):
-    code: str = Field(description="要执行的 Python 代码")
-    timeout: int = Field(default=30, description="超时秒数（1-60）。超过 60 秒的活请拆分，或改用 terminal 跑脚本文件")
+    code: str = Field(description="Python code to execute")
+    timeout: int = Field(default=30, description="Timeout in seconds (1-60). Split longer jobs or run a script via terminal")
 
 class ReadFileParams(BaseModel):
-    path: str = Field(default="", description="文件路径；相对路径以 workspace/ 为基准，询问/完全访问模式下可用绝对路径读取项目内或磁盘文件。若同时给 file_id 则可省略")
-    file_id: str = Field(default="", description="上传附件的 file_id：已解析文档返回解析全文；未解析附件（笔记附件）会【即时提取原文】返回；图片返回 base64(dataURL)。给 file_id 时优先于 path")
-    as_base64: bool = Field(default=False, description="按 file_id 读取时是否强制返回 base64（图片默认即 base64）")
-    offset: int = Field(default=1, description="起始行号（1 起）。path 与 file_id 两种读法含义相同，都可用于续读")
+    path: str = Field(default="", description="File path; relative paths resolve against workspace/. In ask/full modes absolute paths inside the project or on disk may be read. May be omitted when file_id is given")
+    file_id: str = Field(default="", description="file_id of an uploaded attachment: parsed documents return full text; unparsed attachments (note attachments) are extracted on the fly; images return base64 (dataURL). Takes precedence over path")
+    as_base64: bool = Field(default=False, description="When reading by file_id, force base64 output (images are base64 by default)")
+    offset: int = Field(default=1, description="Start line (1-based). Same meaning for path and file_id; use it to continue reading")
     limit: int = Field(default=500, description=(
-        "最多返回多少行。注意返回内容还【按字符数封顶】（主智能体默认约 20000 字符；"
-        "子智能体档案可自设更大上限），行数没到上限也可能被截。"
-        "响应里的 has_more=true 表示没读完，用返回的 next_offset 作为 offset 再次调用即可续读；"
-        "读到 has_more=false 才算读完全文。"))
+        "Maximum number of lines to return. Output is also capped by characters (about 20,000 by default for the main agent;"
+        "subagent profiles may set a higher cap), so a response can be truncated before the line limit."
+        "has_more=true means the file was not fully read; call again with the returned next_offset."
+        "Only has_more=false means the whole text was read."))
     max_chars: int = Field(default=0, description=(
-        "可选：本次单次返回的字符上限（0 = 用当前生效上限）。要一次读入大段正文可显式放大，"
-        "例如 50000；放大只影响本次调用，不会改变系统默认。"))
+        "Optional character cap for this single call (0 = current effective cap). Raise it to read a large block,"
+        "e.g. 50000; it affects only this call and does not change the system default."))
 
 class WriteFileParams(BaseModel):
-    path: str = Field(description="文件路径；安全模式仅限 workspace/，询问模式可写 workspace/ 与 skills/，完全访问模式可写任意绝对路径")
-    content: str = Field(description="文件内容（完整覆盖）")
+    path: str = Field(description="File path; safe mode restricts to workspace/, ask mode also allows skills/, full access allows any absolute path")
+    content: str = Field(description="File content (full overwrite)")
 
 class TerminalParams(BaseModel):
-    command: str = Field(description="要执行的 shell 命令（如 `uv pip install pandas`、`uv sync`、`python script.py`、`git status`）。可执行任意命令，受权限模式约束。")
-    workdir: str = Field(default="", description="工作目录。省略 = 本人产出区（临时脚本/产出文件的落点，避免污染项目）。相对路径以项目根为基准；要在项目内跑 git/uv pip/项目脚本，请显式传 workdir='.'。安全模式强制在项目内。")
+    command: str = Field(description="Shell command to run (e.g. `uv pip install pandas`, `uv sync`, `python script.py`, `git status`). Any command is allowed, subject to the permission mode.")
+    workdir: str = Field(default="", description="Working directory. Omit to use your own output area (for temporary scripts and outputs, keeping the project clean). Relative paths resolve against the project root; pass workdir='.' explicitly to run git/uv pip/project scripts in the project. Safe mode forces the project directory.")
 
 class TodoParams(BaseModel):
-    action: str = Field(description="操作类型: list=列表, add=添加, complete=标记完成, remove=删除")
-    task: Optional[str] = Field(default=None, description="任务描述（add 操作时需要）")
-    task_id: Optional[int] = Field(default=None, description="任务编号（complete/remove 操作时需要）")
+    action: str = Field(description="Action: list / add / complete / remove")
+    task: Optional[str] = Field(default=None, description="Task description (required for add)")
+    task_id: Optional[int] = Field(default=None, description="Task id (required for complete/remove)")
 
 class NotesParams(BaseModel):
-    action: str = Field(description="操作类型: list=列表, read=读取单条, add=添加, append=向已有条目末尾追加内容, update=更新, delete=删除")
+    action: str = Field(description="Action: list / read one / add / append to an existing entry / update / delete")
     scope: str = Field(
         default="notes",
-        description="目标存储，必须按用户意图明确选择："
-                    "scope='notes' = 本地对话笔记（用户说「我的笔记」「笔记」「刚记的」）；"
-                    "scope='database' = 云端共享数据库条目（用户说「数据库」「共享库」「组里的条目」「共享数据库」）。"
-                    "两者格式相同但存储不同，改错地方是不可逆错误：拿不准时先 list 确认，或直接问用户。"
+        description="Target store; choose explicitly from user intent:"
+                    "scope='notes' = local conversation notes (user says 'my notes', 'note this down');"
+                    "scope='database' = cloud shared database entries (user says 'database', 'shared library', 'the group entries')."
+                    "Both use the same format but different storage; writing to the wrong one is irreversible, so list first when unsure or ask the user."
     )
-    note_id: Optional[str] = Field(default=None, description="条目ID（read/append/update/delete时需要；数据库条目的 id 形如 note-1234567890）")
+    note_id: Optional[str] = Field(default=None, description="Entry id (required for read/append/update/delete; database entry ids look like note-1234567890)")
     branch_id: str = Field(
         default="",
-        description="仅 scope='notes' 且 action='list' 时用于限定范围："
-                    "留空（默认）=列出本人**全部对话**的笔记（跨对话，含所属 branch_id，便于按对话定位）；"
-                    "传具体分支 id（如 'branch-48'）=只看该对话的笔记；"
-                    "传 '__current__'=只看当前对话的笔记。"
-                    "read/append/update/delete 按 note_id 跨对话全局生效，不受此参数限制。"
+        description="Only for scope='notes' with action='list':"
+                    "empty (default) = list notes from ALL your conversations (with branch_id to locate them);"
+                    "a branch id (e.g. 'branch-48') = only that conversation;"
+                    "'__current__' = only the current conversation."
+                    "read/append/update/delete work globally by note_id and ignore this parameter."
     )
-    title: Optional[str] = Field(default=None, description="笔记标题（add时需要）")
+    title: Optional[str] = Field(default=None, description="Note title (required for add)")
     content: Optional[str] = Field(
         default=None,
-        description="笔记内容（add/append/update时需要）。必须使用完整 Markdown 富文本，充分利用排版与可视化能力："
-                    "① 用 #/##/### 分级标题组织结构；② 用 - / 1. / **加粗** / *斜体* 等列表与强调；"
-                    "③ 数据对比用 Markdown 表格；④ 流程图、时序图、甘特图等用 ```mermaid 代码块；"
-                    "⑤ 数学公式用 $$...$$ 块级 / $...$ 行内 LaTeX；⑥ 代码用 ```语言 代码块。"
-                    "让笔记图文并茂、结构清晰、可视化丰富。"
-                    "【长度纪律】单次调用建议不超过 6000 字：长文先 add 首部，再用 append 分段追加；超过 2 万字符的写入会被拒绝。"
+        description="Note content (required for add/append/update). Use full Markdown rich text:"
+                    "(1) organize with #/##/### headings; (2) use lists and emphasis (-, 1., **bold**, *italic*);"
+                    "(3) use Markdown tables for comparisons; (4) use ```mermaid blocks for flowcharts, sequence diagrams and Gantt charts;"
+                    "(5) use $$...$$ for block and $...$ for inline LaTeX; (6) use fenced code blocks with a language tag."
+                    "Make notes well structured and richly visual."
+                    "LENGTH LIMIT: keep a single call under ~6,000 characters: add the first part, then append; writes over 20,000 characters are rejected."
     )
 
 class ListFilesParams(BaseModel):
-    subdir: Optional[str] = Field(default="", description="目录路径；不传则列出 workspace 根目录，非安全模式可用绝对路径列出项目/磁盘目录")
+    subdir: Optional[str] = Field(default="", description="Directory path; omit to list the workspace root; outside safe mode absolute paths may list project/disk directories")
 
 class SkillWriteParams(BaseModel):
-    name: str = Field(description="技能名（作为 skills/<name>/ 目录名，不能含 / 或 \\\\\\\\）")
-    content: str = Field(description="文件完整内容；写 SKILL.md 时需含 YAML frontmatter（name/description/version）")
-    file_path: str = Field(default="SKILL.md", description="子文件路径（如 references/x.md、templates/x、scripts/x.py），默认 SKILL.md")
+    name: str = Field(description="Skill name (used as the skills/<name>/ directory name; must not contain / or \\\\\\\\）")
+    content: str = Field(description="Full file content; SKILL.md needs YAML frontmatter (name/description/version)")
+    file_path: str = Field(default="SKILL.md", description="Sub-file path (e.g. references/x.md, templates/x, scripts/x.py); defaults to SKILL.md")
 
 class SearchMemoryParams(BaseModel):
-    query: str = Field(description="搜索关键词，例如: '实验记录 仪器标定'")
-    scope: str = Field(default="auto", description="搜索范围: auto=自动判断, history=历史对话, knowledge=知识库")
+    query: str = Field(description="Search keywords, e.g. 'experiment record instrument calibration'")
+    scope: str = Field(default="auto", description="Scope: auto / history (past conversations) / knowledge (knowledge base)")
 
 class SharedUploadParams(BaseModel):
-    file_id: str = Field(default="", description="本地上传文件的 file_id（8 位 id，上传后返回的）")
-    path: str = Field(default="", description="或 workspace 内相对路径/绝对路径。file_id 与 path 二选一必填")
+    file_id: str = Field(default="", description="file_id of a locally uploaded file (returned on upload)")
+    path: str = Field(default="", description="Or a workspace-relative or absolute path. One of file_id / path is required")
 
 
 class SharedSearchParams(BaseModel):
-    """共享知识库工具 —— 检索 + 分组管理统一入口（用户 2026-09-25 定：
-    「知识库工具统一，不要多写太多新工具」）。
+    """Shared knowledge base tool - unified entry for search and group management (decision 2026-09-25:
+    keep knowledge-base tools unified; do not add many new tools).
 
-    检索类：action="search"（默认），走语义检索。
-    分组类：action=list_groups / create_group / update_group / move_group / delete_group。
-    每次只做一件事，用 action 指定。
+    Search: action="search" (default), semantic retrieval.
+    Groups: action=list_groups / create_group / update_group / move_group / delete_group.
+    Do one thing per call, selected by action.
     """
     action: str = Field(
         default="search",
-        description=("要执行的操作，取值：\n"
-                     "  search        —— 语义检索共享库（默认）\n"
-                     "  list_groups   —— 查看分组树（含每个分组的简介，用于定位资料在哪组）\n"
-                     "  create_group  —— 新建分组（需 name；可给 parent_id、intro）\n"
-                     "  update_group  —— 改分组名或简介（需 group_id；可给 name、intro）\n"
-                     "  move_group    —— 移动分组（需 group_id；parent_id 为目标父，空=移到根级）\n"
-                     "  delete_group  —— 删除分组（需 group_id；mode=move_up 子上移(默认) / cascade 连子删）\n"
-                     "  list_entries  —— 列出条目（**支持 owner/year/kind/sort/summary_only 过滤，见下**）\n"
-                     "  move_entry    —— 把条目移到分组（需 entry_id、to_group_id；to_group_id 空=移出分组）"),
+        description=("Operation to perform:\n"
+                     "  search        -- semantic search in the shared library (default)\n"
+                     "  list_groups   -- view the group tree (with each group's intro, to locate material)\n"
+                     "  create_group  -- create a group (needs name; optional parent_id, intro)\n"
+                     "  update_group  -- rename or re-describe a group (needs group_id; optional name, intro)\n"
+                     "  move_group    -- move a group (needs group_id; parent_id = new parent, empty = root)\n"
+                     "  delete_group  -- delete a group (needs group_id; mode=move_up moves children up (default) / cascade deletes them)\n"
+                     "  list_entries  -- list entries (supports owner/year/kind/sort/summary_only filters, see below)\n"
+                     "  move_entry    -- move an entry into a group (needs entry_id, to_group_id; empty = ungroup)"),
     )
-    query: str = Field(default="", description="search 用：搜索关键词或自然语言问题，例如 '组内仪器使用规范'")
-    top_k: int = Field(default=5, description="search 用：返回最相关的条数，默认 5")
-    group_id: str = Field(default="", description="list_entries 用：限定某分组（空=全部；\"__root__\"=未分组）；update/move/delete_group 用：要操作的分组 id（支持 8 位短 id）")
-    name: str = Field(default="", description="create/update_group 用：分组名")
-    parent_id: str = Field(default="", description="create/move_group 用：父分组 id；空字符串 = 根级")
-    intro: str = Field(default="", description="create/update_group 用：分组简介（用户手写或你代写的一句话说明，供人阅读与检索导航）")
-    mode: str = Field(default="move_up", description="delete_group 用：move_up=子分组与条目上移到父级（默认）；cascade=连同子分组一起删")
-    entry_id: str = Field(default="", description="move_entry 用：要移动的条目 id")
-    to_group_id: str = Field(default="", description="move_entry 用：目标分组 id；空字符串 = 移出分组（回到未分组）")
-    owner: str = Field(default="", description="list_entries 用：只看某用户上传的（如 \"xhq1\"；空=全部用户）")
-    year: str = Field(default="", description="list_entries 用：只看某年上传的（如 \"2026\"；按上传时间 createdAt；空=全部年份）")
-    kind: str = Field(default="", description="list_entries 用：\"note\"=笔记 / \"document\"=文档；空=两者都要")
-    sort: str = Field(default="time", description="list_entries 用：\"time\"=上传时间新→旧(默认) / \"time_asc\"=旧→新 / \"title\"=按名称")
-    summary_only: bool = Field(default=False, description=("list_entries 用：True 时**只返回各分组的条目数量**，不返回明细。\n"
-                                                           "**当你不确定资料在哪个分组时，先用 summary_only=True 看「哪个组有货」，"
-                                                           "再针对具体 group_id 拉明细 —— 这样最省 token，不要先拉全部再自己筛。**"))
+    query: str = Field(default="", description="For search: keywords or a natural-language question, e.g. 'in-house instrument usage rules'")
+    top_k: int = Field(default=5, description="For search: number of most relevant results, default 5")
+    group_id: str = Field(default="", description="For list_entries: restrict to a group (empty = all; \"__root__\" = ungrouped); for update/move/delete_group: target group id (8-char short ids accepted)")
+    name: str = Field(default="", description="For create/update_group: group name")
+    parent_id: str = Field(default="", description="For create/move_group: parent group id; empty string = root")
+    intro: str = Field(default="", description="For create/update_group: one-line group description (written by the user or by you) used for navigation and search")
+    mode: str = Field(default="move_up", description="For delete_group: move_up = move child groups and entries to the parent (default); cascade = delete children too")
+    entry_id: str = Field(default="", description="For move_entry: id of the entry to move")
+    to_group_id: str = Field(default="", description="For move_entry: target group id; empty string = remove from the group")
+    owner: str = Field(default="", description="For list_entries: only uploads by this user (e.g. \"xhq1\"; empty = all users)")
+    year: str = Field(default="", description="For list_entries: only uploads in this year (e.g. \"2026\", by createdAt; empty = all years)")
+    kind: str = Field(default="", description="For list_entries: \"note\" / \"document\"; empty = both")
+    sort: str = Field(default="time", description="For list_entries: \"time\" = newest first (default) / \"time_asc\" / \"title\"")
+    summary_only: bool = Field(default=False, description=("For list_entries: True returns ONLY the entry count per group.\n"
+                                                           "**When you do not know which group holds the material, call this first with summary_only=True,"
+                                                           "then pull details for the relevant group_id - this saves the most tokens. Do not fetch everything and filter locally.**"))
 
 
-# ── XWiki 参数模型（两个统一入口：读 / 写） ─────────
+# -- XWiki parameter models (two unified entries: read / write) --
 
 class WikiReadParams(BaseModel):
-    """XWiki 只读入口 —— 一个工具用 action 分发。"""
+    """XWiki read entry - one tool dispatched by action."""
     action: str = Field(
         default="search",
-        description=("要做的只读操作：\n"
-                     "  search          —— 关键词检索标题/正文（默认；需 query）\n"
-                     "  get             —— 读某页完整正文（需 space、page）\n"
-                     "  list_spaces     —— 列出所有空间（可给 name 过滤）\n"
-                     "  list_pages      —— 列出某空间下所有页面（需 space）\n"
-                     "  list_attachments—— 列出某页的附件（需 space、page）"))
-    query: str = Field(default="", description="action=search 用：关键词。中文直接写，如 '分子对接'")
-    space: str = Field(default="", description="空间名，如 'Main'、'02. 新成员须知'")
-    page: str = Field(default="", description="页面名，如 'WebHome'、'AutodockVina步骤'")
-    limit: int = Field(default=10, description="返回条数：search 默认 10；list_pages 默认 10（内部上限 200）")
-    scope: str = Field(default="all", description="action=search 用：all=标题+正文（默认）/ title / content")
-    name: str = Field(default="", description="action=list_spaces 用：按名称片段过滤，如 '06' 或 'Software'")
+        description=("Read-only operation:\n"
+                     "  search          -- keyword search in titles/body (default; needs query)\n"
+                     "  get             -- read the full body of a page (needs space, page)\n"
+                     "  list_spaces     -- list all spaces (optional name filter)\n"
+                     "  list_pages      -- list all pages in a space (needs space)\n"
+                     "  list_attachments-- list attachments of a page (needs space, page)"))
+    query: str = Field(default="", description="For action=search: keywords; Chinese is fine, e.g. 'molecular docking'")
+    space: str = Field(default="", description="Space name, e.g. 'Main', '02. New member guide'")
+    page: str = Field(default="", description="Page name, e.g. 'WebHome', 'AutodockVina steps'")
+    limit: int = Field(default=10, description="Number of results: 10 by default for search; 10 for list_pages (internal cap 200)")
+    scope: str = Field(default="all", description="For action=search: all = title+body (default) / title / content")
+    name: str = Field(default="", description="For action=list_spaces: filter by name fragment, e.g. '06' or 'Software'")
 
 
 class WikiWriteParams(BaseModel):
-    """XWiki 写入入口 —— 一个工具用 action 分发。"""
+    """XWiki write entry - one tool dispatched by action."""
     action: str = Field(
-        description=("要做的写操作：\n"
-                     "  create            —— 新建页面（需 space、page、content）\n"
-                     "  update            —— 覆盖已有页面正文（需 space、page、content）\n"
-                     "  delete            —— 删除页面（需 space、page；不可恢复）\n"
-                     "  upload_attachment —— 上传本地文件为附件（需 space、page、file_path）"))
-    space: str = Field(default="", description="空间名，如 'Main'")
-    page: str = Field(default="", description="页面名（英文、不含空格），如 'FentonProtocol'")
-    content: str = Field(default="", description="页面正文，用 XWiki 2.1 语法（不是 Markdown）")
-    title: str = Field(default="", description="页面显示标题（可选，默认用 page）")
-    parent: str = Field(default="", description="action=create 用：父页面全名（可选）")
-    file_path: str = Field(default="", description="action=upload_attachment 用：本地文件路径")
-    filename: str = Field(default="", description="action=upload_attachment 用：wiki 上显示的文件名（可选）")
+        description=("Write operation:\n"
+                     "  create            -- create a page (needs space, page, content)\n"
+                     "  update            -- overwrite an existing page body (needs space, page, content)\n"
+                     "  delete            -- delete a page (needs space, page; irreversible)\n"
+                     "  upload_attachment -- upload a local file as an attachment (needs space, page, file_path)"))
+    space: str = Field(default="", description="Space name, e.g. 'Main'")
+    page: str = Field(default="", description="Page name (English, no spaces), e.g. 'FentonProtocol'")
+    content: str = Field(default="", description="Page body in XWiki 2.1 syntax (not Markdown)")
+    title: str = Field(default="", description="Display title (optional; defaults to page)")
+    parent: str = Field(default="", description="For action=create: full name of the parent page (optional)")
+    file_path: str = Field(default="", description="For action=upload_attachment: local file path")
+    filename: str = Field(default="", description="For action=upload_attachment: file name shown in the wiki (optional)")
 
 
-# ── 工具工厂函数 ─────────────────────────────────
+# -- Tool factory helpers --
 
 def _make_async_tool(name: str, description: str, args_schema: Type[BaseModel], func):
-    """创建一个 LangChain StructuredTool（异步）"""
+    """Create an async LangChain StructuredTool"""
     return StructuredTool.from_function(
         name=name,
         description=description,
@@ -217,60 +217,60 @@ def _make_async_tool(name: str, description: str, args_schema: Type[BaseModel], 
     )
 
 
-# ── 工具实例 ─────────────────────────────────────
+# -- Tool instances --
 
 tools_registry = {}
 
 def get_tools(enabled_names: list[str]) -> list[BaseTool]:
-    """根据启用列表返回 LangChain 工具实例"""
+    """Return LangChain tool instances for the enabled list"""
     return [t for name, t in tools_registry.items() if name in enabled_names]
 
 
-# ── 注册工具 ─────────────────────────────────────
+# -- Register tools --
 
-# ── 图谱查询：一个入口，三个动作 ──────────────────
-# 为什么合并（用户 2026-09-27 定）：原先 graph_schema / execute_cypher / graph_vector_search 三个工具
-# 各占一个槽，前端配置面板只显示了前两个（第三个用户根本勾不到）；合并成一个入口后，前端只出现
-# 一个「图谱 (graph)」，而 LLM 侧仍按 action 拿到完全一样的三条路径（实现照旧复用，不重写）。
+# -- Graph query: one entry, three actions --
+# Why merged (decision 2026-09-27): graph_schema / execute_cypher / graph_vector_search used three slots
+# and the settings panel showed only the first two, so the third could never be enabled. Now the UI shows one
+# "graph" tool while the LLM still gets the same three paths via action (implementations unchanged).
 async def _exec_graph_query(action: str = "", cypher: str = "", params: dict = None,
                             query: str = "", scope: str = "catalyst", top_k: int = 8) -> str:
-    """图谱查询唯一入口：按 action 分发到原有实现。"""
+    """Single graph entry: dispatch by action to the existing implementations."""
     a = (action or "").strip().lower()
     if a == "schema":
         return await _exec_graph_schema()
     if a == "cypher":
         if not (cypher or "").strip():
-            return json.dumps({"error": "action=cypher 需要提供 cypher 语句"}, ensure_ascii=False)
+            return json.dumps({"error": "action=cypher requires a cypher statement"}, ensure_ascii=False)
         return await _exec_cypher(cypher, params or {})
     if a == "search":
         if not (query or "").strip():
-            return json.dumps({"error": "action=search 需要提供自然语言 query"}, ensure_ascii=False)
+            return json.dumps({"error": "action=search requires a natural-language query"}, ensure_ascii=False)
         return await _exec_graph_vector_search(query, scope, top_k)
-    return json.dumps({"error": "未知 action: %r（可用 schema / cypher / search）" % action}, ensure_ascii=False)
+    return json.dumps({"error": "unknown action: %r (use schema / cypher / search)" % action}, ensure_ascii=False)
 
 
 tools_registry["graph_query"] = _make_async_tool(
     name="graph_query",
     description=(
-        "催化降解知识图谱（Neo4j）的统一查询入口。**所有图谱数据都通过它获取**，按 action 选动作：\n"
-        "· schema —— 获取图谱结构（节点类型/关系类型/各类型属性/向量索引）。首次查图谱时先调它了解结构。\n"
-        "· cypher —— 执行任意 Cypher（MATCH/RETURN/CALL 皆可）。写操作（CREATE/DELETE/SET）需管理权限。\n"
-        "· search —— 自然语言/同义词语义检索（本地 bge 向量 + 图谱向量索引）。不确定图谱里精确名称时先用它拿候选。\n"
+        "Unified entry to the catalytic degradation knowledge graph (Neo4j). **All graph data is read through this tool**; choose an action:\n"
+        "- schema -- graph structure (node labels / relationship types / properties / vector indexes). Call it first on a new graph.\n"
+        "- cypher -- run any Cypher (MATCH/RETURN/CALL). Writes (CREATE/DELETE/SET) need admin rights.\n"
+        "- search -- natural-language/synonym semantic search (local bge embeddings + graph vector index). Use it to get candidates when the exact name is unknown.\n"
         "\n"
-        "WHEN: 用户问催化剂、污染物、降解效率、实验条件、文献矛盾等图谱里的事。\n"
-        "HOW（分步，别一步问大而全的问题）: 1) 首次先 action=schema；2) 名称精确时直接 action=cypher；\n"
-        "名称不确定先用 action=search 拿候选，再用 action=cypher 按 paper_id 深查。\n"
-        "cypher 三步走：先模糊 MATCH (n) WHERE n.name CONTAINS $q，再精确 MATCH (p:Pollutant {name:$name})，"
-        "再展开 MATCH (p)-[r]-(c) RETURN p,r,c。\n"
-        "空结果降级链：模糊匹配 → 搜节点的 aliases 属性（中文别名/简称就写在里面）→ 换标签类型 → 最后才用自身知识（标注 💡）。\n"
-        "search 结果带相似度，score>0.6 才引用。\n"
+        "WHEN: the user asks about catalysts, pollutants, degradation efficiency, experimental conditions or literature contradictions.\n"
+        "HOW (step by step; avoid one huge query): 1) first call action=schema; 2) with an exact name use action=cypher;\n"
+        "when unsure of the name, use action=search for candidates, then action=cypher by paper_id.\n"
+        "cypher in three steps: fuzzy MATCH (n) WHERE n.name CONTAINS $q, then exact MATCH (p:Pollutant {name:$name}),"
+        "then expand MATCH (p)-[r]-(c) RETURN p,r,c.\n"
+        "Empty-result fallback: fuzzy match -> search the node aliases property (alternate names and abbreviations) -> switch label -> only then use your own knowledge (mark it 💡).\n"
+        "search results carry a similarity score; cite only score>0.6.\n"
         "\n"
-        "回答格式：📊 来自图谱 / 💡 来自自身知识 / 📊+💡 混合来源；数据优先用表格（催化剂 | 效率 | 时间 | pH），保留专业术语英文原名。\n"
-        "【连接须知】图谱跑在远端 Neo4j Aura 上，空闲会被回收连接，"
-        "因此本工具**首次或第二次查询可能失败**（defunct connection / 未连接），"
-        "此时它自己会重连并重试一次——若你只看到一次失败，直接再调一次即可恢复，"
-        "不代表图谱损坏、更不要断言「图谱没数据」。"
-        "仅当连续失败且返回明确 error 时才据实说明，别反复重试。"
+        "Answer format: 📊 from the graph / 💡 from your own knowledge / 📊+💡 mixed. Prefer tables (catalyst | efficiency | time | pH) and keep technical terms in English.\n"
+        "CONNECTION NOTE: the graph runs on remote Neo4j Aura, which drops idle connections,"
+        "so the **first or second query may fail** (defunct connection / not connected)."
+        "It reconnects and retries once; if you see a single failure, call it again to recover."
+        "This does not mean the graph is broken; never claim it has no data."
+        "Report a problem only after repeated failures with an explicit error; do not retry endlessly."
     ),
     args_schema=GraphQueryParams,
     func=_exec_graph_query,
@@ -280,11 +280,11 @@ tools_registry["graph_query"] = _make_async_tool(
 tools_registry["web_search"] = _make_async_tool(
     name="web_search",
     description=(
-        "搜索互联网获取实时信息，返回多个结果（标题、URL、摘要）。\n\n"
-        "WHEN to use: 用户问到最新研究、新闻、论文、领域进展，或你对事实不确定、知识可能过时（如最新研究进展、某技术性能数据、市场信息）时，先搜索再回答；不要用自己可能过时的知识直接下结论。\n\n"
-        "WHEN NOT: 能直接从图谱/上传文档/用户给定资料可靠回答时，优先用那些，不必搜索。\n\n"
-        "HOW: 构造一个客观、聚焦的查询（可用关键词组合，如 'Qwen3 发布 特性 评测 2026'）。若第一次结果不佳，换关键词或加限定词再搜一次；不要无限重试同一查询。\n\n"
-        "After searching: 结合多条结果交叉判断，优先采信权威来源，注明不确定性；用 web_extract 读取需要全文的关键结果。"
+        "Search the web for real-time information and return several results (title, URL, summary).\n\n"
+        "WHEN to use: the user asks about recent research, news, papers or field progress, or you are unsure of a fact or your knowledge may be outdated (new results, performance data, market information): search first. Do not answer from possibly stale knowledge.\n\n"
+        "WHEN NOT: when the graph, uploaded documents or user-provided material answer reliably, use those instead.\n\n"
+        "HOW: build an objective, focused query (keyword combinations work, e.g. 'Qwen3 release features benchmark 2026'). If the first result is poor, change keywords or add qualifiers once; do not repeat the same query endlessly.\n\n"
+        "After searching: cross-check several results, prefer authoritative sources, note uncertainty, and use web_extract for key results that need full text."
     ),
     args_schema=SearchParams,
     func=_web_search,
@@ -293,10 +293,10 @@ tools_registry["web_search"] = _make_async_tool(
 tools_registry["web_extract"] = _make_async_tool(
     name="web_extract",
     description=(
-        "抓取指定 URL 的网页内容并转为纯文本，返回正文要点。\n\n"
-        "WHEN to use: 需要读论文全文、博客、新闻详情、官方文档时——web_search 只给了标题/摘要，正文细节要靠它。\n\n"
-        "HOW: 传入具体 URL。若网页为 PDF 或某些反爬站点可能受限，返回不完整时告知用户或换源。\n\n"
-        "Note: 抓取后只提取正文关键信息回答用户，不要原样贴出整篇内容。"
+        "Fetch a URL, convert the page to plain text and return the key points.\n\n"
+        "WHEN to use: reading a full paper, blog post, news article or official documentation - web_search gives only titles/snippets, so details need this tool.\n\n"
+        "HOW: pass a concrete URL. PDFs and anti-bot sites may be restricted; if the result is incomplete, tell the user or use another source.\n\n"
+        "Note: extract only the key information for the answer; do not paste the whole page."
     ),
     args_schema=FetchParams,
     func=_web_extract,
@@ -304,13 +304,13 @@ tools_registry["web_extract"] = _make_async_tool(
 
 tools_registry["skill_list"] = StructuredTool.from_function(
     name="skill_list",
-    description="列出所有可用的技能及其描述。技能包含领域知识、操作指引、规则约束。当你不确定如何回答或需要领域专业知识时，先用此工具看有什么技能可用。",
+    description="List all available skills and their descriptions. Skills carry domain knowledge, operating instructions and constraints. When unsure how to proceed or needing domain expertise, check this first.",
     coroutine=_skill_list,
 )
 
 
 async def _list_outputs_tool():
-    """列出本人产出区（owner 由登录身份推导，**不接受模型传身份**）。"""
+    """List your own output area (owner is derived from the login identity; **the model cannot pass an identity**)."""
     from tools.file_tools import list_outputs
     return list_outputs()
 
@@ -318,12 +318,12 @@ async def _list_outputs_tool():
 tools_registry["list_outputs"] = StructuredTool.from_function(
     name="list_outputs",
     description=(
-        "列出你生成的文件（产出区里的 csv/png/pptx/xlsx/md 等）及其 file_id。\n\n"
-        "WHEN to use: 你用 write_file('outputs/xxx') 或 run_code / 技能脚本生成了文件之后 —— "
-        "把产出交给用户时必须先拿到 file_id。\n\n"
-        "HOW: 拿到 file_id 后，在回答里写 {{file:<file_id>:<文件名>}} —— 前端会渲染成附件卡片，"
-        "用户点它就能『后端打开』或『前端下载/浏览器预览』（与笔记附件同款）。\n"
-        "注意：产出文件请写到 outputs/ 目录（相对路径），否则不会被收录。"
+        "List the files you generated (csv/png/pptx/xlsx/md etc. in the output area) with their file_id.\n\n"
+        "WHEN to use: after write_file('outputs/xxx'), run_code or a skill script produced a file -"
+        "you must obtain the file_id before handing the output to the user.\n\n"
+        "HOW: once you have the file_id, write {{file:<file_id>:<name>}} in the answer; the frontend renders an attachment card,"
+        "and the user can open it on the backend or download/preview it in the browser (same as note attachments).\n"
+        "Note: write output files under outputs/ (relative path), otherwise they are not indexed."
     ),
     coroutine=_list_outputs_tool,
 )
@@ -331,16 +331,16 @@ tools_registry["list_outputs"] = StructuredTool.from_function(
 tools_registry["run_code"] = _make_async_tool(
     name="run_code",
     description=(
-        "在独立子进程中执行 Python 代码，返回 stdout/stderr/exit_code。\n\n"
-        "WHEN to use: 用户要求计算、数据分析、统计、可视化、批量处理，或需要验证某段逻辑时。\n\n"
-        "HOW: 写完整可运行的代码（含必要的 import 和 print 输出）。工作目录是你本人的产出区，"
-        "脚本写出的文件会留下来；超时默认 30 秒（可传 1-60）。\n\n"
-        "边界（如实说明，别再猜）: 用 AST 拦掉了 subprocess / os.system / os.remove 等起进程与"
-        "删改文件的调用，以及 eval / exec / compile / __import__ 动态执行；re.compile、"
-        "model.compile 这类正常写法不受影响。【不拦网络请求，也不限文件读写路径】，"
-        "所以它是「少一手危险操作」的执行环境，不是安全沙箱。第三方包能不能 import 取决于后端"
-        "所用的解释器（numpy/pandas/scipy 通常可用，matplotlib/sklearn 未必）——缺包时用 terminal"
-        "的 `uv pip install` 装进项目 venv，或直接改用 terminal 跑脚本。"
+        "Run Python code in a separate subprocess and return stdout/stderr/exit_code.\n\n"
+        "WHEN to use: the user asks for computation, data analysis, statistics, visualization or bulk processing, or a piece of logic needs verification.\n\n"
+        "HOW: write complete, runnable code (with imports and print output). The working directory is your own output area;"
+        "files written by the script persist. The default timeout is 30 s (1-60).\n\n"
+        "LIMITS (state them accurately, do not guess): AST blocks subprocess / os.system / os.remove and similar"
+        "process/filesystem calls, plus dynamic eval / exec / compile / __import__; normal calls such as re.compile or"
+        "model.compile are unaffected. Network requests are NOT blocked and file paths are NOT restricted,"
+        "so this is a convenience environment, not a security sandbox. Third-party imports depend on the backend"
+        "interpreter (numpy/pandas/scipy usually work; matplotlib/sklearn may not). If a package is missing, use terminal"
+        "with `uv pip install` into the project venv, or run the script in terminal."
     ),
     args_schema=CodeParams,
     func=_run_python,
@@ -349,10 +349,10 @@ tools_registry["run_code"] = _make_async_tool(
 tools_registry["skill_view"] = _make_async_tool(
     name="skill_view",
     description=(
-        "读取一个技能的完整内容（SKILL.md 或子文件）。\n\n"
-        "WHEN to use: 系统已列出可用技能（<available_skills> 或 skill_list），当你需要真正按某技能执行（它含操作指引、命令、质量标准）时，\n"
-        "必须先 skill_view(name) 读取全文——一行简介不足以指导执行。即使你自认会用基础工具，只要技能相关就应读取。\n\n"
-        "HOW: 传入技能名。读了之后严格按技能所述步骤与约定执行该任务。"
+        "Read the full content of a skill (SKILL.md or a sub-file).\n\n"
+        "WHEN to use: skills are listed (<available_skills> or skill_list) and you need to actually follow one (it contains steps, commands and quality criteria):\n"
+        "always call skill_view(name) for the full text - a one-line summary cannot guide execution. Read it whenever the skill is relevant.\n\n"
+        "HOW: pass the skill name, then follow its steps and conventions exactly."
     ),
     args_schema=SkillViewParams,
     func=_skill_view,
@@ -361,10 +361,10 @@ tools_registry["skill_view"] = _make_async_tool(
 tools_registry["terminal"] = _make_async_tool(
     name="terminal",
     description=(
-        "在项目环境中执行 shell 命令（git、build、test、uv/pip 装包、跑脚本等），返回 stdout/stderr/exit_code。\n\n"
-        "WHEN to use: 需要运行真实命令、装/升级第三方库（uv pip install / uv sync）、跑测试或脚本、查看 git 状态时。run_code 也能 import 大部分已装的第三方包（numpy/pandas/scipy 实测可用），但【超时上限只有 60 秒】且不做进程隔离——要跑长任务、装包或执行脚本文件，用 terminal。\n\n"
-        "HOW: 写完整 shell 命令。工作目录**默认当前工作区域的项目目录**；相对 workdir 以项目目录为基准。会产出大量中间文件的脚本，先 cd 到产物目录再跑（路径见系统提示词「工作区域」一节）。\n\n"
-        "安全: 受权限模式约束——safe 仅项目内且禁高危命令；ask 涉及外部会返回 need_confirm 需用户确认；full 任意执行。装包建议用 `uv pip install <包>` 装进项目 venv。"
+        "Run shell commands in the project (git, build, test, uv/pip install, scripts) and return stdout/stderr/exit_code.\n\n"
+        "WHEN to use: running real commands, installing/upgrading packages (uv pip install / uv sync), running tests or scripts, checking git status. run_code can import most installed packages (numpy/pandas/scipy verified) but its timeout is 60 s and it is not process-isolated; use terminal for long jobs, installs or script files.\n\n"
+        "HOW: write the full shell command. The working directory **defaults to the current work area's project directory**; relative workdir values resolve against it. For scripts that emit many intermediate files, cd to the output directory first (see the Work Area section of the system prompt).\n\n"
+        "Safety: constrained by the permission mode - safe allows only the project and blocks risky commands; ask returns need_confirm for external actions; full allows anything. Install packages with `uv pip install <package>` into the project venv."
     ),
     args_schema=TerminalParams,
     func=_terminal,
@@ -372,14 +372,14 @@ tools_registry["terminal"] = _make_async_tool(
 
 tools_registry["read_file"] = _make_async_tool(
     name="read_file",
-    description="读取文件内容，可指定起始行和行数。相对路径以当前工作区域的项目目录为基准；以 output/ 开头的相对路径读产物目录；询问/完全访问模式下可用绝对路径。",
+    description="Read file content, optionally starting at a line and limiting the number of lines. Relative paths resolve against the current work area's project directory; paths starting with output/ read the output directory; ask/full modes allow absolute paths.",
     args_schema=ReadFileParams,
     func=_read_file,
 )
 
 tools_registry["write_file"] = _make_async_tool(
     name="write_file",
-    description="将内容写入文件（存在则覆盖）。相对路径写入当前工作区域的项目目录；以 output/ 开头写入产物目录（中间产物专用，如 output/tmp.log）。安全模式限工作区域内；询问模式另放行 skills/；完全访问模式任意路径。",
+    description="Write content to a file (overwrites). Relative paths write into the current work area's project directory; paths starting with output/ write the output directory (for intermediate files such as output/tmp.log). Safe mode restricts to the work area; ask mode also allows skills/; full mode allows any path.",
     args_schema=WriteFileParams,
     func=_write_file,
 )
@@ -387,38 +387,38 @@ tools_registry["write_file"] = _make_async_tool(
 tools_registry["skill_write"] = _make_async_tool(
     name="skill_write",
     description=(
-        "创建或更新一个技能：写入 skills/<name>/ 下的文件（默认 SKILL.md，可写 references/templates/scripts 子文件），并自动更新 skills/index.json。\n\n"
-        "WHEN to use: 用户要求把某套做法保存成可复用技能、或修正现有技能；当用户提出可复用的工作流/操作指引且值得留存时，主动提出创建技能。\n\n"
-        "HOW — SKILL.md 必须含 YAML frontmatter：\n"
-        "  name: 技能名（作目录名，勿含 / 或空白）\n"
-        "  description: 触发条件自包含的一句话（'当要X时用。简述行为。'），首 57 字符内写明何时触发。\n"
-        "  version: 版本号\n"
-        "正文用 Markdown：分节（## 何时用 / ## 步骤 / ## 坑 / ## 验证），把可复现的具体命令、参数、易错点写清楚，让未来一次成功。\n\n"
-        "写完后 index.json 会自动同步。"
+        "Create or update a skill: write files under skills/<name>/ (SKILL.md by default; references/templates/scripts sub-files allowed) and update skills/index.json automatically.\n\n"
+        "WHEN to use: the user asks to save a procedure as a reusable skill or to fix an existing one; proactively offer to create a skill when a reusable workflow is worth keeping.\n\n"
+        "HOW - SKILL.md must contain YAML frontmatter:\n"
+        "  name: skill name (directory name; no / or whitespace)\n"
+        "  description: one self-contained sentence stating when to use it ('Use when X. Briefly what it does.'); state the trigger within the first 57 characters.\n"
+        "  version: version number\n"
+        "Body in Markdown: sections (## When to use / ## Steps / ## Pitfalls / ## Verification) with reproducible commands, parameters and pitfalls so a future run succeeds first time.\n\n"
+        "index.json is synced automatically afterwards."
     ),
     args_schema=SkillWriteParams,
     func=_skill_write,
 )
 
-# ── todo 实现 ─────────────────────────────────────
+# -- todo implementation --
 
 _WORKSPACE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "workspace"))
 
-# 单条笔记内容硬上限：超过即拒绝并提示拆分/追加（防止模型单次生成过长内容被输出上限截断）
+# Hard cap on a single note write: reject and ask to split/append (prevents output-limit truncation)
 MAX_NOTE_CHARS = 20000
 
 
 def _note_too_long(content: str) -> str:
     if content and len(content) > MAX_NOTE_CHARS:
-        return (f"单次写入内容 {len(content)} 字符，超过上限 {MAX_NOTE_CHARS}，已拒绝（强行写入会在生成端被截断）。"
-                f"请拆分为多条笔记，或先写入前半部分、再用 append 动作分段追加。")
+        return (f"Refused: {len(content)} characters exceeds the limit of {MAX_NOTE_CHARS} (forced writes are truncated by the generation limit)."
+                f"Split it into several notes, or write the first part and append the rest with the append action.")
     return ""
 
 def _get_todo_path():
-    """待办按 **身份 + 对话分支** 分文件。
+    """Todos are stored per **identity + conversation branch**.
 
-    旧实现是全局 workspace/_todos.json：换个人、换个对话都看到同一份待办
-    （共享库/多用户下等于互相看见私事），也无法按对话恢复上下文。
+    The old implementation used a global workspace/_todos.json, so everyone and every conversation
+    shared the same list (exposing private items in multi-user setups) and could not restore context per conversation.
     """
     from agent.agent import _current_user, _current_branch_id
     owner = _current_user or "guest"
@@ -431,11 +431,11 @@ def _get_todo_path():
 
 
 def todo_context_block() -> str:
-    """把当前身份+分支的待办回灌进系统提示。
+    """Feed the current identity+branch todos back into the system prompt.
 
-    旧实现只有 add/complete/list 三个动作，写进去的待办**从不出现在上下文里** ——
-    模型看不到自己的清单，等于白记（用户问"为什么它不记得自己列过什么"）。
-    没有未完成项时返回空串（不占上下文）。
+    The old version only had add/complete/list, and todos **never appeared in the context** -
+    the model could not see its own list, defeating the purpose.
+    Returns an empty string when nothing is pending (no context cost).
     """
     try:
         todos = _read_todos()
@@ -444,11 +444,11 @@ def todo_context_block() -> str:
     pending = [x for x in todos if isinstance(x, dict) and not x.get("done")]
     if not pending:
         return ""
-    lines = ["[当前任务清单]（你自己用 todo 工具记的，未完成 %d 项；完成一项就 complete 掉）" % len(pending)]
+    lines = ["[Current task list] (recorded with the todo tool; %d pending; mark each one complete when done)" % len(pending)]
     for x in pending[:20]:
         lines.append("- #%s %s" % (x.get("id"), str(x.get("content", ""))[:160]))
     if len(pending) > 20:
-        lines.append("…还有 %d 项" % (len(pending) - 20))
+        lines.append("...and %d more" % (len(pending) - 20))
     return "\n".join(lines)
 
 def _read_todos():
@@ -467,28 +467,28 @@ async def _exec_todo(action: str, task: str = None, task_id: int = None) -> str:
     todos = _read_todos()
     if action == "add":
         if not task:
-            return json.dumps({"error": "任务描述不能为空"})
+            return json.dumps({"error": "Task description cannot be empty"})
         new_id = max([t.get("id", 0) for t in todos], default=0) + 1
         todos.append({"id": new_id, "content": task, "done": False, "created": str(__import__("datetime").datetime.now())})
         _write_todos(todos)
-        return json.dumps({"status": "ok", "message": f"已添加任务: {task}", "total": len(todos)}, ensure_ascii=False)
+        return json.dumps({"status": "ok", "message": f"Task added: {task}", "total": len(todos)}, ensure_ascii=False)
     elif action == "complete":
         if task_id is None:
-            return json.dumps({"error": "需要指定任务编号"})
+            return json.dumps({"error": "Task id is required"})
         for t in todos:
             if t["id"] == task_id:
                 t["done"] = True
                 _write_todos(todos)
-                return json.dumps({"status": "ok", "message": f"✅ 已完成: {t['content']}"}, ensure_ascii=False)
-        return json.dumps({"error": f"任务 #{task_id} 不存在"})
+                return json.dumps({"status": "ok", "message": f"✅ Completed: {t['content']}"}, ensure_ascii=False)
+        return json.dumps({"error": f"Task #{task_id} does not exist"})
     elif action == "remove":
         if task_id is None:
-            return json.dumps({"error": "需要指定任务编号"})
+            return json.dumps({"error": "Task id is required"})
         new_todos = [t for t in todos if t["id"] != task_id]
         if len(new_todos) == len(todos):
-            return json.dumps({"error": f"任务 #{task_id} 不存在"})
+            return json.dumps({"error": f"Task #{task_id} does not exist"})
         _write_todos(new_todos)
-        return json.dumps({"status": "ok", "message": f"已删除任务 #{task_id}"})
+        return json.dumps({"status": "ok", "message": f"Deleted task #{task_id}"})
     else:  # list
         done = sum(1 for t in todos if t.get("done"))
         return json.dumps({
@@ -497,7 +497,7 @@ async def _exec_todo(action: str, task: str = None, task_id: int = None) -> str:
             "tasks": [{"id": t["id"], "content": t["content"], "done": t.get("done", False)} for t in todos]
         }, ensure_ascii=False, indent=2)
 
-# ── conversation_notes 实现 ──────────────────────
+# -- conversation_notes implementation --
 
 def _get_notes_path():
     os.makedirs(_WORKSPACE, exist_ok=True)
@@ -517,17 +517,17 @@ def _write_notes(notes):
 
 async def _exec_notes(action: str, note_id: str = None, title: str = None, content: str = None,
                       scope: str = "notes", branch_id: str = "") -> str:
-    """笔记/数据库条目统一入口。
+    """Unified entry for notes and database entries.
 
-    scope='notes'    → 本地对话笔记 users/<身份>/notes.json（list 默认跨对话全量，可用 branch_id 限定）
-    scope='database' → 云端共享数据库条目（branch=__db__；本地实例自动转发云端）
+    scope='notes'    -> local conversation notes in users/<identity>/notes.json (list covers all conversations by default; branch_id narrows it)
+    scope='database' -> cloud shared database entries (branch=__db__; local instances forward to the cloud)
     """
     from agent.agent import _current_branch_id, _current_user
     from tools import file_tools as _ft
     owner = _current_user or "guest"
     now = str(__import__("datetime").datetime.now())
 
-    # ── 数据库条目：走云端（云端实例直接本地库；本地实例转发 hub）──
+    # -- Database entries: go through the cloud (cloud instances use the local store; local instances forward to the hub) --
     if (scope or "notes").strip().lower() in ("database", "db", "__db__", "cloud", "shared"):
         from tools.shared_hub import db_notes
         act = action
@@ -536,38 +536,38 @@ async def _exec_notes(action: str, note_id: str = None, title: str = None, conte
             return json.dumps(r, ensure_ascii=False)
         if act == "list":
             entries = r.get("entries", [])
-            # 数据库 list 已是目录形态（id/title/owner/content_len/preview，无正文），直接透传
+            # Database list is already a catalog (id/title/owner/content_len/preview, no body): pass it through
             slim = [{"id": e.get("id"), "title": e.get("title"), "owner": e.get("owner", ""),
                      "content_len": e.get("content_len", 0), "preview": e.get("preview", "")}
                     for e in entries]
             return json.dumps({"status": "ok", "scope": "database", "total": len(slim),
-                               "note": "以上仅为目录（不含正文，避免撑爆上下文）。需要正文用 action=read 按 id 读取；"
-                                       "增删改用 update/delete/add",
+                               "note": "The above is only a catalog (no body, to protect the context). Read the body with action=read by id;"
+                                       "create/update/delete with add/update/delete",
                                "entries": slim}, ensure_ascii=False, indent=2)
         if act == "read":
             return json.dumps({"status": "ok", "scope": "database", "entry": r.get("entry")},
                               ensure_ascii=False, indent=2)
-        msg = {"add": "已在数据库新建条目", "append": "已追加到数据库条目",
-               "update": "已更新数据库条目", "delete": "已删除数据库条目"}.get(act, "完成")
+        msg = {"add": "Created a database entry", "append": "Appended to the database entry",
+               "update": "Updated the database entry", "delete": "Deleted the database entry"}.get(act, "Done")
         return json.dumps({"status": "ok", "scope": "database", "id": r.get("id", ""),
                            "message": f"{msg}（id={r.get('id','')}）"}, ensure_ascii=False)
 
-    # ── 本地对话笔记 ──
+    # -- Local conversation notes --
     if action == "add":
         if not title and not content:
-            return json.dumps({"error": "标题和内容不能同时为空"})
+            return json.dumps({"error": "Title and content cannot both be empty"})
         too_long = _note_too_long(content)
         if too_long:
             return json.dumps({"error": too_long}, ensure_ascii=False)
         r = json.loads(await _ft.add_note(title, content, _current_branch_id, owner))
-        return json.dumps({"status": "ok", "message": f"已添加笔记: {title}（{len(content or '')} 字符）",
+        return json.dumps({"status": "ok", "message": f"Note added: {title} ({len(content or '')} characters)",
                            "note_id": r.get("note_id")}, ensure_ascii=False)
 
     if action == "append":
         if not note_id:
-            return json.dumps({"error": "append 需要提供 note_id"})
+            return json.dumps({"error": "append requires a note_id"})
         if not content:
-            return json.dumps({"error": "append 的内容不能为空"})
+            return json.dumps({"error": "append content cannot be empty"})
         too_long = _note_too_long(content)
         if too_long:
             return json.dumps({"error": too_long}, ensure_ascii=False)
@@ -577,8 +577,8 @@ async def _exec_notes(action: str, note_id: str = None, title: str = None, conte
                 n["content"] = (n.get("content", "") + "\n\n" + content) if n.get("content") else content
                 n["updatedAt"] = now
                 _ft._write_notes(owner, notes)
-                return json.dumps({"status": "ok", "message": f"已追加到笔记: {n['title']}（现共 {len(n['content'])} 字符）"}, ensure_ascii=False)
-        return json.dumps({"error": "笔记不存在"})
+                return json.dumps({"status": "ok", "message": f"Appended to note: {n['title']} (now {len(n['content'])} characters)"}, ensure_ascii=False)
+        return json.dumps({"error": "Note not found"})
 
     if action == "update":
         too_long = _note_too_long(content) if content is not None else None
@@ -589,19 +589,19 @@ async def _exec_notes(action: str, note_id: str = None, title: str = None, conte
             return json.dumps(r, ensure_ascii=False)
         notes = _ft._read_notes(owner)
         t = next((n for n in notes if n.get("id") == note_id), {})
-        return json.dumps({"status": "ok", "message": f"已更新笔记: {t.get('title','')}（{len(t.get('content',''))} 字符）"}, ensure_ascii=False)
+        return json.dumps({"status": "ok", "message": f"Note updated: {t.get('title','')} ({len(t.get('content',''))} characters)"}, ensure_ascii=False)
 
     if action == "delete":
         r = json.loads(await _ft.delete_note(note_id, owner))
         if "error" in r:
             return json.dumps(r, ensure_ascii=False)
-        return json.dumps({"status": "ok", "message": "已删除笔记"}, ensure_ascii=False)
+        return json.dumps({"status": "ok", "message": "Note deleted"}, ensure_ascii=False)
 
-    # read：按 id 读单条本地笔记
+    # read: read one local note by id
     if action == "read":
         n, _ = _ft._find_note(owner, note_id)
         if n is None:
-            return json.dumps({"error": "笔记不存在"}, ensure_ascii=False)
+            return json.dumps({"error": "Note not found"}, ensure_ascii=False)
         return json.dumps({"status": "ok", "scope": "notes",
                            "entry": {"id": n["id"], "title": n.get("title", ""),
                                      "content": (n.get("content") or "")[:20000],
@@ -610,18 +610,18 @@ async def _exec_notes(action: str, note_id: str = None, title: str = None, conte
                                      "branch_id": n.get("branch_id", ""),
                                      "owner": n.get("owner", owner)}}, ensure_ascii=False, indent=2)
 
-    # list：本地笔记目录。
-    # ★ 修正（用户实测踩到）：原先硬过滤成「只列当前对话 branch」，
-    #   结果 agent 看不到自己在**别的对话**里建的笔记（document-entry 建的条目笔记全在各自 branch 下），
-    #   出现「我有很多笔记，AI 说只有 1 条」。现改为默认跨对话全量，并带回 branch_id / branch_title，
-    #   仍可用 branch_id 限定（具体 id 或 '__current__'）。只给目录，不含正文（正文可能极大）。
+    # list: catalog of local notes.
+    # Fix (found in real use): list used to hard-filter to the current branch,
+    #   so the agent could not see notes created in **other conversations** (document entries live in their own branches),
+    #   producing "I have many notes but the AI says one". It now lists all conversations by default with branch_id / branch_title,
+    #   and branch_id still narrows it (specific id or '__current__'). Catalog only; bodies may be huge.
     bid = (branch_id or "").strip()
-    if bid.lower() in ("__current__", "current", "本对话", "当前对话"):
+    if bid.lower() in ("__current__", "current", "this chat", "current chat"):
         bid = _current_branch_id or ""
     all_notes = _ft._read_notes(owner)
     notes = [n for n in all_notes if (n.get("branch_id") or "") == bid] if bid else list(all_notes)
 
-    # 对话标题映射（chats.json 的 branches[].title）→ 让 agent 能按「哪段对话」定位/认领笔记
+    # Conversation title map (chats.json branches[].title) so the agent can locate notes by conversation
     titles, groups = {}, {}
     try:
         from tools import user_chats as _uc
@@ -640,65 +640,65 @@ async def _exec_notes(action: str, note_id: str = None, title: str = None, conte
                 "preview": c[:120].replace("\n", " ") + ("…" if len(c) > 120 else "")}
 
     for n in notes:
-        b_id = n.get("branch_id") or "(未归属)"
+        b_id = n.get("branch_id") or "(unassigned)"
         g = groups.setdefault(b_id, {"branch_id": b_id, "branch_title": titles.get(b_id, ""), "count": 0})
         g["count"] += 1
 
     return json.dumps({
         "status": "ok", "scope": "notes", "owner": owner,
-        "filter": bid or "(全部对话)",
+        "filter": bid or "(all conversations)",
         "current_branch_id": _current_branch_id,
         "total": len(notes),
         "by_branch": list(groups.values()),
-        "note": "以上为本人笔记目录（默认跨对话、只含目录不含正文）。找正文：action=read 按 note_id；"
-                "只列某段对话的笔记：list 时传 branch_id='branch-12' 或 '__current__'。",
+        "note": "Catalog of your notes (all conversations by default; no bodies). For a body, action=read by note_id;"
+                "To list one conversation, pass branch_id='branch-12' or '__current__'.",
         "notes": [_slim_local(n) for n in notes]
     }, ensure_ascii=False, indent=2)
 
-# ── 子智能体（delegate_task）──────────────────────
+# -- Subagents (delegate_task) --
 
 class DelegateTaskParams(BaseModel):
     tasks: list[dict] = Field(
-        description="要派发的子任务列表（1-4 个）。**同一个档案可以一次派多个实例**"
-                    "（例如同时派 3 个 reader 各读一篇），各实例独立上下文、独立技能目录、"
-                    "独立工具集、独立参数/模型，并行互不干扰。每个元素形如 "
-                    "{\"goal\": \"这个子任务要达成的目标（必填，具体可执行）\", "
-                    "\"context\": \"必要的背景信息（可选，把主对话里相关的关键事实写进来，子智能体看不到主对话）\", "
-                    "\"profile\": \"可选：子智能体档案名（backend/agents/<name>/agent.json），"
-                    "自带技能目录/工具目录/上下文参数/模型参数。不填=通用子智能体。可用档案见 /api/agents/profiles\", "
-                    "\"tools\": [\"可选：限定该子智能体可用的工具名\"], "
-                    "\"role\": \"可选（旧写法，兼容）：contradiction=文献矛盾核查 / extraction=数据提取 / verify=数据核查\"}"
+        description="List of subtasks to dispatch (1-4). **One profile may run several instances at once**"
+                    "(e.g. three readers each reading one paper), each with its own context, skill directory,"
+                    "tool set and parameters/model, running in parallel. Each element looks like "
+                    "{\"goal\": \"Goal of this subtask (required, concrete and actionable)\", "
+                    "\"context\": \"Necessary background (optional; include key facts from the main conversation, which the subagent cannot see)\", "
+                    "\"profile\": \"Optional: subagent profile name (backend/agents/<name>/agent.json),"
+                    "with its own skill/tool directories, context parameters and model. Omit for the generic subagent. Available profiles: /api/agents/profiles\", "
+                    "\"tools\": [\"Optional: restrict the tools this subagent may use\"], "
+                    "\"role\": \"Optional (legacy): contradiction / extraction / verify\"}"
     )
 
 
 def delegate_prepare(tasks) -> tuple:
-    """校验并裁剪子任务列表。返回 (valid_tasks, error_json_str 或 None)。
+    """Validate and trim the subtask list. Returns (valid_tasks, error_json_str or None).
 
-    供两条路径复用：① _exec_delegate（非流式 / LangChain 工具路径）；
-    ② agent.stream_agent 的自定义引擎流式路径（边跑边流）。
+    Shared by both paths: (1) _exec_delegate (non-streaming / LangChain tool path);
+    (2) the custom streaming engine in agent.stream_agent.
     """
     from agent.agent import get_subagent_options, get_current_model_config
     from agent.subagent import SUBAGENT_MAX_TASKS
 
     opts = get_subagent_options()
     if not opts.get("enabled", True):
-        return [], json.dumps({"error": "子智能体功能已在设置中关闭"}, ensure_ascii=False)
+        return [], json.dumps({"error": "Subagents are disabled in settings"}, ensure_ascii=False)
     if not get_current_model_config().get("model"):
-        return [], json.dumps({"error": "子智能体无法启动：缺少模型配置（请先选择模型）"}, ensure_ascii=False)
+        return [], json.dumps({"error": "Subagents cannot start: no model configured (choose a model first)"}, ensure_ascii=False)
     if not isinstance(tasks, list) or not tasks:
-        return [], json.dumps({"error": "tasks 不能为空"}, ensure_ascii=False)
+        return [], json.dumps({"error": "tasks cannot be empty"}, ensure_ascii=False)
     limit = int(opts.get("max_tasks", SUBAGENT_MAX_TASKS) or SUBAGENT_MAX_TASKS)
     valid = [t for t in tasks if isinstance(t, dict) and (t.get("goal") or "").strip()][:limit]
     if not valid:
-        return [], json.dumps({"error": "每个子任务都必须提供非空 goal"}, ensure_ascii=False)
-    # 档案校验：给了 profile/role 就必须存在（早报错，主控才好立刻改正或换档案重派）
+        return [], json.dumps({"error": "Every subtask needs a non-empty goal"}, ensure_ascii=False)
+    # Profile check: profile/role must exist (fail early so the main agent can correct or re-dispatch)
     try:
         from agent import profiles as _pf
         _known = set(_pf.load_profiles().keys())
         for t in valid:
             pn = str(t.get("profile") or t.get("role") or "").strip()
             if pn and pn not in _known:
-                return [], json.dumps({"error": f"未知子智能体档案「{pn}」",
+                return [], json.dumps({"error": f"Unknown subagent profile: {pn}",
                                        "available": sorted(_known)}, ensure_ascii=False)
     except Exception:
         pass
@@ -706,17 +706,17 @@ def delegate_prepare(tasks) -> tuple:
 
 
 def slim_subagent_results(results: list) -> list:
-    """把子智能体结果裁成「只回喂摘要」的精简版（防上下文爆炸）。
+    """Trim subagent results to summaries before feeding them back (prevents context blow-up).
 
-    病根：run_subagent 返回的 steps 里含子智能体**读过的正文**
-    （tool_result 最多 2000 字/条、thinking 全文），会随工具结果一起灌回主控上下文。
-    实测一次派 2 篇即吃掉约 2 万字符，10 步流水线必炸。
+    Root cause: steps returned by run_subagent contain the **full text the subagent read**
+    (tool_result up to 2,000 characters each, full thinking), which was fed back into the main context.
+    Two papers in one dispatch consumed about 20,000 characters; a 10-step pipeline overflowed.
 
-    修法：**前端与主控分离** ——
-      · 事件槽 set_delegate_results() 仍放**完整原件**，供 subagent_end 流给前端展示过程；
-      · 这里只裁「回喂给模型」的副本：删掉 steps 正文，保留可核验的元信息
-        （ok / goal / summary / error / 轮次 / 秒数 / 调用过的工具名 / 步骤数）。
-    想恢复旧行为（回喂完整 steps）：设置里 subagent.feed_steps=True。
+    Fix: **separate the UI stream from the main agent** -
+      - the event slot set_delegate_results() still holds the **full originals** for the subagent_end stream;
+      - here only the copy fed to the model is trimmed: drop step bodies, keep verifiable metadata
+        (ok / goal / summary / error / rounds / seconds / tool names / step count).
+    To restore the old behavior, set subagent.feed_steps=True.
     """
     try:
         from agent.agent import get_subagent_options
@@ -742,13 +742,13 @@ def slim_subagent_results(results: list) -> list:
             "summary": (r.get("summary") or "")[:10000],
             "rounds": r.get("rounds", 0),
             "seconds": r.get("seconds", 0),
-            # 完整步骤已随 subagent_end 流给前端；此处只报数量，绝不回喂正文
+            # Full steps already went to the UI via subagent_end; report only counts, never bodies
             "steps_omitted": len(steps),
             "tools_used": tools_used,
         }
         if r.get("error"):
             item["error"] = r["error"]
-        # 结构化状态：供主控评估「要不要重派 / 换一个档案重派」
+        # Structured status so the main agent can decide whether to re-dispatch or switch profiles
         for _k in ("profile", "status", "missing", "confidence"):
             if r.get(_k) not in (None, ""):
                 item[_k] = r[_k]
@@ -757,10 +757,10 @@ def slim_subagent_results(results: list) -> list:
 
 
 async def _exec_delegate(tasks: list[dict], max_rounds: int = None, timeout: int = None) -> str:
-    """派发子智能体（并发上限 & 三级超时由设置决定；失败即失败，不重试）。
+    """Dispatch subagents (concurrency and timeouts come from settings; failures are not retried).
 
-    非流式路径（LangChain 引擎 / /api/agent/run）：跑完再一次性回传。
-    自定义引擎的流式路径在 agent.stream_agent 中直接调用 run_subagents_parallel(emit=...)。
+    Non-streaming path (LangChain engine / /api/agent/run): run first, return once.
+    The custom streaming engine calls run_subagents_parallel(emit=...) directly in agent.stream_agent.
     """
     from agent.agent import (get_subagent_options,
                              set_delegate_tasks, set_delegate_results)
@@ -774,14 +774,14 @@ async def _exec_delegate(tasks: list[dict], max_rounds: int = None, timeout: int
     mr = max_rounds if max_rounds else opts.get("max_rounds", SUBAGENT_MAX_ROUNDS_DEFAULT)
     to = timeout if timeout else opts.get("timeout", SUBAGENT_TIMEOUT_DEFAULT)
     sub_timeouts = {"nudge": opts.get("nudge"), "warn": opts.get("warn"), "abort": opts.get("abort")}
-    # 把任务清单放进事件槽 → 主循环立刻能向前端流 subagent_start（引擎无关）
+    # Put the task list in the event slot so the main loop can stream subagent_start (engine-agnostic)
     set_delegate_tasks(valid)
     results = await run_subagents_parallel(valid, max_rounds=mr, timeout=to,
                                            max_parallel=int(opts.get("max_parallel", 2) or 2),
                                            timeouts=sub_timeouts)
-    # 结果放进槽 → 主循环流 subagent_end（前端要完整步骤，这里放原件）
+    # Put results in the slot so the main loop streams subagent_end (the UI wants full steps, so originals go here)
     set_delegate_results(results)
-    # 回喂主控的那一份必须裁剪（见 slim_subagent_results 说明）
+    # The copy fed back to the main agent must be trimmed (see slim_subagent_results)
     return json.dumps({"status": "ok", "count": len(results),
                        "results": slim_subagent_results(results)},
                       ensure_ascii=False)
@@ -790,108 +790,108 @@ async def _exec_delegate(tasks: list[dict], max_rounds: int = None, timeout: int
 tools_registry["delegate_task"] = _make_async_tool(
     name="delegate_task",
     description=(
-        "派发子智能体（子智能体=独立上下文的小助手）并行去做**互相独立的子任务**，你负责汇总它们的结论。"
-        "【什么时候用】任务可以切成 2-4 块彼此独立、且每块都需要多步检索/阅读时（例如"
-        "「分别查 A、B、C 三个课题的文献进展」「一篇文章读结构、一篇文章读数据」）；"
-        "或者需要并行搜集多方资料以节省时间时。"
-        "【什么时候不要用】① 一个问题就能答完（自己调工具更快）；② 子任务之间存在前后依赖（必须先拿到前一个结果才能定下一个）——"
-        "这种情况应你自己按顺序做；③ 只是想写笔记/改数据库（用 conversation_notes）；④ 不要为了「显得正式」而派子智能体。"
-        "【档案（profile）—— 子智能体有自己的技能/工具/参数/模型】"
-        "每个子任务可指定 profile：子智能体档案（backend/agents/<name>/agent.json），它自带技能目录、"
-        "工具目录、运行上下文参数（如一次能读多少字符）与模型参数，**不与主智能体共用**。"
-        "**同一个档案可以一次派多个实例**（例如同时派 3 个 reader 各读一篇），各实例独立上下文并行跑、互不干扰。"
-        "不填 profile = 通用子智能体（只读工具 + 主控模型）；可用档案名单见 /api/agents/profiles。"
-        "【硬限制】子智能体不能再派子智能体（深度=1）；单次可派的子任务数与并发数、每个子智能体的轮次与三级超时，"
-        "以用户在设置里的「子智能体」配置为准（默认 4 个任务 / 并发 2 / 轮次 4 / 超时 300s），"
-        "但档案里显式写了的轮次/时限/读入上限以档案为准。"
-        "子智能体只能使用只读/检索类工具（含它自己 agents/<name>/tools/ 下的私有工具），"
-        "不能写文件、不能执行终端命令。"
-        "【怎么用】每个子任务的 goal 要写明「做什么+要产出什么」，context 里带上它需要的背景"
-        "（子智能体看不到我们的对话历史，不写它就只能自己瞎猜）。"
-        "【评估与重派】results 里每个子智能体带回 status(ok/partial/failed)、missing(缺口说明)、confidence —— "
-        "先评估是否满足要求；**不合格就重派**，且重派必须把上轮失败信息写进 context"
-        "（例：「上一次提取 XXX 失败了：<把 missing 原文抄进来>。已经试过 <路径>，请换一条路径完成 YYY」），"
-        "否则新实例是一张白纸，会把同样的动作原样再做一遍。允许换档案重派"
-        "（如 reader 没读到 → 派 verifier 回原文复核）。同一子任务**最多重派 2 次**，"
-        "仍失败就如实向用户说明缺口，不要无限重试。"
-        "拿到 results 后，你**必须**把它们综合成给用户的最终答案，"
-        "不要只是把子智能体的原文拼贴返回。"
+        "Dispatch subagents (independent-context helpers) to work on **mutually independent subtasks** in parallel; you synthesize their conclusions."
+        "WHEN to use: the task splits into 2-4 independent parts, each needing multi-step retrieval/reading (e.g."
+        "'check the literature progress of topics A, B and C' or 'one paper for structure, one for data');"
+        "or when parallel collection saves time."
+        "WHEN NOT to use: (1) one question can be answered directly (calling tools yourself is faster); (2) subtasks depend on each other (the next needs the previous result) -"
+        "do them yourself in order; (3) you only need to write notes or edit the database (use conversation_notes); (4) never dispatch just to look thorough."
+        "PROFILES - each subagent has its own skills, tools, parameters and model."
+        "Each subtask may name a profile (backend/agents/<name>/agent.json) with its own skill directory,"
+        "tool directory, context parameters (e.g. characters per read) and model, **not shared with the main agent**."
+        "**One profile may run several instances** (e.g. three readers on three papers), each with its own context."
+        "Omit profile for the generic subagent (read-only tools + main model); see /api/agents/profiles."
+        "HARD LIMITS: subagents cannot dispatch subagents (depth=1). Task count, concurrency, rounds and timeouts"
+        "follow the user's Subagents settings (default 4 tasks / concurrency 2 / 4 rounds / 300 s timeout),"
+        "but rounds/limits set explicitly in a profile take precedence."
+        "Subagents may use only read-only/retrieval tools (including private tools under agents/<name>/tools/);"
+        "they cannot write files or run terminal commands."
+        "HOW: each goal must state what to do and what to produce; context must carry the background it needs"
+        "(subagents cannot see our chat history; without context they guess)."
+        "EVALUATE AND RE-DISPATCH: each result carries status(ok/partial/failed), missing, and confidence -"
+        "check whether it meets the requirement; **re-dispatch if not**, and always put the previous failure in context"
+        "(e.g. 'last extraction of XXX failed: <copy missing verbatim>. Tried <path>; use another path to finish YYY'),"
+        "otherwise the new instance is a blank slate and repeats the same actions. Switching profiles is allowed"
+        "(e.g. reader missed -> dispatch verifier). Re-dispatch the same subtask **at most twice**;"
+        "if it still fails, report the gap honestly; do not retry endlessly."
+        "After receiving results you **must** synthesize them into the final answer;"
+        "do not just paste the subagents' text together."
     ),
     args_schema=DelegateTaskParams,
     func=_exec_delegate,
 )
 
 
-# ── 注册新工具 ───────────────────────────────────
+# -- Register new tools --
 
 tools_registry["list_files"] = _make_async_tool(
     name="list_files",
-    description="列出目录下的文件。相对路径以 workspace/ 为基准；非安全模式下可用绝对路径列出项目或磁盘目录。",
+    description="List files in a directory. Relative paths resolve against workspace/; outside safe mode absolute paths may list project or disk directories.",
     args_schema=ListFilesParams,
     func=_list_files,
 )
 
 tools_registry["todo"] = _make_async_tool(
     name="todo",
-    description="管理任务清单。可以列出所有任务、添加新任务、标记任务完成、删除任务。当你需要跟踪多步工作进度或帮用户记住待办事项时使用。",
+    description="Manage the task list: list, add, complete and remove tasks. Use it to track multi-step work or remember user to-dos.",
     args_schema=TodoParams,
     func=_exec_todo,
 )
 
 tools_registry["conversation_notes"] = _make_async_tool(
     name="conversation_notes",
-    description="管理「笔记」与「数据库条目」两套同格式存储，用 scope 参数明确指定目标（必填判断）："
-                "scope='notes'=本地对话笔记（用户说「笔记」「我的笔记」）；"
-                "scope='database'=云端共享数据库条目（用户说「数据库」「共享库」「组里的条目」）。"
-                "支持 list=列表, read=按id读取, add=新建, append=末尾追加, update=更新, delete=删除。"
-                "【作用域铁律·2026 修正】scope='notes' 的 list **默认跨对话全量**：返回本人**所有对话**里建的笔记目录，"
-                "每条带 branch_id / branch_title（所属对话），并给出 by_branch 分组统计 —— "
-                "**不要因为「当前对话里没看到」就说用户没有/只有 1 条笔记**（用户说「我有很多对话笔记」时一律先跨对话 list 全量）。"
-                "只列某段对话：list 传 branch_id='branch-12'（具体对话）或 '__current__'（仅当前对话）。"
-                "read/append/update/delete 按 note_id **跨对话全局生效**，不需要也不能指定 branch。"
-                "【读取纪律·重要】list 只返回**目录**（id/标题/branch/正文长度/前120字预览），**不含正文**——"
-                "这是为了防止大条目（有的几十万字）一次性撑爆上下文。要看某条正文，必须再用 read 按 id 取；"
-                "read 单次最多返回 20000 字（超出会标记 truncated=true 并告知原文总长），"
-                "不要反复 read 同一超长条目，需要时请让用户分段查看或指定要看哪部分。"
-                "【意图识别铁律】用户提到「数据库/共享库/组里」→ scope='database'；只提「笔记/记一下」→ scope='notes'；"
-                "拿不准时先用 list 看两边内容再决定，或直接问用户，绝不要猜。"
-                "【重要·长度纪律】单次写入的 content 不要超过约 6000 字：超出模型单轮输出上限的内容会被截断。"
-                "长内容必须分步构建——先 add 写入第一部分，随后用 append 逐段追加（每次约 2000-5000 字）；"
-                "或拆分为多条并在标题中标注（上/中/下、卷一/卷二等）。绝对不要试图一次写完全文。"
-                "【排版要求】充分利用 Markdown 富文本能力，做到图文并茂、结构清晰、可视化丰富："
-                "① 用 #/##/### 分级标题组织长文结构；"
-                "② 用有序/无序列表、**加粗**、*斜体*、> 引用等增强可读性；"
-                "③ 涉及数据对比、参数、结果汇总时，用 Markdown 表格呈现；"
-                "④ 需要展示流程、架构、时序、甘特图时，用 ```mermaid 代码块（flowchart / sequenceDiagram / gantt / pie 等）；"
-                "⑤ 涉及数学公式时，用 $$...$$ 块级、$...$ 行内 LaTeX；"
-                "⑥ 代码示例用 ```语言 代码块。"
-                "让每条内容都像一份排版精良的图文报告，而不是纯文本。",
+    description="Manage notes and database entries (same format, different stores); scope is required:"
+                "scope='notes' = local conversation notes (user says 'notes', 'my notes');"
+                "scope='database' = cloud shared database entries (user says 'database', 'shared library', 'group entries')."
+                "Actions: list / read by id / add / append / update / delete."
+                "SCOPE RULE (2026): list for scope='notes' **covers all conversations by default** and returns the catalog from **every** conversation,"
+                "each with branch_id / branch_title and a by_branch summary -"
+                "**never claim the user has no notes or only one just because the current conversation shows none** (when the user says 'I have many notes', list all conversations first)."
+                "To list one conversation, pass branch_id='branch-12' or '__current__'."
+                "read/append/update/delete work **globally by note_id** and never take a branch."
+                "READING RULE: list returns only the **catalog** (id/title/branch/body length/120-character preview), **no body** -"
+                "large entries (some hundreds of thousands of characters) would overflow the context. Read the body with read by id;"
+                "read returns at most 20,000 characters per call (longer text sets truncated=true and reports the total length);"
+                "do not re-read the same huge entry; ask the user to narrow it down or read it in sections."
+                "INTENT RULE: 'database / shared library / the group' -> scope='database'; 'notes / note this down' -> scope='notes';"
+                "when unsure, list both or ask the user; never guess."
+                "LENGTH RULE: keep content under ~6,000 characters per write; anything beyond the single-response limit is truncated."
+                "Build long content in steps: add the first part, then append sections (about 2,000-5,000 characters each);"
+                "or split into several notes titled Part 1/2/3. Never try to write the whole text at once."
+                "FORMATTING: use Markdown rich text for clear structure and rich visuals:"
+                "(1) organize long text with #/##/### headings;"
+                "(2) use ordered/unordered lists, **bold**, *italic* and > quotes for readability;"
+                "(3) present comparisons, parameters and summaries in Markdown tables;"
+                "(4) show flows, architecture, sequences or Gantt charts with ```mermaid blocks (flowchart / sequenceDiagram / gantt / pie);"
+                "(5) use $$...$$ block and $...$ inline LaTeX for math;"
+                "(6) use fenced code blocks with a language tag."
+                "Make every entry a well-typeset illustrated report, not plain text.",
     args_schema=NotesParams,
     func=_exec_notes,
 )
 
-# ── 搜索工具 ─────────────────────────────────────
+# -- Search tools --
 
 async def _search_history_wrapped(query: str, top_k: int = 3, scope: str = None) -> str:
-    """按当前登录身份搜索本人聊天历史（游客=guest 空间）。"""
+    """Search your own chat history under the current login identity (guests use the guest space)."""
     from agent.agent import _current_user
     return await _search_history(query, top_k, scope, user=_current_user)
 
 
 tools_registry["search_history"] = _make_async_tool(
     name="search_history",
-    description="从当前用户的历史对话中搜索相关信息（按登录身份隔离，每人只搜到自己的）。当你需要回顾之前讨论过的内容、数据、结论时使用。返回最相关的片段及相似度分数。",
+    description="Search the current user's past conversations (isolated by identity). Use it to recall earlier discussions, data or conclusions. Returns the most relevant snippets with similarity scores.",
     args_schema=SearchMemoryParams,
     func=_search_history_wrapped,
 )
 
-# search_knowledge 已移除：本地实例无数据库；检索共享数据库统一用 shared_search。
+# search_knowledge was removed: local instances have no database; use shared_search for the shared library.
 
 tools_registry["shared_upload"] = _make_async_tool(
     name="shared_upload",
-    description="把本地文件上传到组内共享库（局域网服务器上的 C4EAI 实例）。上传后服务器自动解析文本并入知识索引，"
-                "全组人都能用 shared_search 搜到。当用户说「共享」「传到服务器」「给组里用」等意图时使用。"
-                "参数给 file_id（本地上传的文件）或 path（workspace 内路径）之一。",
+    description="Upload a local file to the group shared library (a C4EAI instance on the LAN server). The server parses it and indexes the text,"
+                "so the whole group can find it with shared_search. Use it when the user says 'share', 'upload to the server' or 'for the group'."
+                "Pass either file_id (a locally uploaded file) or path (a workspace path).",
     args_schema=SharedUploadParams,
     func=_shared_upload,
 )
@@ -899,46 +899,46 @@ tools_registry["shared_upload"] = _make_async_tool(
 tools_registry["shared_search"] = _make_async_tool(
     name="shared_search",
     description=(
-        "组内共享知识库的统一入口：语义检索 + 分组树管理 + 条目查询。\n"
+        "Unified entry to the group shared library: semantic search + group tree management + entry lookup.\n"
         "\n"
-        "【共享库的组织方式】\n"
-        "  顶层按条目类型分：笔记（人写的总结，附件不解析）与文档（上传自动解析）。\n"
-        "  下层是分组树，每个分组有【简介】说明这组放什么 —— 找资料先看简介判断方向。\n"
-        "  条目归属于某个分组，并记录了上传者(owner)与上传时间。\n"
+        "HOW THE SHARED LIBRARY IS ORGANIZED\n"
+        "  Top level by entry type: notes (human-written summaries; attachments not parsed) and documents (parsed on upload).\n"
+        "  Below is a group tree; each group has an intro describing what it holds - read intros first.\n"
+        "  Entries belong to a group and record owner and upload time.\n"
         "\n"
-        "【找资料的正确顺序 —— 请按这个流程，能大幅省 token】\n"
-        "  1) action=list_groups      看分组树与简介，了解有哪些方向\n"
+        "CORRECT ORDER FOR FINDING MATERIAL (saves many tokens)\n"
+        "  1) action=list_groups      view the tree and intros\n"
         "  2) action=list_entries + summary_only=True\n"
-        "     看「哪个分组有多少条」。**不确定资料在哪组时先做这步，不要直接拉全部明细。**\n"
-        "  3) action=list_entries 针对具体 group_id 拉明细（只返回标题/id/owner/时间，不含正文）\n"
-        "  4) 需要正文再 action=search 做语义检索，或读具体条目\n"
+        "     see how many entries each group has. **Do this first when unsure; do not pull all details.**\n"
+        "  3) action=list_entries for a specific group_id (title/id/owner/time only, no body)\n"
+        "  4) use action=search or read a specific entry when you need the body\n"
         "\n"
-        "【过滤条件下推 —— 直接用参数筛，不要把全部拉回来自己筛】\n"
-        "  例：用户问「26 年 xhq1 传的 XX 组的内容」\n"
-        "     → action=list_entries, owner=\"xhq1\", year=\"2026\", group_id=\"<该组>\"\n"
-        "  例：不知道在哪组 → 先 summary_only=True + owner=\"xhq1\" + year=\"2026\"\n"
-        "     返回各组的条数，再挑有货的组拉明细。\n"
+        "PUSH FILTERS DOWN - filter with parameters; do not fetch everything and filter locally\n"
+        "  Example: the user asks for XX group content uploaded by xhq1 in 2026\n"
+        "     -> action=list_entries, owner=\"xhq1\", year=\"2026\", group_id=\"<that group>\"\n"
+        "  Example: unknown group -> summary_only=True + owner=\"xhq1\" + year=\"2026\"\n"
+        "     count per group, then pull details from the group that has material.\n"
         "\n"
-        "【语义检索】action=search（默认）：在共享库中做语义搜索，返回相关片段与来源文档。\n"
-        "  适合「我不知道具体在哪，按意思找」的场景。\n"
+        "SEMANTIC SEARCH: action=search (default) returns relevant snippets and source documents.\n"
+        "  Use it when you do not know where something is and want to search by meaning.\n"
         "\n"
-        "【管理】用户说「建个分组/把这组移到xx下/改一下简介/把某条移到某组」等，\n"
-        "  用 create_group / move_group / update_group / move_entry / delete_group 直接做，不必问怎么做。\n"
-        "  注意：分组只是分类，删除分组不会删除条目（子分组与条目默认上移到父级）。"
+        "MANAGEMENT: for 'create a group / move this group under xx / update the intro / move an entry',\n"
+        "  call create_group / move_group / update_group / move_entry / delete_group directly.\n"
+        "  Note: groups are only categories; deleting one does not delete entries (children move up by default)."
     ),
     args_schema=SharedSearchParams,
     func=_knowledge,
 )
 
-# ── MinerU PDF 解析工具 ──────────────────────────
+# -- MinerU PDF parsing tool --
 
 class MinerUParams(BaseModel):
-    path: str = Field(description="要解析的 PDF 文件路径，或包含多个 PDF 的文件夹路径（会递归扫描所有 .pdf）。路径可以是相对 workspace/ 的相对路径，或绝对路径。")
-    out_dir: str = Field(default="mineru_output", description="Markdown 输出目录（相对 workspace/）。单文件默认输出到该目录下的同名 .md。")
-    single_pdf: bool = Field(default=False, description="为 True 时 path 视为单个 PDF 文件；为 False 时自动判断：是文件就单文件，是目录就批量。一般不需手动设置。")
+    path: str = Field(description="PDF file path or a folder containing PDFs (all .pdf files are scanned recursively). Relative paths resolve against workspace/; absolute paths are allowed.")
+    out_dir: str = Field(default="mineru_output", description="Markdown output directory (relative to workspace/). A single file outputs a same-named .md there.")
+    single_pdf: bool = Field(default=False, description="True treats path as a single PDF; False auto-detects: a file is one document, a folder is processed in batches. Usually no need to set.")
 
 async def _mineru_parse(path: str, out_dir: str = "mineru_output", single_pdf: bool = False):
-    """MinerU 解析工具后端实现：解析单个 PDF 或文件夹下所有 PDF（走 MinerU v4 批量接口）。"""
+    """MinerU backend: parse one PDF or every PDF in a folder (MinerU v4 batch interface)."""
     import asyncio
     from pathlib import Path
     ws = Path(__file__).parent.parent.parent / "workspace"
@@ -950,7 +950,7 @@ async def _mineru_parse(path: str, out_dir: str = "mineru_output", single_pdf: b
 
     token = load_token()
     if not token:
-        return {"ok": False, "error": "未配置 MinerU API Token。请在『智能体配置』面板的 MinerU 配置中填写 API Key。"}
+        return {"ok": False, "error": "MinerU API token is not configured. Fill in the API key under MinerU in the Agent settings panel."}
 
     def _run():
         return parse_pdfs(str(p), str(out_root), token)
@@ -962,18 +962,18 @@ async def _mineru_parse(path: str, out_dir: str = "mineru_output", single_pdf: b
 
 tools_registry["mineru_parse"] = _make_async_tool(
     name="mineru_parse",
-    description="使用 MinerU 将 PDF 文献解析为 Markdown。当用户上传了 PDF 或给出 PDF 文件/文件夹路径，需要把 PDF 转成可读 Markdown 时使用。支持单个 PDF 文件或包含多个 PDF 的文件夹（递归扫描）。走 MinerU v4 批量接口（单文件、或文件夹自动分批，每批至多 50 个）。每个 PDF 输出一个同名 .zip（内含解析产物），返回文件列表路径。需配置 MinerU Token。",
+    description="Parse PDF papers into Markdown with MinerU. Use it when the user uploads a PDF or gives a PDF path/folder and needs readable Markdown. Supports one PDF or a folder (recursive scan) through the MinerU v4 batch interface (single file, or folder batches of at most 50). Each PDF yields a same-named .zip containing the parse output, and the file paths are returned. Requires a MinerU token.",
     args_schema=MinerUParams,
     func=_mineru_parse,
 )
 
 
-# ── 检索 / 编辑 / 文献 / GitHub（方案 A · A2）─────────────────────
-# 实现分别在 backend/tools/{search_tools,lit_tools,github_tools}.py，这里只做注册与措辞。
-# 三条纪律写进了 description（照着 Claude/Hermes 的工具措辞，用我们自己的话）：
-#   ① 先定位再读：不要一上来就整篇 read_file；
-#   ② 结果超限会显式告诉你还有多少、怎么续取；
-#   ③ 同一调用别反复重试，失败先看报错再换招。
+# -- Search / edit / literature / GitHub --
+# Implemented in backend/tools/{search_tools,lit_tools,github_tools}.py; this file only registers them and holds wording.
+# Three rules are baked into the descriptions:
+#   1) locate first, then read: do not read whole files immediately;
+#   2) over-limit results say how much remains and how to continue;
+#   3) do not retry the same call; read the error and change approach.
 
 from tools.search_tools import (search_files as _search_files, find_files as _find_files,
                                 edit_file as _edit_file)
@@ -985,217 +985,217 @@ from tools.github_tools import (gh_repo_info as _gh_repo_info, gh_list_dir as _g
 
 
 class SearchFilesParams(BaseModel):
-    pattern: str = Field(description="正则表达式（Python re 语法）")
-    path: str = Field(default=".", description="搜索起点（文件或目录）。相对路径以 workspace/ 为基准（与 read_file 一致）；非安全模式下也可传本机绝对路径（Windows 形如 C:/Users/<用户名>/Documents，用你这台机器上的真实路径）")
-    file_glob: str = Field(default=None, description="只搜匹配该 glob 的文件，如 *.py / *.md")
+    pattern: str = Field(description="Regular expression (Python re syntax)")
+    path: str = Field(default=".", description="Search root (file or directory). Relative paths resolve against workspace/ (same as read_file); outside safe mode local absolute paths are allowed (on Windows e.g. C:/Users/<name>/Documents, using this machine's real path)")
+    file_glob: str = Field(default=None, description="Only search files matching this glob, e.g. *.py / *.md")
     output_mode: str = Field(default="files_with_matches",
-                             description="files_with_matches=只列文件名（先用它定位）/ content=带行号与上下文 / count=每文件命中数（判断有没有戏）")
-    context: int = Field(default=0, description="content 模式下的上下文行数（等价 grep -C）")
-    limit: int = Field(default=50, description="最多返回条数（超限会告诉你还剩多少，用 offset 续取）")
-    offset: int = Field(default=0, description="跳过前 N 条（分页）")
-    order: str = Field(default="modified", description="modified=最近修改优先 / discovery=目录遍历顺序")
+                             description="files_with_matches = file names only (locate first) / content = line numbers and context / count = hits per file")
+    context: int = Field(default=0, description="Context lines in content mode (like grep -C)")
+    limit: int = Field(default=50, description="Maximum results (the response reports how many remain; continue with offset)")
+    offset: int = Field(default=0, description="Skip the first N results (paging)")
+    order: str = Field(default="modified", description="modified = most recently modified first / discovery = directory walk order")
 
 
 class FindFilesParams(BaseModel):
-    pattern: str = Field(description="文件名 glob，如 *.py、**/test_*.py")
-    path: str = Field(default=".", description="搜索起点目录。相对路径以 workspace/ 为基准；非安全模式下可传绝对路径")
-    limit: int = Field(default=50, description="最多返回条数")
-    offset: int = Field(default=0, description="跳过前 N 条")
+    pattern: str = Field(description="File-name glob, e.g. *.py, **/test_*.py")
+    path: str = Field(default=".", description="Search root directory. Relative paths resolve against workspace/; outside safe mode absolute paths are allowed")
+    limit: int = Field(default=50, description="Maximum results")
+    offset: int = Field(default=0, description="Skip the first N results")
 
 
 class EditFileParams(BaseModel):
-    file_path: str = Field(description="要改的文件路径")
-    old_string: str = Field(description="被替换的原文（必须唯一命中，否则会报错并列出出现次数）")
-    new_string: str = Field(description="替换后的内容")
-    replace_all: bool = Field(default=False, description="true=替换全部出现（默认 false，只在 old_string 唯一时改一处）")
+    file_path: str = Field(description="File path to edit")
+    old_string: str = Field(description="Original text to replace (must match exactly once; otherwise an error lists the occurrence count)")
+    new_string: str = Field(description="Replacement text")
+    replace_all: bool = Field(default=False, description="true = replace every occurrence (default false: only a unique old_string is replaced)")
 
 
 class CrossrefParams(BaseModel):
-    doi: str = Field(default=None, description="DOI，如 10.1038/s41467-026-70180-1（有 DOI 直接用它，最准）")
-    query: str = Field(default=None, description="题名/关键词（没 DOI 时用它查）")
-    rows: int = Field(default=5, description="query 模式返回条数")
+    doi: str = Field(default=None, description="DOI, e.g. 10.1038/s41467-026-70180-1 (most accurate when available)")
+    query: str = Field(default=None, description="Title/keywords (used when there is no DOI)")
+    rows: int = Field(default=5, description="Number of results in query mode")
 
 
 class ArxivParams(BaseModel):
-    query: str = Field(description="检索词（英文术语效果最好）")
-    max_results: int = Field(default=5, description="返回条数")
-    sort_by: str = Field(default="relevance", description="relevance=相关度 / lastUpdatedDate / submittedDate")
+    query: str = Field(description="Search terms (English works best)")
+    max_results: int = Field(default=5, description="Number of results")
+    sort_by: str = Field(default="relevance", description="relevance / lastUpdatedDate / submittedDate")
 
 
 class S2Params(BaseModel):
-    query: str = Field(description="检索词")
-    limit: int = Field(default=5, description="返回条数")
-    year: str = Field(default=None, description="年份过滤，如 2020-2026 或 2024")
+    query: str = Field(description="Search terms")
+    limit: int = Field(default=5, description="Number of results")
+    year: str = Field(default=None, description="Year filter, e.g. 2020-2026 or 2024")
 
 
 class GhRepoParams(BaseModel):
-    repo: str = Field(description="owner/name，如 NousResearch/hermes-agent")
+    repo: str = Field(description="owner/name, e.g. NousResearch/hermes-agent")
 
 
 class GhListDirParams(BaseModel):
     repo: str = Field(description="owner/name")
-    path: str = Field(default="", description="目录路径，空=仓库根")
-    ref: str = Field(default=None, description="分支/tag/commit，默认仓库默认分支")
+    path: str = Field(default="", description="Directory path; empty = repository root")
+    ref: str = Field(default=None, description="Branch/tag/commit; defaults to the repository default branch")
 
 
 class GhReadFileParams(BaseModel):
     repo: str = Field(description="owner/name")
-    path: str = Field(description="文件路径，如 src/main.py")
-    ref: str = Field(default=None, description="分支/tag/commit")
-    max_chars: int = Field(default=40000, description="最多返回字符数（超长会显式说明被截断并给出总长度）")
+    path: str = Field(description="File path, e.g. src/main.py")
+    ref: str = Field(default=None, description="Branch/tag/commit")
+    max_chars: int = Field(default=40000, description="Maximum characters (long output reports truncation and the total length)")
 
 
 class GhSearchReposParams(BaseModel):
-    query: str = Field(description="仓库检索词")
-    limit: int = Field(default=5, description="返回条数")
+    query: str = Field(description="Repository search terms")
+    limit: int = Field(default=5, description="Number of results")
     sort: str = Field(default="stars", description="stars / forks / updated")
 
 
 class GhSearchCodeParams(BaseModel):
-    query: str = Field(description="代码特征串（函数名、独特字符串；搜不到就换更独特的串，别原地重试）")
-    limit: int = Field(default=10, description="返回条数")
-    lang: str = Field(default=None, description="语言过滤，如 python")
+    query: str = Field(description="Code signature (function name, unique string; if nothing is found use a more distinctive string, do not retry the same one)")
+    limit: int = Field(default=10, description="Number of results")
+    lang: str = Field(default=None, description="Language filter, e.g. python")
 
 
 class GhTarballParams(BaseModel):
     repo: str = Field(description="owner/name")
-    ref: str = Field(default=None, description="分支/tag/commit")
-    dest_dir: str = Field(default=None, description="落地目录（默认产出区）")
+    ref: str = Field(default=None, description="Branch/tag/commit")
+    dest_dir: str = Field(default=None, description="Destination directory (defaults to your output area)")
 
 
 tools_registry["search_files"] = _make_async_tool(
     name="search_files",
     description=(
-        "在本地文件里搜**内容**（正则）。给 LLM 用的 grep，带三态输出与分页。\n\n"
-        "WHEN: 用户问「X 在哪里实现/哪个文件里有 X」、改代码前要定位、要在项目里找某个函数名或字符串。\n"
-        "路径基准：相对路径以 workspace/ 为基准（与 read_file 一致）——搜项目代码要传本机绝对路径（Windows 形如 C:/Users/<用户名>/项目名/backend）。\\n"
-        "HOW（按顺序，1~2 次就该收敛）: 1) 先用 output_mode=files_with_matches 只问「在哪些文件」；"
-        "2) 文件不多时对某个文件用 output_mode=content + context=3 看命中上下文；"
-        "3) 命中太多就加 file_glob（如 *.py）或收紧正则，**不要改成整篇 read_file**；"
-        "4) 想确认「这条路有没有戏」用 output_mode=count。\n"
-        "结果超限时会明确告诉你还剩多少条，用 offset 续取（不要重复同一次搜索）。"
+        "Search file **content** locally with a regex: a grep for LLMs with three output modes and paging.\n\n"
+        "WHEN: the user asks where X is implemented or which file has X, you must locate code before editing, or you need a function name or string.\n"
+        "PATH BASE: relative paths resolve against workspace/ (same as read_file) - to search project code pass this machine absolute path (Windows e.g. C:/Users/<name>/project/backend).\\n"
+        "HOW (in order; 1-2 calls should converge): 1) start with output_mode=files_with_matches to see which files;"
+        "2) when few files remain, use output_mode=content + context=3 on one file;"
+        "3) too many hits: add file_glob (e.g. *.py) or tighten the regex - **do not switch to whole-file read_file**;"
+        "4) use output_mode=count to check whether an approach is promising.\n"
+        "Over-limit results report how many remain; continue with offset (do not repeat the search)."
     ),
     args_schema=SearchFilesParams, func=_search_files)
 
 tools_registry["find_files"] = _make_async_tool(
     name="find_files",
     description=(
-        "按**文件名** glob 找文件（如 *.pdf、**/test_*.py），结果按修改时间新→旧。\n\n"
-        "WHEN: 只记得文件名/后缀，要定位它在哪里；或要看某目录下有哪些文件。\n"
-        "HOW: pattern 用 glob；找不到时放宽（先 *关键片段* 再 *）。不要用 terminal 的 ls/find 递归猜。"
+        "Find files by **file name** glob (e.g. *.pdf, **/test_*.py), newest modified first.\n\n"
+        "WHEN: you only remember a file name/suffix and need its location, or need to list a directory.\n"
+        "HOW: pass a glob; broaden it when nothing is found (first *fragment*, then *). Do not guess with terminal ls/find."
     ),
     args_schema=FindFilesParams, func=_find_files)
 
 tools_registry["edit_file"] = _make_async_tool(
     name="edit_file",
     description=(
-        "把文件里的一段原文替换成新内容（改一处，不必整篇重写）。\n\n"
-        "WHEN: 用户要求修改代码/文本的某处，且你**已经读过**那一段。\n"
-        "HOW: old_string 要带上足够的上下文保证唯一；若返回「出现 N 次」的报错，就加更多上下文行重试，"
-        "**不要**改用 replace_all 蒙（会改到不该改的地方）。改完可再 read_file 复读确认。\n"
-        "未读过的文件不要动。"
+        "Replace one passage in a file (no full rewrite).\n\n"
+        "WHEN: the user asks to change a specific place and you have **already read** that passage.\n"
+        "HOW: include enough context in old_string to be unique; if the error says it occurs N times, add more context and retry -"
+        "do **not** gamble with replace_all (it changes unintended places). Re-read with read_file to confirm.\n"
+        "Never touch a file you have not read."
     ),
     args_schema=EditFileParams, func=_edit_file)
 
 tools_registry["crossref_lookup"] = _make_async_tool(
     name="crossref_lookup",
     description=(
-        "查文献元数据（Crossref，无需密钥）：题名/期刊/年份/作者/DOI/被引。\n\n"
-        "WHEN: 已知 DOI 要补全信息；或只有题名要查它的 DOI。\n"
-        "HOW: 有 DOI 就直接传 doi=（最准）；否则传 query=题名。拿到 DOI 后要读原文，用 web_extract(url='https://doi.org/<DOI>')。\n"
-        "不要用 web_search 找元数据（噪声大）。"
+        "Look up literature metadata (Crossref, no key): title/journal/year/authors/DOI/citations.\n\n"
+        "WHEN: a DOI is known and metadata is needed, or only a title is known and its DOI is needed.\n"
+        "HOW: with a DOI pass doi= (most accurate); otherwise query=title. To read the paper use web_extract(url='https://doi.org/<DOI>').\n"
+        "Do not use web_search for metadata (too noisy)."
     ),
     args_schema=CrossrefParams, func=_crossref_lookup)
 
 tools_registry["arxiv_search"] = _make_async_tool(
     name="arxiv_search",
     description=(
-        "检索 arXiv 预印本（无需密钥）：id/题名/摘要/作者/发布日/主分类。\n\n"
-        "WHEN: 找 arXiv 覆盖的领域文献（物理/CS/材料/工程等），或已知一篇 arXiv 论文要核对信息。\n"
-        "HOW: query 用英文术语；要更全就换同义词再搜**一次**，两次都空就如实告诉用户没检索到。"
+        "Search arXiv preprints (no key): id/title/abstract/authors/date/primary category.\n\n"
+        "WHEN: looking for literature in arXiv-covered fields (physics/CS/materials/engineering) or verifying a known arXiv paper.\n"
+        "HOW: query in English; try synonyms **once** for broader coverage; if both are empty, tell the user nothing was found."
     ),
     args_schema=ArxivParams, func=_arxiv_search)
 
 tools_registry["semantic_scholar_search"] = _make_async_tool(
     name="semantic_scholar_search",
     description=(
-        "检索 Semantic Scholar（无需密钥，有频率限制）：题名/年份/期刊/被引数/摘要/DOI。\n\n"
-        "WHEN: 要判断某主题文献的**影响力**（citationCount）或要摘要做快速判断。\n"
-        "HOW: 返回 429 限流时**不要重试**，改用 crossref_lookup，并在回答里说明。"
+        "Search Semantic Scholar (no key, rate-limited): title/year/journal/citations/abstract/DOI.\n\n"
+        "WHEN: judging the **influence** of a topic (citationCount) or needing abstracts for a quick read.\n"
+        "HOW: on 429 do **not** retry; use crossref_lookup and mention it in the answer."
     ),
     args_schema=S2Params, func=_s2_search)
 
 tools_registry["gh_repo_info"] = _make_async_tool(
     name="gh_repo_info",
-    description=("看 GitHub 仓库概况（stars/语言/描述/默认分支），无需 token。\n\n"
-                 "WHEN: 用户提到某个开源仓库，先确认它是什么、默认分支是哪个。"),
+    description=("GitHub repository overview (stars/language/description/default branch), no token.\n\n"
+                 "WHEN: the user mentions an open-source repository; confirm what it is and its default branch."),
     args_schema=GhRepoParams, func=_gh_repo_info)
 
 tools_registry["gh_list_dir"] = _make_async_tool(
     name="gh_list_dir",
-    description=("列 GitHub 仓库某个目录下的文件（无需 token）。\n\n"
-                 "WHEN: 不知道目标文件在哪一层时。路径明确时直接用 gh_read_file，别一层层爬。"),
+    description=("List files in a GitHub repository directory (no token).\n\n"
+                 "WHEN: the file location is unknown. With a known path use gh_read_file; do not crawl level by level."),
     args_schema=GhListDirParams, func=_gh_list_dir)
 
 tools_registry["gh_read_file"] = _make_async_tool(
     name="gh_read_file",
-    description=("读 GitHub 仓库里的一个文件（无需 token，走 raw）。超长会显式说明被截断并给出总长度。\n\n"
-                 "WHEN: 要「看看人家怎么实现的」。要通读整个项目时，用 gh_download_tarball 落到本地再用 search_files/read_file（更省调用）。"),
+    description=("Read one file from a GitHub repository (no token, raw). Long files report truncation and total length.\n\n"
+                 "WHEN: inspecting how someone implemented something. To read a whole project, use gh_download_tarball then search_files/read_file locally (fewer calls)."),
     args_schema=GhReadFileParams, func=_gh_read_file)
 
 tools_registry["gh_search_repos"] = _make_async_tool(
     name="gh_search_repos",
-    description=("按关键词搜 GitHub 仓库（无需 token），可按 stars 排序。\n\n"
-                 "WHEN: 不知道具体仓库名，先找到候选（如「XX 的 Python 实现」）。"),
+    description=("Search GitHub repositories by keyword (no token), sortable by stars.\n\n"
+                 "WHEN: the exact repository is unknown; find candidates (e.g. Python implementation of XX)."),
     args_schema=GhSearchReposParams, func=_gh_search_repos)
 
 tools_registry["gh_search_code"] = _make_async_tool(
     name="gh_search_code",
-    description=("跨 GitHub 公开仓库搜**代码片段**（走公开搜索服务，无需 token）。\n\n"
-                 "WHEN: 找一个函数/类在哪些项目里出现、看某 API 的真实用法。\n"
-                 "HOW: query 用独特特征串（函数全名、报错原文）。官方代码搜索接口需要认证，这里走公开服务，"
-                 "搜不到就换更独特的串 —— **不要重复同一次搜索**。"),
+    description=("Search **code snippets** across public GitHub repositories (public search service, no token).\n\n"
+                 "WHEN: finding which projects use a function/class, or seeing real API usage.\n"
+                 "HOW: query with a distinctive string (full function name, exact error text). The official code search API needs auth; this uses a public service,"
+                 "switch to a more distinctive string when nothing is found - **do not repeat the same search**."),
     args_schema=GhSearchCodeParams, func=_gh_search_code)
 
 tools_registry["gh_download_tarball"] = _make_async_tool(
     name="gh_download_tarball",
-    description=("把 GitHub 仓库压缩包下载到本地（无需 token，codeload）。\n\n"
-                 "WHEN: 要整体读一个开源项目（比逐文件 gh_read_file 省大量调用）。\n"
-                 "HOW: 下载后返回落地路径，接着用 find_files/search_files/read_file 在本地读。"),
+    description=("Download a GitHub repository tarball locally (no token, codeload).\n\n"
+                 "WHEN: reading an entire open-source project (far fewer calls than gh_read_file per file).\n"
+                 "HOW: the local path is returned; then use find_files/search_files/read_file."),
     args_schema=GhTarballParams, func=_gh_tarball)
 
 
-# ── XWiki 工具（读 / 写 各一个，action 分发） ──────
+# -- XWiki tools (one read, one write, dispatched by action) --
 
 tools_registry["wiki_read"] = _make_async_tool(
     name="wiki_read",
-    description=("读取组内 XWiki（团队知识库，155 个空间）—— 只读，一个工具用 action 分发。\n"
+    description=("Read the group XWiki (team knowledge base, 155 spaces) - read-only, one tool dispatched by action.\n"
                  "\n"
-                 "【action 取值】\n"
-                 "  search（默认） 关键词检索标题+正文，需 query；返回 space/page/title/snippet/url\n"
-                 "  get            读某页完整正文，需 space+page\n"
-                 "  list_spaces    列出所有空间（可给 name 过滤，如 name='06'）\n"
-                 "  list_pages     列出某空间下所有页面，需 space\n"
-                 "  list_attachments 列出某页附件，需 space+page\n"
+                 "ACTIONS\n"
+                 "  search (default) keyword search in titles+body, needs query; returns space/page/title/snippet/url\n"
+                 "  get            read a full page body, needs space+page\n"
+                 "  list_spaces    list all spaces (optional name filter, e.g. name='06')\n"
+                 "  list_pages     list pages in a space, needs space\n"
+                 "  list_attachments list page attachments, needs space+page\n"
                  "\n"
-                 "【怎么用】用户说「wiki 里有没有 XX」→ search；确定要看某页 → get；\n"
-                 "不知道空间叫什么 → 先 list_spaces（或用 name 过滤）。\n"
-                 "空间名可以是中文（如 '02. 新成员须知'），照抄返回的 space 字段即可。\n"
-                 "检索是数据库全文匹配（非语义），关键词要具体；搜不到就换词，别重复同一次搜索。"),
+                 "HOW: is there XX in the wiki -> search; a known page -> get;\n"
+                 "unknown space name -> list_spaces first (or filter by name).\n"
+                 "Space names may be non-English (e.g. '02. New member guide'); copy the returned space field.\n"
+                 "Search is full-text database matching (not semantic): use specific keywords and change them when nothing is found."),
     args_schema=WikiReadParams, func=_wiki_read)
 
 tools_registry["wiki_write"] = _make_async_tool(
     name="wiki_write",
-    description=("写入组内 XWiki —— 一个工具用 action 分发。\n"
+    description=("Write to the group XWiki - one tool dispatched by action.\n"
                  "\n"
-                 "【action 取值】\n"
-                 "  create            新建页面，需 space+page+content\n"
-                 "  update            覆盖已有页面正文，需 space+page+content（自动读版本号防冲突）\n"
-                 "  delete            删除页面，需 space+page（不可恢复）\n"
-                 "  upload_attachment 上传本地文件为附件，需 space+page+file_path\n"
+                 "ACTIONS\n"
+                 "  create            create a page, needs space+page+content\n"
+                 "  update            overwrite a page body, needs space+page+content (version read to prevent conflicts)\n"
+                 "  delete            delete a page, needs space+page (irreversible)\n"
+                 "  upload_attachment upload a local file, needs space+page+file_path\n"
                  "\n"
-                 "【铁律】\n"
-                 "  ① content 必须是 XWiki 2.1 语法（= 标题 =、**粗体**、* 列表、{{code}}…），不要写 Markdown；\n"
-                 "  ② 改已有页面前先 wiki_read(action=get) 看现状，别盲覆盖；\n"
-                 "  ③ 删除前必须让用户确认页名。"),
+                 "RULES\n"
+                 "  1) content must be XWiki 2.1 syntax (headings, bold, lists, code blocks), not Markdown;\n"
+                 "  2) before editing a page, wiki_read(action=get) to see the current state; never overwrite blindly;\n"
+                 "  3) always have the user confirm the page name before deleting."),
     args_schema=WikiWriteParams, func=_wiki_write)

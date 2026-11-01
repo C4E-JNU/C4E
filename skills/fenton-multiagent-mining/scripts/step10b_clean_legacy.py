@@ -1,24 +1,24 @@
 # -*- coding: utf-8 -*-
-"""step10b_clean_legacy.py — 历史图谱矛盾清洗（可复跑，幂等）
+"""step10b_clean_legacy.py — legacy graph contradiction cleanup (rerunnable, idempotent)
 
-把旧口径的 Contradiction 节点按《references/矛盾分类规范.md》重排为：
+Re-normalize Contradiction nodes written under the old caliber according to `references/contradiction_taxonomy.md`:
 
-  ① 非真矛盾 → 换标签 :ContradictionArchived 出库（摘掉 embedding，**不删节点**，可逆可审计）
-  ② 真矛盾   → severity(A/B/C/D/E) + severity_label + evidence_source + cross_paper + caliber_variance，废弃 category
-             （E = 其他·无法归类，兼「判不了」兜底；本脚本不再产生 `unknown`）
-  ③ 关系重建 → 删历史脏边 :REL；每个矛盾建唯一 (:DISPUTES)->(:Paper)
-  ④ 溯源补全 → trace / paper_title / paper_doi / batch / paper_dir
-  ⑤ Figure 锚定 → 从图号抽 FigureN，建 **paper 限定** 图节点 + (:DISPUTED_IN)
-  ⑥ Paper 计数重算 → contradiction_count / contradiction_severity
+  ① non-genuine contradictions → relabel :ContradictionArchived and remove from the active set (embedding stripped, **node never deleted**, reversible and auditable)
+  ② genuine contradictions   → severity(A/B/C/D/E) + severity_label + evidence_source + cross_paper + caliber_variance, category deprecated
+             (E = other · unclassifiable, also the "cannot grade" fallback; this script never produces `unknown`)
+  ③ relationship rebuild → delete the legacy dirty edge :REL; create one unique (:DISPUTES)->(:Paper) per contradiction
+  ④ traceability completion → trace / paper_title / paper_doi / batch / paper_dir
+  ⑤ Figure anchoring → extract FigureN from the figure number and create **paper-scoped** figure nodes + (:DISPUTED_IN)
+  ⑥ Paper counters recomputed → contradiction_count / contradiction_severity
 
-为什么"去除"用换标签而不是 DELETE：
-  · 旧数据缺 severity，规则判级有残余不确定性 → 保留节点可随时翻查、可回滚；
-  · 换标签后 Contradiction 集合不再返回它们，对下游（图谱检索/报告/GraphRAG）等于已去除；
-  · 同时 REMOVE embedding，向量索引不再召回，避免串味。
+Why removal relabels instead of DELETE:
+  · old data lacks severity, so rule-based grading carries residual uncertainty → keeping the node allows inspection and rollback at any time;
+  · after relabeling the Contradiction set no longer returns them, which for downstream consumers (graph retrieval / reports / GraphRAG) is equivalent to removal;
+  · embeddings are also REMOVEd so vector recall stops returning them and nothing bleeds through.
 
-用法:
-  python scripts/step10b_clean_legacy.py --dry-run          # 只统计各步命中数，不写库
-  python scripts/step10b_clean_legacy.py                    # 执行清洗
+Usage:
+  python scripts/step10b_clean_legacy.py --dry-run          # only count each step's matches, write nothing
+  python scripts/step10b_clean_legacy.py                    # run the cleanup
   python scripts/step10b_clean_legacy.py --uri neo4j+s://... --user xxx --password yyy
 """
 import argparse
@@ -29,59 +29,59 @@ from pathlib import Path
 ENV_FILE = Path(__file__).resolve().parent / 'neo4j.env'
 
 # ────────────────────────────────────────────────────────────────
-# ① 非真矛盾归档规则：(说明, WHERE 条件, 归档原因)
-#    判据一律基于「有无互不相容的对照值」，只按来源/严重程度定性，不看载体类别。
+# ① non-genuine-contradiction archival rules: (description, WHERE clause, archival reason)
+#    every criterion is based on "is there a mutually incompatible comparator value", qualified only by source/severity, never by carrier class.
 # ────────────────────────────────────────────────────────────────
 ARCHIVE_RULES = [
     (
-        'Q1/Q2 我方提取/OCR 错误、Q3 口径差、Q4 双源一致',
+        'Q1/Q2 our extraction/OCR errors, Q3 caliber differences, Q4 dual-source agreement',
         "coalesce(c.category,'') IN ['E1','E2','E5','consistent','dual_source','within_tolerance','none','CONSISTENT'] "
         "OR coalesce(c.category,'') STARTS WITH '一致'",
-        "CASE WHEN coalesce(c.category,'') IN ['E1','E2'] THEN 'Q1/Q2 我方提取读数错误，非文献矛盾' "
-        "WHEN coalesce(c.category,'')='E5' THEN 'Q3 口径差异，双方均无误' "
-        "ELSE 'Q4 双源一致' END",
+        "CASE WHEN coalesce(c.category,'') IN ['E1','E2'] THEN 'Q1/Q2 our own reading error, not a paper contradiction' "
+        "WHEN coalesce(c.category,'')='E5' THEN 'Q3 caliber difference, neither side is wrong' "
+        "ELSE 'Q4 the two sources agree' END",
     ),
     (
-        '条目自述非矛盾/仅记录',
+        'the entry itself says it is not a contradiction / record only',
         "toString(c.adopted_value) CONTAINS '非矛盾' OR toString(c.adopted_value) CONTAINS '仅记录' "
         "OR toString(c.adopted_value) CONTAINS '不构成' OR toString(c.reason) CONTAINS '非矛盾'",
-        "'条目自述非矛盾/仅记录'",
+        "'the entry itself says it is not a contradiction / record only'",
     ),
     (
-        'OCR 伪影 / 修正记录 / 一致类变体（脏 category 值）',
+        'OCR artifacts / correction records / agreement variants (dirty category values)',
         "coalesce(c.category,'') =~ '(?i).*(consistent|none|tolerance|suspicion_resolved|ocr|伪影|archive_fix|text_only|image_only|记录|dual_source).*'",
-        "CASE WHEN coalesce(c.category,'') =~ '(?i).*(ocr|伪影).*' THEN 'Q1/Q2 我方 OCR/读图伪影，非文献矛盾' "
-        "WHEN coalesce(c.category,'') =~ '(?i).*(archive_fix).*' THEN '归档修正记录，非文献矛盾' "
-        "WHEN coalesce(c.category,'') =~ '(?i).*(text_only|image_only|记录).*' THEN '单源记录（无第二来源对照），非矛盾' "
-        "ELSE 'Q4 双源一致/容差内' END",
+        "CASE WHEN coalesce(c.category,'') =~ '(?i).*(ocr|伪影).*' THEN 'Q1/Q2 our own OCR/figure-reading artifact, not a paper contradiction' "
+        "WHEN coalesce(c.category,'') =~ '(?i).*(archive_fix).*' THEN 'archive-correction record, not a paper contradiction' "
+        "WHEN coalesce(c.category,'') =~ '(?i).*(text_only|image_only|记录).*' THEN 'single-source record (no second source to compare), not a contradiction' "
+        "ELSE 'Q4 the two sources agree / within tolerance' END",
     ),
     (
-        '无任何对照值（text/adopted/image 全空）',
+        'no comparator value at all (text/adopted/image all empty)',
         "c.text_value IS NULL AND c.adopted_value IS NULL AND c.image_value IS NULL",
-        "'无对照值记录（text/adopted/image 均无冲突值）'",
+        "'record without a comparator value (no conflicting text/adopted/image value)'",
     ),
     (
-        '数值实质等同（相对差<1%）',
+        'numerically equivalent (relative difference <1%)',
         "toFloat(toString(c.text_value)) IS NOT NULL AND toFloat(toString(c.adopted_value)) IS NOT NULL "
         "AND abs(toFloat(toString(c.text_value))-toFloat(toString(c.adopted_value))) "
         "<= 0.01*(CASE WHEN abs(toFloat(toString(c.text_value)))>abs(toFloat(toString(c.adopted_value))) "
         "THEN abs(toFloat(toString(c.text_value))) ELSE abs(toFloat(toString(c.adopted_value))) END)",
-        "'Q4 数值实质等同（相对差<1%）'",
+        "'Q4 numerically equivalent (relative difference <1%)'",
     ),
     (
-        '图文两值实质等同',
+        'the figure and text values are materially equal',
         "toFloat(toString(c.text_value)) IS NOT NULL AND toFloat(toString(c.image_value)) IS NOT NULL "
         "AND abs(toFloat(toString(c.text_value))-toFloat(toString(c.image_value))) "
         "<= 0.01*(CASE WHEN abs(toFloat(toString(c.text_value)))>abs(toFloat(toString(c.image_value))) "
         "THEN abs(toFloat(toString(c.text_value))) ELSE abs(toFloat(toString(c.image_value))) END)",
-        "'Q4 图文两值实质等同（相对差<1%）'",
+        "'Q4 the figure and text values are materially equal (relative difference <1%)'",
     ),
     (
-        '无对照值且自述一致/基准裁定',
+        'no comparator value and self-described as consistent / basis adjudicated',
         "c.text_value IS NULL AND c.image_value IS NULL AND c.adopted_value IS NOT NULL "
         "AND (toString(c.adopted_value) CONTAINS '一致' OR toString(c.adopted_value) CONTAINS '为准' "
         "OR toString(c.adopted_value) CONTAINS '无冲突') AND NOT toString(c.adopted_value) CONTAINS '不一致'",
-        "'Q4 双源一致/基准裁定（无冲突值）'",
+        "'Q4 the two sources agree / basis adjudicated (no conflicting value)'",
     ),
 ]
 
@@ -92,7 +92,7 @@ ARCHIVE_TMPL = (
 )
 ARCHIVE_COUNT_TMPL = "MATCH (c:Contradiction) WHERE {where} RETURN count(*) AS n"
 
-# ② 真矛盾归类：severity / evidence_source / 两个布尔标记，废弃 category
+# ② genuine-contradiction classification: severity / evidence_source / the two booleans, category deprecated
 CLASSIFY = (
     "MATCH (c:Contradiction) WITH c, coalesce(c.category,'') AS cat "
     "SET c.severity = CASE WHEN cat IN ['A','B','C','D'] THEN cat "
@@ -105,13 +105,13 @@ CLASSIFY = (
     "REMOVE c.category RETURN count(*) AS n"
 )
 
-# ②b 图文两值都是数值且不等 → 数值偏差 A
+# ②b both figure and text values are numeric and differ → numerical deviation A
 PROMOTE_A = (
     "MATCH (c:Contradiction) WITH c, toFloat(toString(c.text_value)) AS tv, toFloat(toString(c.image_value)) AS iv "
     "WHERE c.severity='unknown' AND tv IS NOT NULL AND iv IS NOT NULL SET c.severity='A' RETURN count(*) AS n"
 )
 
-# ②c 文本启发式定级（能判的判，判不了的保持 unknown 并标 pending_arbitration）
+# ②c text-heuristic grading (grade what can be graded; leave the rest pending_arbitration)
 HEURISTIC = (
     "MATCH (c:Contradiction) WHERE c.severity='unknown' "
     "WITH c, toLower(coalesce(c.field,'') + ' | ' + coalesce(c.reason,'')) AS t "
@@ -125,7 +125,7 @@ HEURISTIC = (
     "THEN 'pending' ELSE 'pending_arbitration' END RETURN count(*) AS n"
 )
 
-# ③ 关系重建
+# ③ relationship rebuild
 DEL_REL = "MATCH (c:Contradiction)-[r:REL]->() WITH r LIMIT 20000 DELETE r RETURN count(*) AS n"
 DEL_REL_ARCHIVED = "MATCH (a:ContradictionArchived)-[r]->() WITH r LIMIT 20000 DELETE r RETURN count(*) AS n"
 DEL_LEGACY_EDGE = "MATCH (c:Contradiction)-[r:REPORTED_IN|FROM_FIGURE|DISPUTES]->() DELETE r RETURN count(*) AS n"
@@ -133,7 +133,7 @@ DISPUTES_PAPER = (
     "MATCH (c:Contradiction), (p:Paper {paper_id:c.paper_id}) MERGE (c)-[:DISPUTES]->(p) RETURN count(*) AS n"
 )
 
-# ④ 溯源补全
+# ④ traceability completion
 ENRICH = (
     "MATCH (c:Contradiction)-[:DISPUTES]->(p:Paper) "
     "SET c.paper_title = p.title, c.paper_doi = p.doi, c.batch = p.batch, c.paper_dir = p.dir_name, "
@@ -141,7 +141,7 @@ ENRICH = (
     "+ coalesce(c.field, '-') + ' / ' + coalesce(c.figure, '-') RETURN count(*) AS n"
 )
 
-# ⑤ Figure 锚定（APOC 抽号 → paper 限定图节点 + DISPUTED_IN）
+# ⑤ Figure anchoring (APOC number extraction → paper-scoped figure node + DISPUTED_IN)
 FIGURE_LINK = (
     "MATCH (c:Contradiction) WHERE c.figure IS NOT NULL AND c.figure <> '' "
     "WITH c, apoc.text.regexGroups(c.figure, '(?i)fig(?:ure)?\\\\.?\\\\s*(S?\\\\d+)') AS g "
@@ -151,7 +151,7 @@ FIGURE_LINK = (
     "MERGE (c)-[:DISPUTED_IN]->(f) RETURN count(*) AS n"
 )
 
-# ⑤b 实验锚定（尽力而为：该篇唯一实验命中条件词 / 唯一污染物名命中）
+# ⑤b experiment anchoring (best effort: the paper's only experiment hits a condition word / the only pollutant name hits)
 EXP_LINK_1 = (
     "MATCH (c:Contradiction) MATCH (e:Experiment {paper_id:c.paper_id}) WITH c, collect(e) AS exps "
     "WHERE size(exps)=1 AND c.field IS NOT NULL AND any(w IN "
@@ -167,7 +167,7 @@ EXP_LINK_2 = (
     "MERGE (c)-[:FROM_EXPERIMENT]->(e) SET c.experiment_ref = e.node_id RETURN count(*) AS n"
 )
 
-# ⑥ Paper 计数重算
+# ⑥ Paper counter recomputation
 RECOUNT = (
     "MATCH (p:Paper) OPTIONAL MATCH (c:Contradiction {paper_id:p.paper_id}) "
     "WITH p, count(c) AS n, "
@@ -204,7 +204,7 @@ def load_env():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--dry-run', action='store_true', help='只统计各归档规则命中数，不写库')
+    ap.add_argument('--dry-run', action='store_true', help='only count each archival rule\'s matches, write nothing')
     ap.add_argument('--uri', default=None)
     ap.add_argument('--user', default=None)
     ap.add_argument('--password', default=None)
@@ -217,56 +217,56 @@ def main():
     pwd = a.password or cfg.get('NEO4J_PASSWORD')
     db = a.database or cfg.get('NEO4J_DATABASE')
     if not (uri and user and pwd):
-        print('缺少 Neo4j 连接信息（scripts/neo4j.env 或 --uri/--user/--password）')
+        print('missing Neo4j connection details (scripts/neo4j.env or --uri/--user/--password)')
         return 1
     try:
         from neo4j import GraphDatabase
     except ImportError:
-        print('需要 neo4j 驱动：uv pip install neo4j')
+        print('the neo4j driver is required: uv pip install neo4j')
         return 1
 
     drv = GraphDatabase.driver(uri, auth=(user, pwd))
     with drv.session(database=db) as s:
-        print('清洗前：', s.run(AUDIT).single().data())
+        print('before cleanup: ', s.run(AUDIT).single().data())
 
-        # ① 归档
+        # ① archival
         for desc, where, reason in ARCHIVE_RULES:
             if a.dry_run:
                 n = s.run(ARCHIVE_COUNT_TMPL.format(where=where)).single()['n']
-                print(f'  [dry] 归档·{desc}: {n}')
+                print(f'  [dry] archive·{desc}: {n}')
             else:
                 n = s.run(ARCHIVE_TMPL.format(where=where, reason=reason)).single()['n']
-                print(f'  ✓ 归档·{desc}: {n}')
+                print(f'  OK archive·{desc}: {n}')
 
         if a.dry_run:
-            print('\n[dry-run] 未写入任何改动；去掉 --dry-run 执行清洗。')
+            print('\n[dry-run] nothing was written; drop --dry-run to run the cleanup.')
             return 0
 
-        # ② 归类
-        for desc, q in [('severity/evidence_source 归位', CLASSIFY),
-                        ('图文数值偏差 → A', PROMOTE_A),
-                        ('文本启发式定级', HEURISTIC)]:
+        # ② classification
+        for desc, q in [('severity/evidence_source placement', CLASSIFY),
+                        ('figure-text numerical deviation → A', PROMOTE_A),
+                        ('text-heuristic grading', HEURISTIC)]:
             print(f'  ✓ {desc}: {s.run(q).single()["n"]}')
 
-        # ③ 关系重建
-        for desc, q in [('删脏边 REL(真矛盾)', DEL_REL), ('删归档节点残留边', DEL_REL_ARCHIVED),
-                        ('清旧矛盾边', DEL_LEGACY_EDGE), ('建 DISPUTES→Paper', DISPUTES_PAPER)]:
+        # ③ relationship rebuild
+        for desc, q in [('delete dirty REL edges (genuine contradictions)', DEL_REL), ('delete edges left on archived nodes', DEL_REL_ARCHIVED),
+                        ('clear legacy contradiction edges', DEL_LEGACY_EDGE), ('create DISPUTES→Paper', DISPUTES_PAPER)]:
             print(f'  ✓ {desc}: {s.run(q).single()["n"]}')
 
-        # ④ 溯源
-        print(f'  ✓ 溯源属性补全: {s.run(ENRICH).single()["n"]}')
+        # ④ traceability
+        print(f'  OK traceability properties completed: {s.run(ENRICH).single()["n"]}')
 
-        # ⑤ 锚定
-        print(f'  ✓ Figure 锚定: {s.run(FIGURE_LINK).single()["n"]}')
-        print(f'  ✓ 实验锚定(条件词): {s.run(EXP_LINK_1).single()["n"]}')
-        print(f'  ✓ 实验锚定(污染物名): {s.run(EXP_LINK_2).single()["n"]}')
+        # ⑤ anchoring
+        print(f'  OK Figure anchoring: {s.run(FIGURE_LINK).single()["n"]}')
+        print(f'  OK experiment anchoring (condition words): {s.run(EXP_LINK_1).single()["n"]}')
+        print(f'  OK experiment anchoring (pollutant names): {s.run(EXP_LINK_2).single()["n"]}')
 
-        # ⑥ 计数
-        print(f'  ✓ Paper 计数重算: {s.run(RECOUNT).single().data()}')
+        # ⑥ counters
+        print(f'  OK Paper counters recomputed: {s.run(RECOUNT).single().data()}')
 
-        print('清洗后：', s.run(AUDIT).single().data())
+        print('after cleanup: ', s.run(AUDIT).single().data())
     drv.close()
-    print('\n提示：unknown / review_status=pending_arbitration 的条目留给 fenton-arbiter 分批定级。')
+    print('\nnote: entries left as unknown / review_status=pending_arbitration are for fenton-arbiter to grade across papers.')
     return 0
 
 

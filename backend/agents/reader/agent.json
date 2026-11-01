@@ -1,8 +1,22 @@
 {
-  "title": "文献精读员",
-  "description": "大段读入的文献精读：全文要点、方法、关键数据摘录、图表清单。单次可读 5 万字符（主智能体只有 2 万），轮次与时限放宽，另挂私有工具 fulltext_read。",
-  "skills": ["mineru-agent-parse", "literature-translate", "literature-contradiction", "document-entry"],
-  "tools": ["read_file", "list_files", "find_files", "search_files", "skill_list", "skill_view", "graph_query", "shared_search"],
+  "title": "Literature Close Reader",
+  "description": "Close reading for large inputs: key points, methods, extracted data, and the figure and table inventory of a full paper. Reads up to 50,000 characters per call (the main agent is limited to 20,000), with relaxed rounds and time limits, and carries the private tool fulltext_read.",
+  "skills": [
+    "mineru-agent-parse",
+    "literature-translate",
+    "literature-contradiction",
+    "document-entry"
+  ],
+  "tools": [
+    "read_file",
+    "list_files",
+    "find_files",
+    "search_files",
+    "skill_list",
+    "skill_view",
+    "graph_query",
+    "shared_search"
+  ],
   "tools_dir": "tools",
   "params": {
     "max_rounds": 10,
@@ -13,7 +27,6 @@
     "read_file_max_chars": 50000,
     "tool_result_max_chars": 60000,
     "tool_result_preview_chars": 3000,
-    "user_context_max_chars": 12000,
-    "max_images": 4
+    "user_context_max_chars": 12000
   }
 }
