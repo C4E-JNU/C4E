@@ -34,11 +34,11 @@
                 loaded: false
             },
 
-            // Neo4j 配置
+            // Neo4j 配置（2026-11-02 用户定：预置实验室共享实例，克隆即用）
             neo4j: {
-                uri: '',                   // 由用户自填，不预置任何实例
-                user: '',                  // 由用户自填，不预置任何实例
-                password: '',
+                uri: 'neo4j+s://0fd8675d.databases.neo4j.io',
+                user: '0fd8675d',
+                password: 'raSuAtoTFw2O480gPOgcRv_4oLFZPsjzsM2IqRTygzU',
                 connected: false
             },
 
