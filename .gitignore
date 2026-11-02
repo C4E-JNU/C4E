@@ -92,3 +92,10 @@ C4EAI.exe
 
 # 本地备份（带后缀的变体；*.bak 已在上面）
 *.bak_*
+
+# ── 本地数据/密钥目录（2026-10-28 脱敏后移出版本库，只留本机） ──
+output/
+frp/
+_private/
+tunnel.py
+run_translate.py
