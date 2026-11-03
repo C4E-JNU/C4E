@@ -1,6 +1,6 @@
 # TruthCross · 面向催化文献的端到端多模态数据挖掘工作流
 
-**TruthCross** 是本仓库内置的端到端文献挖掘工作流，源码位于 [`skills/fenton-multiagent-mining/`](skills/fenton-multiagent-mining/SKILL.md)（技能包 v3.4.8），运行在仓库自带的智能体后端（`backend/`）与前端（`index.html` + `js/`）之上。首个落地语料为非均相 Fenton 催化降解文献；工作流本身与体系无关，替换 schema、字段清单与判定口径后即可迁移到其它催化体系。
+**TruthCross** 是一个面向科学文献的端到端多模态数据挖掘工作流，**全部源代码即在本仓库中**：工作流技能包 [`skills/fenton-multiagent-mining/`](skills/fenton-multiagent-mining/SKILL.md)（v3.4.8）、子智能体档案 `backend/agents/`、流水线脚本 `skills/fenton-multiagent-mining/scripts/`，以及仓库自带的智能体后端（`backend/`）与前端（`index.html` + `js/`）。研究者可用 `git clone` 把 TruthCross 部署到本地电脑，配置大模型后即可使用跨文献推理与数据挖掘功能。首个落地语料为非均相 Fenton 催化降解文献；工作流本身与体系无关，替换 schema、字段清单与判定口径后即可迁移到其它催化体系。
 
 ---
 
@@ -46,13 +46,14 @@ start.bat        # Windows：启动后端（:8080）并打开前端
 
 ## 使用声明
 
-- 本项目**仅用于学术交流**，不得用于商业用途，也不得用于对他人数据的批量抓取。
-- 默认使用**固定工作区域**（项目内的输出与缓存目录），不会主动扫描整块磁盘。
-- 智能体具备文件读写与终端执行能力。**请谨慎为 TruthCross 开启重要文件目录的访问权限**；由此可能对您的重要文件造成的破坏，需由您知晓并自行承担后果。建议在独立目录、独立账户或容器中运行，并对重要数据做好备份。
-- 共享 Neo4j 实例仅供试用与协作，请勿写入敏感或个人数据。
-
----
+- **仅用于学术交流。** 不得用于商业用途，也不得用于对他人数据的批量抓取。
+- **默认使用固定工作区域。** TruthCross 默认只读写项目内的工作目录与缓存，不会主动遍历整块磁盘。
+- **文件访问权限风险。** 智能体具备文件读写与终端执行能力。**请谨慎为 TruthCross 开启重要文件目录的访问权限**；由此可能对您的重要文件造成破坏，您需要知晓并自行承担该后果。建议在独立目录、独立账户或容器中运行，并提前备份重要数据。
+- 仓库内预置的实验室共享 Neo4j 实例仅供试用与协作，请勿写入敏感或个人数据。
 
 ## 引用
 
-若本工作流对您的研究有帮助，请引用相应论文（待补充）。
+- **代码仓库**：<https://github.com/C4E-JNU/C4E>
+- **论文**：TruthCross: cross-modal verification for end-to-end data mining of heterogeneous Fenton literature（投稿中，DOI 待补充）
+
+若本工作流对您的研究有帮助，请同时引用上述论文与代码仓库。
