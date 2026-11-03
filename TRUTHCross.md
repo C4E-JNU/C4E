@@ -54,6 +54,6 @@ start.bat        # Windows：启动后端（:8080）并打开前端
 ## 引用
 
 - **代码仓库**：<https://github.com/C4E-JNU/C4E>
-- **论文**：TruthCross: cross-modal verification for end-to-end data mining of heterogeneous Fenton literature（投稿中，DOI 待补充）
+- **论文**：TruthCross: Cross-Verification-Enhanced Multi-Agent Data Mining with Simultaneous Suspicious Data Discovery from Catalysis Literature—A Case Study on Heterogeneous Fenton Reactions（投稿中，DOI 待补充）
 
 若本工作流对您的研究有帮助，请同时引用上述论文与代码仓库。
