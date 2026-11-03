@@ -6,6 +6,21 @@
 
 ---
 
+## 🧬 TruthCross · 端到端文献挖掘工作流
+
+本仓库同时内置 **TruthCross** —— 面向催化文献的端到端多模态数据挖掘与知识图谱工作流（[`skills/fenton-multiagent-mining/`](skills/fenton-multiagent-mining/SKILL.md)，v3.4.8）。它把「文献筛选 → 解析归档 → 图像挖掘 → 图文互证 → 节点对齐 → schema 填充 → 图谱入库」串成一条可复现的流水线，支持跨文献推理与文献持续入库。
+
+```bash
+git clone https://github.com/C4E-JNU/C4E.git
+cd C4E && start.bat        # 打开 http://127.0.0.1:8080，配置大模型后即可使用
+```
+
+完整说明、上手示例与使用声明见 **[TRUTHCross.md](TRUTHCross.md)**。
+
+> 仅用于学术交流；默认使用固定工作区，请谨慎授予重要目录访问权限，风险自担。
+
+---
+
 ## 📚 先读这三份文档
 
 | 文档 | 什么时候读 |
