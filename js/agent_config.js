@@ -10,11 +10,12 @@ const TOOL_GROUPS = [
     { name: t('agentcfg.gr.code'), tools: ['run_code', 'terminal'] },
     { name: t('agentcfg.gr.literature'), tools: ['crossref_lookup', 'arxiv_search', 'semantic_scholar_search'] },
     { name: t('agentcfg.gr.github'), tools: ['gh_repo_info', 'gh_list_dir', 'gh_read_file', 'gh_search_repos', 'gh_search_code', 'gh_download_tarball'] },
-    { name: t('agentcfg.gr.memory'), tools: ['search_history', 'conversation_notes'] },
+    { name: t('agentcfg.gr.personal'), tools: ['conversation_notes'] },
+    { name: t('agentcfg.gr.memory'), tools: ['search_history'] },
     { name: t('agentcfg.gr.task'), tools: ['todo'] },
     { name: t('agentcfg.gr.subagent'), tools: ['delegate_task'] },
     { name: t('agentcfg.gr.documents'), tools: ['mineru_parse'] },
-    { name: 'XWiki', tools: ['wiki_read', 'wiki_write'] },
+    { name: 'Wiki', tools: ['wiki_read', 'wiki_write'] },
 ];
 
 // ── 工具：从后端 /api/tools 动态加载 + 按分组渲染勾选 ──

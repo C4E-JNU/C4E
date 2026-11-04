@@ -36,7 +36,7 @@
     <!-- Local stylesheets -->
     <link rel="stylesheet" href="css/variables.css?v=10">
     <link rel="stylesheet" href="css/reset.css?v=5">
-    <link rel="stylesheet" href="css/layout.css?v=57">
+    <link rel="stylesheet" href="css/layout.css?v=58">
     <link rel="stylesheet" href="css/sidebar.css?v=25">
     <link rel="stylesheet" href="css/messages.css?v=12">
     <link rel="stylesheet" href="css/input.css?v=24">
@@ -110,15 +110,15 @@
                     <path d="M8 3.4C6.6 2.2 4.4 1.9 1.6 1.9v10c2.8 0 5 .3 6.4 1.5 1.4-1.2 3.6-1.5 6.4-1.5v-10c-2.8 0-5 .3-6.4 1.5z"/>
                     <path d="M8 3.4v10"/>
                 </svg>
-                <span class="btn-text">Shared Wiki</span>
+                <span class="btn-text" data-i18n="nav.sharedNotes">Shared Notes</span>
             </button>
-            <!-- XWiki shortcut: opens XWiki on 138 in a new tab -->
-            <a href="http://172.24.108.138:8090/bin/view/Main/" target="_blank" rel="noopener" class="db-analysis-btn xwiki-btn" id="xwiki-btn" title="XWiki">
+            <!-- Team wiki shortcut: opens XWiki on 138 in a new tab -->
+            <a href="http://172.24.108.138:8090/bin/view/Main/" target="_blank" rel="noopener" class="db-analysis-btn xwiki-btn" id="xwiki-btn" title="Wiki — team wiki (XWiki)">
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true">
                     <circle cx="8" cy="8" r="6.5"/>
                     <path d="M8 4.5v7M5.5 8h5"/>
                 </svg>
-                <span class="btn-text">XWiki</span>
+                <span class="btn-text" data-i18n="nav.wiki">Wiki</span>
             </a>
             <!-- Right wordmark: collapses to the logo alone when space is tight (overflow tiers in js/topbar.js) -->
             <div class="header-brand" id="header-brand">
@@ -147,7 +147,7 @@
     <!-- Database panel (floating window, same shape as the notes panel; items grouped by user) -->
     <div class="notes-panel" id="database-panel" style="top:140px;left:auto;right:40px;width:520px;height:600px;">
         <div class="notes-panel-header" id="db-panel-header">
-            <span class="notes-panel-title" data-i18n="db.title">🗄️ Database</span>
+            <span class="notes-panel-title" data-i18n="db.title">📚 Shared Notes</span>
             <span id="database-status-badge" style="font-size:0.78rem;color:var(--gray);margin-left:.5rem;">0 entries</span>
             <div class="notes-panel-actions">
                 <!-- Upload/add buttons moved into each folder row (decided 2026-09-25) - see tree rendering -->
@@ -708,7 +708,7 @@
              <!-- Notes panel -->
              <div class="notes-panel" id="notes-panel">
                  <div class="notes-panel-header">
-                     <span class="notes-panel-title" data-i18n="notes.title">📝 Chat Notes</span>
+                     <span class="notes-panel-title" data-i18n="notes.title">📝 My Knowledge Base</span>
                      <div class="notes-panel-actions">
                          <button id="notes-scope-btn" title="Toggle: this conversation / all notes" data-i18n-title="notes.scope.t" data-i18n="notes.scope">📚 All</button>
                          <button id="notes-add-btn" data-i18n="notes.add">＋ Add Note</button>
@@ -839,7 +839,7 @@
 
 
     <!-- Scripts (in dependency order) -->
-    <script src="js/i18n.js?v=6"></script>
+    <script src="js/i18n.js?v=7"></script>
     <script src="js/state.js?v=24"></script>
     <!-- Personal settings stored in the backend (must load before other modules) -->
     <script src="js/user_settings.js?v=2"></script>
@@ -864,7 +864,7 @@
     <script src="js/subagent_view.js?v=5"></script>
     <!-- Frontend tool registry removed (all tools come from the backend) -->
     <script src="js/skill_system.js?v=3"></script>
-    <script src="js/agent_config.js?v=15"></script>
+    <script src="js/agent_config.js?v=16"></script>
     <script src="js/ui.js?v=14"></script>
     <script src="js/bubbles.js?v=6"></script>
     <script src="js/bubble_actions.js?v=4"></script>

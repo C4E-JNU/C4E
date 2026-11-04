@@ -106,11 +106,23 @@
             cursor: pointer;
             font-size: 0.9rem;
             font-weight: 500;
+            /* 按钮/link 同款：<a> 继承系统字体、行高不同，会让 XWiki 按钮比同排按钮高 5px 且宽一点 */
+            font-family: inherit;
+            line-height: 1;
+            text-decoration: none;
             transition: transform, opacity, width, height, max-height, background-color, color, border-color, box-shadow, filter, left, top 0.3s;
             display: flex;
             align-items: center;
             gap: 0.5rem;
         ; font-size: .8rem; padding: .3rem .75rem}
+
+        /* <a> 形态的按钮（XWiki）：去掉链接下划线与悬停变色，其它视觉完全等同 button */
+        a.db-analysis-btn,
+        a.db-analysis-btn:hover,
+        a.db-analysis-btn:visited {
+            text-decoration: none;
+            color: white;
+        }
 
         .db-analysis-btn:hover {
             opacity: 0.9;

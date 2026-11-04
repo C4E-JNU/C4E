@@ -29,7 +29,9 @@
   "rename.ph": "输入新的对话名称",
   "btn.cancel": "取消",
   "btn.rename": "重命名",
-  "db.title": "🗄️ 数据库",
+  "db.title": "📚 共享笔记库",
+  "nav.sharedNotes": "共享笔记库",
+  "nav.wiki": "团队 Wiki",
   "db.f.owner": "按上传者筛选",
   "db.f.year": "按上传年份筛选",
   "db.f.sort": "排序方式",
@@ -167,7 +169,7 @@
   "sb.start": "+ 开始新的对话",
   "sb.resize": "拖动调整历史/聊天左右占比",
   "sb.toggle": "切换侧边栏",
-  "notes.title": "📝 对话笔记",
+  "notes.title": "📝 个人知识库",
   "notes.scope": "📚 全部",
   "notes.scope.t": "在本对话的笔记 / 全部笔记之间切换",
   "notes.add": "＋ 添加笔记",
@@ -1127,8 +1129,12 @@
       "zh": "代码/终端 (code)"
     },
     "agentcfg.gr.database": {
-      "en": "Database / shared library",
-      "zh": "数据库/共享库 (database)"
+      "en": "Shared Notes (group library)",
+      "zh": "共享笔记库 (shared)"
+    },
+    "agentcfg.gr.personal": {
+      "en": "My Knowledge Base (private)",
+      "zh": "个人知识库 (private)"
     },
     "agentcfg.gr.documents": {
       "en": "Documents",
@@ -1255,16 +1261,16 @@
       "zh": "未登录：点这里登录共享库"
     },
     "auth.guestTitle": {
-      "en": "Not logged in: local features work as usual; log in to use shared-library tools and the database",
-      "zh": "未登录：本地功能照常用；登录后可使用共享库工具与数据库"
+      "en": "Not logged in: local features work as usual; log in to use the Shared Notes library and the Wiki tools",
+      "zh": "未登录：本地功能照常用；登录后可使用共享笔记库与 Wiki 工具"
     },
     "auth.hintLogin": {
-      "en": "After logging in you can use the shared library and your own database",
-      "zh": "登录后可使用共享库与自己的数据库"
+      "en": "After logging in you can use the Shared Notes library; your personal knowledge base is private to your account",
+      "zh": "登录后可使用共享笔记库；个人知识库只属于你自己的账号"
     },
     "auth.hintRegister": {
-      "en": "Free registration; private features work right away, the database needs admin approval",
-      "zh": "自由注册；注册后私人功能立即可用，数据库需管理员授权"
+      "en": "Free registration; private features work right away, the Shared Notes library needs admin approval",
+      "zh": "自由注册；注册后私人功能立即可用，共享笔记库需管理员授权"
     },
     "auth.levelSet": {
       "en": "✅ Set {u} to {lv}",

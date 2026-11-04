@@ -32,13 +32,28 @@ from tools.xwiki_tools import (
 
 # -- Pydantic parameter models (JSON Schema given to the LLM) --
 
+# 用户定名（2026-11-02）：三个库的大概叫法 —— 个人知识库 / 共享笔记库 / Wiki。
+# 这段话会拼进每个库工具的描述开头：模型分不清库，根本原因是三个库在工具里
+# 各自有一堆别名（notes / database / shared library / knowledge base / wiki），
+# 且共享库历史上还有两个入口。统一成同一张路由表，别名只出现一次。
+LIBRARY_ROUTING = (
+    "THREE STORES — pick by what the user actually asked for; never substitute one for another.\n"
+    "  1) My Knowledge Base (个人知识库) — the user's OWN private notes, saved per conversation; only this user can see them. Tool: conversation_notes.\n"
+    "  2) Shared Notes (共享笔记库) — the whole group's library on the server: a folder tree of notes and uploaded documents, visible to everyone. Tool: shared_search (upload a file first with shared_upload).\n"
+    "  3) Wiki (团队 Wiki / XWiki) — the team wiki site, organized into spaces and pages. Tools: wiki_read / wiki_write.\n"
+    "Intent map: 'my notes / I noted earlier / my knowledge base' -> 1; "
+    "'shared / the group / what others uploaded / the server library' -> 2; "
+    "'wiki / space / page / wiki.<domain>' -> 3.\n"
+    "If the user does not say which store and the answer would change, ask — do not guess.\n\n"
+)
+
 class GraphQueryParams(BaseModel):
     """Single entry point for graph queries (schema / cypher / search)."""
     action: str = Field(description="Action: schema=inspect graph structure (call first) | cypher=run Cypher | search=natural-language semantic search")
     cypher: str = Field(default="", description="For action=cypher: the Cypher statement. Example: MATCH (p:Pollutant {name:$name})-[:DEGRADES]->(c) RETURN c.name LIMIT 10")
     params: dict = Field(default={}, description="For action=cypher: optional query parameters. Example: {'name': 'Ciprofloxacin'}")
     query: str = Field(default="", description="For action=search: natural-language query. Example: 'nickel-doped magnetite degrading DDT'")
-    scope: str = Field(default="catalyst", description="For action=search: catalyst / category / pollutant / experiment / contradiction")
+    scope: str = Field(default="catalyst", description="For action=search: paper / catalyst / pollutant / experiment / contradiction")
     top_k: int = Field(default=8, description="For action=search: number of results, 1-25")
 
 
@@ -85,14 +100,8 @@ class TodoParams(BaseModel):
     task_id: Optional[int] = Field(default=None, description="Task id (required for complete/remove)")
 
 class NotesParams(BaseModel):
-    action: str = Field(description="Action: list / read one / add / append to an existing entry / update / delete")
-    scope: str = Field(
-        default="notes",
-        description="Target store; choose explicitly from user intent:"
-                    "scope='notes' = local conversation notes (user says 'my notes', 'note this down');"
-                    "scope='database' = cloud shared database entries (user says 'database', 'shared library', 'the group entries')."
-                    "Both use the same format but different storage; writing to the wrong one is irreversible, so list first when unsure or ask the user."
-    )
+    """My Knowledge Base (personal notes) — see LIBRARY_ROUTING."""
+    action: str = Field(description="Action: list / read one / add / append to an existing entry / update / delete — all in the user's PERSONAL knowledge base")
     note_id: Optional[str] = Field(default=None, description="Entry id (required for read/append/update/delete; database entry ids look like note-1234567890)")
     branch_id: str = Field(
         default="",
@@ -141,15 +150,22 @@ class SharedSearchParams(BaseModel):
     action: str = Field(
         default="search",
         description=("Operation to perform:\n"
-                     "  search        -- semantic search in the shared library (default)\n"
+                     "  search        -- semantic search in the shared notes library (default)\n"
                      "  list_groups   -- view the group tree (with each group's intro, to locate material)\n"
                      "  create_group  -- create a group (needs name; optional parent_id, intro)\n"
                      "  update_group  -- rename or re-describe a group (needs group_id; optional name, intro)\n"
                      "  move_group    -- move a group (needs group_id; parent_id = new parent, empty = root)\n"
                      "  delete_group  -- delete a group (needs group_id; mode=move_up moves children up (default) / cascade deletes them)\n"
                      "  list_entries  -- list entries (supports owner/year/kind/sort/summary_only filters, see below)\n"
+                     "  read_entry    -- read one entry's full body (needs entry_id)\n"
+                     "  add_entry     -- create an entry in the shared library (needs title and/or content; optional kind, group_id)\n"
+                     "  append_entry  -- append text to an existing entry (needs entry_id, content)\n"
+                     "  update_entry  -- overwrite an existing entry (needs entry_id; optional title, content)\n"
+                     "  delete_entry  -- delete an entry (needs entry_id; irreversible — confirm with the user first)\n"
                      "  move_entry    -- move an entry into a group (needs entry_id, to_group_id; empty = ungroup)"),
     )
+    title: str = Field(default="", description="For add_entry/update_entry: entry title")
+    content: str = Field(default="", description="For add_entry/append_entry/update_entry: Markdown body (keep each call under ~6,000 characters; build long text with add_entry + append_entry)")
     query: str = Field(default="", description="For search: keywords or a natural-language question, e.g. 'in-house instrument usage rules'")
     top_k: int = Field(default=5, description="For search: number of most relevant results, default 5")
     group_id: str = Field(default="", description="For list_entries: restrict to a group (empty = all; \"__root__\" = ungrouped); for update/move/delete_group: target group id (8-char short ids accepted)")
@@ -660,7 +676,7 @@ async def _exec_notes(action: str, note_id: str = None, title: str = None, conte
 class DelegateTaskParams(BaseModel):
     tasks: list[dict] = Field(
         description="List of subtasks to dispatch (1-4). **One profile may run several instances at once**"
-                    "(e.g. three readers each reading one paper), each with its own context, skill directory,"
+                    "(e.g. three fenton-screener instances each screening one paper), each with its own context, skill directory,"
                     "tool set and parameters/model, running in parallel. Each element looks like "
                     "{\"goal\": \"Goal of this subtask (required, concrete and actionable)\", "
                     "\"context\": \"Necessary background (optional; include key facts from the main conversation, which the subagent cannot see)\", "
@@ -799,7 +815,7 @@ tools_registry["delegate_task"] = _make_async_tool(
         "PROFILES - each subagent has its own skills, tools, parameters and model."
         "Each subtask may name a profile (backend/agents/<name>/agent.json) with its own skill directory,"
         "tool directory, context parameters (e.g. characters per read) and model, **not shared with the main agent**."
-        "**One profile may run several instances** (e.g. three readers on three papers), each with its own context."
+        "**One profile may run several instances** (e.g. three fenton-screener instances on three papers), each with its own context."
         "Omit profile for the generic subagent (read-only tools + main model); see /api/agents/profiles."
         "HARD LIMITS: subagents cannot dispatch subagents (depth=1). Task count, concurrency, rounds and timeouts"
         "follow the user's Subagents settings (default 4 tasks / concurrency 2 / 4 rounds / 300 s timeout),"
@@ -812,7 +828,7 @@ tools_registry["delegate_task"] = _make_async_tool(
         "check whether it meets the requirement; **re-dispatch if not**, and always put the previous failure in context"
         "(e.g. 'last extraction of XXX failed: <copy missing verbatim>. Tried <path>; use another path to finish YYY'),"
         "otherwise the new instance is a blank slate and repeats the same actions. Switching profiles is allowed"
-        "(e.g. reader missed -> dispatch verifier). Re-dispatch the same subtask **at most twice**;"
+        "(e.g. an incomplete fenton-verifier result -> re-dispatch fenton-arbiter). Re-dispatch the same subtask **at most twice**;"
         "if it still fails, report the gap honestly; do not retry endlessly."
         "After receiving results you **must** synthesize them into the final answer;"
         "do not just paste the subagents' text together."
@@ -840,11 +856,11 @@ tools_registry["todo"] = _make_async_tool(
 
 tools_registry["conversation_notes"] = _make_async_tool(
     name="conversation_notes",
-    description="Manage notes and database entries (same format, different stores); scope is required:"
-                "scope='notes' = local conversation notes (user says 'notes', 'my notes');"
-                "scope='database' = cloud shared database entries (user says 'database', 'shared library', 'group entries')."
+    description=LIBRARY_ROUTING +
+                "THIS TOOL = store 1 only: the user's PERSONAL knowledge base (private, per conversation, invisible to the group)."
+                "It is NOT the shared library: group-shared notes and documents are read/written with shared_search, and the Wiki with wiki_read / wiki_write."
                 "Actions: list / read by id / add / append / update / delete."
-                "SCOPE RULE (2026): list for scope='notes' **covers all conversations by default** and returns the catalog from **every** conversation,"
+                "SCOPE RULE (2026): action='list' **covers all conversations by default** and returns the catalog from **every** conversation,"
                 "each with branch_id / branch_title and a by_branch summary -"
                 "**never claim the user has no notes or only one just because the current conversation shows none** (when the user says 'I have many notes', list all conversations first)."
                 "To list one conversation, pass branch_id='branch-12' or '__current__'."
@@ -853,8 +869,6 @@ tools_registry["conversation_notes"] = _make_async_tool(
                 "large entries (some hundreds of thousands of characters) would overflow the context. Read the body with read by id;"
                 "read returns at most 20,000 characters per call (longer text sets truncated=true and reports the total length);"
                 "do not re-read the same huge entry; ask the user to narrow it down or read it in sections."
-                "INTENT RULE: 'database / shared library / the group' -> scope='database'; 'notes / note this down' -> scope='notes';"
-                "when unsure, list both or ask the user; never guess."
                 "LENGTH RULE: keep content under ~6,000 characters per write; anything beyond the single-response limit is truncated."
                 "Build long content in steps: add the first part, then append sections (about 2,000-5,000 characters each);"
                 "or split into several notes titled Part 1/2/3. Never try to write the whole text at once."
@@ -899,7 +913,10 @@ tools_registry["shared_upload"] = _make_async_tool(
 tools_registry["shared_search"] = _make_async_tool(
     name="shared_search",
     description=(
-        "Unified entry to the group shared library: semantic search + group tree management + entry lookup.\n"
+        LIBRARY_ROUTING +
+        "THIS TOOL = store 2 only: the Shared Notes library (共享笔记库) — the group's shared folder tree of notes and documents on the server."
+        "It is NOT the user's personal notes (that is conversation_notes) and NOT the Wiki (that is wiki_read / wiki_write).\n"
+        "Unified entry to the group shared library: semantic search + entry read/write + folder-tree management.\n"
         "\n"
         "HOW THE SHARED LIBRARY IS ORGANIZED\n"
         "  Top level by entry type: notes (human-written summaries; attachments not parsed) and documents (parsed on upload).\n"
@@ -924,7 +941,10 @@ tools_registry["shared_search"] = _make_async_tool(
         "\n"
         "MANAGEMENT: for 'create a group / move this group under xx / update the intro / move an entry',\n"
         "  call create_group / move_group / update_group / move_entry / delete_group directly.\n"
-        "  Note: groups are only categories; deleting one does not delete entries (children move up by default)."
+        "  Note: groups are only categories; deleting one does not delete entries (children move up by default).\n"
+        "WRITING ENTRIES: add_entry (title + content) / append_entry / update_entry / delete_entry / read_entry,\n"
+        "  identified by entry_id. Long text: add_entry first, then append_entry in ~2,000-5,000 character sections.\n"
+        "  For a file, upload it with shared_upload first, then it becomes an entry."
     ),
     args_schema=SharedSearchParams,
     func=_knowledge,
@@ -1169,7 +1189,9 @@ tools_registry["gh_download_tarball"] = _make_async_tool(
 
 tools_registry["wiki_read"] = _make_async_tool(
     name="wiki_read",
-    description=("Read the group XWiki (team knowledge base, 155 spaces) - read-only, one tool dispatched by action.\n"
+    description=(LIBRARY_ROUTING +
+                 "THIS TOOL = store 3 only: the team Wiki (XWiki) — read-only, one tool dispatched by action."
+                 "It is NOT the shared notes library (shared_search) and NOT the user's personal notes (conversation_notes).\n"
                  "\n"
                  "ACTIONS\n"
                  "  search (default) keyword search in titles+body, needs query; returns space/page/title/snippet/url\n"
@@ -1186,7 +1208,9 @@ tools_registry["wiki_read"] = _make_async_tool(
 
 tools_registry["wiki_write"] = _make_async_tool(
     name="wiki_write",
-    description=("Write to the group XWiki - one tool dispatched by action.\n"
+    description=(LIBRARY_ROUTING +
+                 "THIS TOOL = store 3 only: the team Wiki (XWiki) — one tool dispatched by action."
+                 "It is NOT the shared notes library (shared_search) and NOT the user's personal notes (conversation_notes).\n"
                  "\n"
                  "ACTIONS\n"
                  "  create            create a page, needs space+page+content\n"

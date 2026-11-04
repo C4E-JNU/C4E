@@ -4,7 +4,7 @@
     shared_search: 在共享库上做语义搜索（服务器上的知识索引）
 
 服务器地址由环境变量 C4EAI_HUB 指定，例如：
-    C4EAI_HUB=http://<HUB-IP>:8088
+    C4EAI_HUB=http://172.24.108.138:8088
 未配置时工具返回明确错误，不静默失败。
 """
 import json
@@ -385,7 +385,8 @@ async def knowledge(action: str = "search", query: str = "", top_k: int = 5,
                     intro: str = "", mode: str = "move_up",
                     entry_id: str = "", to_group_id: str = "",
                     owner: str = "", year: str = "", sort: str = "",
-                    kind: str = "", summary_only: bool = False) -> str:
+                    kind: str = "", summary_only: bool = False,
+                    title: str = "", content: str = "") -> str:
     """共享知识库统一入口：语义检索 + 分组树管理 + 条目归类。
 
     分组数据在共享库（云端 pool/_folders.json）：
@@ -399,11 +400,45 @@ async def knowledge(action: str = "search", query: str = "", top_k: int = 5,
             return json.dumps({"error": "search 需要提供 query"}, ensure_ascii=False)
         return await shared_search(query, top_k)
 
+    # ── 条目读写（2026-11-02）──────────────────────────────────────────────
+    # 用户要求「一个库一个入口」：共享笔记库的全部增删改查都走 shared_search。
+    # 底层仍是原本就有的 db_notes（云端 branch=__db__），不新建存储。
+    _ENTRY_ACTIONS = {"read_entry": "read", "add_entry": "add",
+                      "append_entry": "append", "update_entry": "update",
+                      "delete_entry": "delete"}
+    if action in _ENTRY_ACTIONS:
+        from agent.agent import _current_user
+        me = _current_user or "guest"
+        act = _ENTRY_ACTIONS[action]
+        if act in ("read", "append", "update", "delete") and not (entry_id or "").strip():
+            return json.dumps({"error": f"{action} 需要提供 entry_id"}, ensure_ascii=False)
+        r = await db_notes(act, entry_id or "", title or "", content or "", me, kind=kind or "")
+        if "error" in r:
+            return json.dumps(r, ensure_ascii=False)
+        if act == "read":
+            return json.dumps({"status": "ok", "scope": "shared", "entry": r.get("entry")},
+                              ensure_ascii=False, indent=2)
+        if act == "add":
+            new_id = r.get("id", "")
+            gid0 = _resolve_group_id(group_id)
+            if new_id and gid0:
+                await knowledge(action="move_entry", entry_id=new_id, to_group_id=gid0)
+            return json.dumps({"status": "ok", "scope": "shared", "id": new_id,
+                               "group_id": gid0 if new_id else "",
+                               "message": f"已在共享笔记库创建条目（id={new_id}）"},
+                              ensure_ascii=False)
+        msg = {"append": "已追加到共享笔记库条目", "update": "已更新共享笔记库条目",
+               "delete": "已删除共享笔记库条目"}.get(act, "完成")
+        return json.dumps({"status": "ok", "scope": "shared", "id": r.get("id", entry_id),
+                           "message": f"{msg}（id={r.get('id', entry_id)}）"},
+                          ensure_ascii=False)
+
     # ── 分组类操作 ──
     _ACTIONS = {"list_groups", "create_group", "update_group", "move_group", "delete_group",
                 "list_entries", "move_entry"}
     if action not in _ACTIONS:
-        return json.dumps({"error": f"未知 action: {action}；可用: search / " + " / ".join(sorted(_ACTIONS))},
+        return json.dumps({"error": f"未知 action: {action}；可用: search / read_entry / add_entry / append_entry / "
+                                    f"update_entry / delete_entry / " + " / ".join(sorted(_ACTIONS))},
                           ensure_ascii=False)
 
     gid = _resolve_group_id(group_id)
