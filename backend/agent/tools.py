@@ -196,8 +196,11 @@ class WikiReadParams(BaseModel):
                      "  list_spaces     -- list all spaces (optional name filter)\n"
                      "  list_pages      -- list all pages in a space (needs space)\n"
                      "  list_attachments-- list attachments of a page (needs space, page)"))
-    query: str = Field(default="", description="For action=search: keywords; Chinese is fine, e.g. 'molecular docking'")
-    space: str = Field(default="", description="Space name, e.g. 'Main', '02. New member guide'")
+    query: str = Field(default="", description=("For action=search: a natural-language question or keywords (Chinese/English). "
+                                                "Multi-word and full questions are split automatically; results are ranked and carry a content "
+                                                "snippet. Use 1-3 keywords when you already know the topic."))
+    space: str = Field(default="", description=("Space name, e.g. 'Main', '02. New member guide'. "
+                                                "For action=search: optional filter that limits the search to one space/branch."))
     page: str = Field(default="", description="Page name, e.g. 'WebHome', 'AutodockVina steps'")
     limit: int = Field(default=10, description="Number of results: 10 by default for search; 10 for list_pages (internal cap 200)")
     scope: str = Field(default="all", description="For action=search: all = title+body (default) / title / content")
@@ -1194,7 +1197,9 @@ tools_registry["wiki_read"] = _make_async_tool(
                  "It is NOT the shared notes library (shared_search) and NOT the user's personal notes (conversation_notes).\n"
                  "\n"
                  "ACTIONS\n"
-                 "  search (default) keyword search in titles+body, needs query; returns space/page/title/snippet/url\n"
+                 "  search (default) keyword search over titles+body, needs query; returns space/page/title/snippet/url,\n"
+                 "                   ranked by relevance. Full questions work (they are split into terms + 2-grams);\n"
+                 "                   0 hits -> retry with shorter keywords or a synonym, or browse with list_pages\n"
                  "  get            read a full page body, needs space+page\n"
                  "  list_spaces    list all spaces (optional name filter, e.g. name='06')\n"
                  "  list_pages     list pages in a space, needs space\n"
