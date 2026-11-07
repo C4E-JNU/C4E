@@ -53,8 +53,8 @@ _AUTH_PUBLIC = {"/api/auth/login", "/api/auth/register", "/api/health", "/api/pl
 # 账号系统开关：仅共享库实例设置 C4EAI_AUTH=1 启用；本地实例不设 → 一切照旧（无登录）
 _AUTH_ENABLED = os.environ.get("C4EAI_AUTH", "") == "1"
 
-# 组内共享库默认地址：本地实例即使环境变量没生效（start.bat 环境丢失等），也连这台
-_DEFAULT_HUB = "http://<HUB-IP>:8088"
+# 共享库地址默认留空：不设 C4EAI_HUB = 本机独立运行
+_DEFAULT_HUB = ""   # 共享库地址请设环境变量 C4EAI_HUB；不设 = 本机独立运行
 
 def _hub_base() -> str:
     return os.environ.get("C4EAI_HUB", "").rstrip("/") or _DEFAULT_HUB
@@ -1290,7 +1290,7 @@ async def api_xiaoe_ask(req: XiaoeAskReq, request: Request):
         mc = (body or {}).get("model") or {}
     except Exception:
         mc = {}
-    endpoint = mc.get("base_url") or os.environ.get("C4EAI_LLM_BASE", "http://<HUB-IP>:8080/v1")
+    endpoint = mc.get("base_url") or os.environ.get("C4EAI_LLM_BASE", "")
     if not endpoint.rstrip("/").endswith("/chat/completions"):
         endpoint = endpoint.rstrip("/") + "/chat/completions"
     model = mc.get("model") or os.environ.get("C4EAI_LLM_MODEL", "qwen3")
@@ -1846,7 +1846,11 @@ async def api_remote_info():
     _root = str(Path(__file__).parent.parent)
     if _root not in sys.path:
         sys.path.insert(0, _root)
-    import tunnel
+    try:
+        import tunnel
+    except ImportError:
+        return {"enabled": False, "available": False, "url": "",
+                "error": "远程访问组件未安装（可选功能）"}
     return tunnel.status()
 
 
@@ -1856,7 +1860,11 @@ async def api_remote_start():
     _root = str(Path(__file__).parent.parent)
     if _root not in sys.path:
         sys.path.insert(0, _root)
-    import tunnel
+    try:
+        import tunnel
+    except ImportError:
+        return {"enabled": False, "available": False, "url": "",
+                "error": "远程访问组件未安装（可选功能）"}
     tunnel.start()
     return tunnel.status()
 

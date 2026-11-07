@@ -164,6 +164,8 @@ def start_tunnel() -> None:
             log("远程访问隧道已连接：" + tunnel.public_url())
         else:
             log("远程访问隧道未启动（分发包默认关闭，或本目录缺 frpc）")
+    except ImportError:
+        log("远程访问组件未安装（可选功能）")
     except Exception:
         log("隧道启动异常：\n" + traceback.format_exc())
 

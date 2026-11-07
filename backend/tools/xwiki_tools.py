@@ -21,7 +21,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 # ── 配置 ──────────────────────────────────────────────
-_XWIKI_BASE = os.environ.get("XWIKI_BASE", "http://<HUB-IP>:8090")
+_XWIKI_BASE = os.environ.get("XWIKI_BASE", "")
 _XWIKI_USER = os.environ.get("XWIKI_USER", "HaiqiangXie")
 _XWIKI_PASS = os.environ.get("XWIKI_PASS", "xhq15297718955")
 _XWIKI_WIKI = os.environ.get("XWIKI_WIKI", "xwiki")

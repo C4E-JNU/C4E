@@ -26,6 +26,8 @@ mineru_processing.log
 
 # ── 配置/密钥（不提交） ──
 .env
+**/neo4j.env
+!**/neo4j.env.example
 **/mineru_config.json
 **/*_secret*.json
 
@@ -35,6 +37,10 @@ node_modules/
 # ── 模型缓存（体积大，可重新下载，不入库） ──
 model_cache/
 **/model_cache/
+
+# ── 便携运行时 / 发布产物（由 GitHub Releases 提供，不入库） ──
+python/
+C4EAI-Portable*.zip
 
 # ── 临时/备份目录 ──
 _syn/

@@ -10,8 +10,8 @@
     "graph_query"
   ],
   "model": {
-    "model": "qwen3",
-    "base_url": "http://<HUB-IP>:8080/v1"
+    "model": "",
+    "base_url": ""
   },
   "params": {
     "max_rounds": 30,

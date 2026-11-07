@@ -48,7 +48,7 @@
             },
             'qwen-local': {
                 id: 'qwen-local', name: '本地千问', hidden: true, type: 'openai',
-                defaultEndpoint: 'http://<HUB-IP>:8080/v1',
+                defaultEndpoint: '',
                 apiKeyHeader: 'Authorization', apiKeyPrefix: 'Bearer ',
                 desc: t('prov.desc.qwenLocal'),
                 models: [
@@ -100,16 +100,12 @@
               // 用户在配置界面自行填写，保存后写 localStorage（本地缓存）+ 同步到本人账号
               // （/api/user/settings → workspace/users/<身份>/settings.json，见 js/user_settings.js）。
 
-              // 本地千问（实验室 llama-server，免密钥内置可用）；旧存档 IP 端点自动迁移到 c4eai.lab
+              // 本地千问（自建 llama-server，免密钥）：地址不内置，未配置则留空
               if (!providerSettings['qwen-local']) {
                   providerSettings['qwen-local'] = {
                       apiKey: 'sk-local',
-                      endpoint: 'http://<HUB-IP>:8080/v1'
+                      endpoint: ''
                   };
-              } else if ((providerSettings['qwen-local'].endpoint || '').indexOf('c4eai') >= 0) {
-                  providerSettings['qwen-local'].endpoint = 'http://<HUB-IP>:8080/v1';
-                  providerSettings['qwen-local'].apiKey = providerSettings['qwen-local'].apiKey || 'sk-local';
-                  setUserSetting('ragagent-provider-settings', JSON.stringify(providerSettings));
               }
 
               // 本地千问写死可用：确保 qwen3-local 始终在“已亮起”列表

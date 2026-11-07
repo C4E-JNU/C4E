@@ -27,7 +27,7 @@ start.bat        # Windows：启动后端（:8080）并打开前端
 启动后访问 <http://127.0.0.1:8080>，首次使用在「智能体配置」中完成三件事：
 
 1. **配置大模型**：DeepSeek / 通义千问 / 任意 OpenAI 兼容端点，填入 API Key；
-2. **连接 Neo4j**：仓库已预置实验室共享实例的默认配置（`skills/fenton-multiagent-mining/scripts/neo4j.env`），克隆即用；也可改为本地实例；
+2. **连接 Neo4j（可选）**：复制 `skills/fenton-multiagent-mining/scripts/neo4j.env.example` 为 `neo4j.env`，填入你自己的 Neo4j 实例信息；不填也可以使用不依赖图谱的功能；
 3. **配置 MinerU Token**（PDF 解析，需自备，共享实例不提供）。
 
 随后在工具 / 技能钩选中启用 `fenton-multiagent-mining`，即可对指定文献目录发起挖掘。
