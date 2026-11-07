@@ -26,12 +26,7 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "dist_private" / "neo4j_secret.py"
 LOCAL_PY = ROOT / "backend" / "tools" / "neo4j_local.py"
 
-# 拼接用的固定料：分成多段存放，避免一眼看出用途
-_SALT_PARTS = ["C4EAI", "-truthcross-", "graph", "-v1-", "2026"]
-
-
-def _key() -> bytes:
-    return hashlib.sha256("".join(_SALT_PARTS).encode("utf-8")).digest()
+# 每次构建随机生成密钥，只嵌进包内模块；仓库里不保留任何可解密材料
 
 
 def _keystream(key: bytes, n: int) -> bytes:
@@ -43,8 +38,8 @@ def _keystream(key: bytes, n: int) -> bytes:
     return bytes(out[:n])
 
 
-def _xor(data: bytes) -> bytes:
-    ks = _keystream(_key(), len(data))
+def _xor(data: bytes, key: bytes) -> bytes:
+    ks = _keystream(key, len(data))
     return bytes(a ^ b for a, b in zip(data, ks))
 
 
@@ -135,8 +130,9 @@ def main() -> int:
         return 1
 
     payload = json.dumps(cfg, ensure_ascii=False).encode("utf-8")
-    blob = base64.b64encode(_xor(payload)).decode("ascii")
-    key_ints = ", ".join(str(b) for b in _key())
+    key = os.urandom(32)
+    blob = base64.b64encode(_xor(payload, key)).decode("ascii")
+    key_ints = ", ".join(str(b) for b in key)
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(TEMPLATE.format(key_ints="bytes([" + key_ints + "])", blob=blob),
