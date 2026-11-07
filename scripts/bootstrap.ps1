@@ -15,13 +15,40 @@ if (Test-Path -LiteralPath $python) {
 $zip = Join-Path $env:TEMP "C4EAI-Portable.zip"
 $downloadOk = $false
 
+function Download-Asset {
+    param([string]$Url, [string]$OutFile)
+    for ($attempt = 1; $attempt -le 3; $attempt++) {
+        try {
+            Write-Host "Downloading (attempt $attempt/3): $Url"
+            Invoke-WebRequest -Uri $Url -OutFile $OutFile -UseBasicParsing -TimeoutSec 1800 `
+                -Headers @{ "User-Agent" = "C4EAI-Bootstrap" }
+            if ((Get-Item -LiteralPath $OutFile).Length -ge 50MB) { return $true }
+            Write-Warning "Downloaded file is too small."
+        }
+        catch {
+            Write-Warning "Attempt $attempt failed: $($_.Exception.Message)"
+        }
+        Start-Sleep -Seconds 3
+    }
+    $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+    if ($curl) {
+        for ($attempt = 1; $attempt -le 3; $attempt++) {
+            try {
+                Write-Host "Retrying with curl (attempt $attempt/3)..."
+                & $curl.Source -L -sS --retry 2 --retry-delay 2 --max-time 1800 -o $OutFile $Url
+                if ($LASTEXITCODE -eq 0 -and (Get-Item -LiteralPath $OutFile).Length -ge 50MB) { return $true }
+            }
+            catch { }
+            Start-Sleep -Seconds 3
+        }
+    }
+    return $false
+}
+
 try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    Write-Host "Downloading: $AssetUrl"
-    Invoke-WebRequest -Uri $AssetUrl -OutFile $zip -UseBasicParsing -Headers @{ "User-Agent" = "C4EAI-Bootstrap" }
-    $size = (Get-Item -LiteralPath $zip).Length
-    if ($size -lt 50MB) {
-        throw "Downloaded file is too small ($([math]::Round($size / 1MB, 1)) MB)."
+    if (-not (Download-Asset -Url $AssetUrl -OutFile $zip)) {
+        throw "Could not download the portable runtime from GitHub."
     }
 
     Write-Host "Extracting runtime..."
