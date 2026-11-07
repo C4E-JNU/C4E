@@ -49,6 +49,7 @@
                 permissionMode: 'safe',
                 engine: 'custom',          // custom=裸API手写循环 / langchain=LangChain流式
                 maxRounds: 0,              // 0=无限轮次（用户 2026-09-28 定）
+                settingsRev: 3,            // 旧存档迁移版本：3 = 默认全工具（含 delegate_task / 文件 / 终端）
             },
 
             // 模型设置

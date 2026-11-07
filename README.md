@@ -62,6 +62,25 @@ python start.py
 3. **MinerU Token（可选）**：批量解析 PDF 时需要，需自备账号。
 4. **工具/技能**：按需钩选；启用 `fenton-multiagent-mining` 后可对指定文献目录发起 TruthCross 流水线。
 
+> 如果升级后仍有工具没默认打开，点「工具」标题旁的 **全选 / Select all**，或在浏览器控制台执行
+> `localStorage.removeItem('ragagent-agent-config')` 后刷新页面。新版本会把旧存档迁移到
+> `settingsRev=3`，一次性启用 `graph_query`、`delegate_task`、文件与终端工具。
+
+### 图谱向量维度
+
+应用默认使用 `BAAI/bge-small-zh-v1.5`（**512 维**）。如果你导入的旧图谱里向量索引是 384 维，
+`graph_query` 的向量检索会报维度不匹配。先运行只读检查：
+
+```bash
+python scripts/check_vector_compat.py --env skills/fenton-multiagent-mining/scripts/neo4j.env
+```
+
+确认需要重建后，再执行（会删除并重建 5 个向量索引，然后重新嵌入节点，耗时取决于节点数）：
+
+```bash
+python scripts/rebuild_graph_embeddings.py --env skills/fenton-multiagent-mining/scripts/neo4j.env --apply
+```
+
 ---
 
 ## 📚 文档

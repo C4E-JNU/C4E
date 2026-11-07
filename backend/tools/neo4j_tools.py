@@ -149,6 +149,7 @@ def _serialize_value(v):
 
 # 向量索引名 → 节点标签；索引维度由 step10_graph_sync.py 按本地 bge-small-zh-v1.5 (512) 创建
 VECTOR_INDEX_LABELS = {
+    "vec_paper": "Paper",
     "vec_catalyst": "Catalyst",
     "vec_category": "CatalystCategory",
     "vec_pollutant": "Pollutant",
@@ -182,6 +183,9 @@ async def execute_graph_vector_search(query: str, scope: str = "catalyst", top_k
         return json.dumps({"error": f"本地向量化模型加载失败: {e}"})
 
     expand = {
+        "Paper": """
+            OPTIONAL MATCH (n)-[:HAS_CONTRADICTION]->(k:Contradiction)
+            RETURN n, score, count(DISTINCT k) AS contradictions""",
         "Catalyst": """
             OPTIONAL MATCH (n)-[:IN_CATEGORY]->(cat:CatalystCategory)
             OPTIONAL MATCH (n)<-[:USES_CATALYST]-(e:Experiment)-[:DEGRADES]->(pl:Pollutant)
@@ -211,6 +215,27 @@ async def execute_graph_vector_search(query: str, scope: str = "catalyst", top_k
     }[label]
 
     try:
+        # 先核对索引维度：旧库可能存在 384 维索引，而本地 bge-small-zh-v1.5 是 512 维。
+        # 直接查询会得到难懂的 "dimension mismatch"，这里提前给出可操作的错误。
+        try:
+            for _r in Neo4jClient.run("SHOW VECTOR INDEXES YIELD name, options"):
+                if _r.get("name") != index_name:
+                    continue
+                _conf = ((_r.get("options") or {}).get("indexConfig") or {})
+                _dim = _conf.get("vector.dimensions") or _conf.get("dimensions")
+                if _dim and int(_dim) != len(q_vec):
+                    return json.dumps({
+                        "error": f"向量维度不匹配：本地模型 bge-small-zh-v1.5 输出 {len(q_vec)} 维，"
+                                 f"索引 {index_name} 是 {int(_dim)} 维。",
+                        "model": "BAAI/bge-small-zh-v1.5",
+                        "model_dim": len(q_vec),
+                        "index": index_name,
+                        "index_dim": int(_dim),
+                        "fix": "运行 scripts/rebuild_graph_embeddings.py --apply 重建该图谱的向量与索引。"
+                    }, ensure_ascii=False)
+        except Exception:
+            pass
+
         rows = Neo4jClient.run(
             f"""
             CALL db.index.vector.queryNodes($index, $k, $vec) YIELD node, score

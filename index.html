@@ -405,7 +405,7 @@
                                                         
                                                         </div>
                         <div class="config-section">
-                                                            <div class="config-section-title"><span data-i18n="pa.tools">Tools</span> <span style="font-size:0.75rem;color:var(--gray);font-weight:normal" data-i18n="pa.tools.d">(checked = available to the LLM; from backend tools_registry)</span></div>
+                                                            <div class="config-section-title"><span data-i18n="pa.tools">Tools</span> <span style="font-size:0.75rem;color:var(--gray);font-weight:normal" data-i18n="pa.tools.d">(checked = available to the LLM; from backend tools_registry)</span> <button type="button" onclick="selectAllTools()" style="margin-left:0.5rem;font-size:0.75rem;padding:0.15rem 0.45rem;cursor:pointer;">全选 / Select all</button></div>
                                                             <div id="tools-groups-container" style="min-height:2rem;">
                                                                 <!-- 由 agent_config.js 从后端 /api/tools 按分组动态渲染 -->
                                                                 <div style="font-size:0.8rem;color:var(--gray);padding:0.25rem 0;" data-i18n="loading">Loading…</div>

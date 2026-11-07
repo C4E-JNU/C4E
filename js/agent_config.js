@@ -298,6 +298,12 @@ function saveAgentConfig() {
     // 面板收起与「已保存」提示统一由设置面板的保存流程处理（branching.js saveSettings）
 }
 
+function selectAllTools() {
+    state.agentConfig.enabledTools = TOOL_GROUPS.flatMap(g => g.tools);
+    try { saveAgentConfigToLocal(); } catch (e) { /* ignore */ }
+    renderToolsGroups();
+}
+
 function loadAgentConfigFromLocal() {
     try {
         const saved = localStorage.getItem('ragagent-agent-config');
@@ -314,13 +320,15 @@ function loadAgentConfigFromLocal() {
                 state.agentConfig.loadedSkills = parsed.loadedSkills;
             }
             // 一次性放开（2026-09-28 用户定）：除访问权限外全部放开、轮次无限、超时保护只留「一天硬停」。
-            // 用 settingsRev 守卫，只对旧存档生效一次；此后用户改什么就是什么。
-            if (parsed.settingsRev !== 2) {
+            // settingsRev=3：新版本工具（delegate_task / graph_query / 文件 / 终端）必须补进旧存档，
+            // 否则老用户会看到「工具没默认打开」。只迁移一次；之后用户改什么就是什么。
+            if (parsed.settingsRev !== 3) {
                 state.agentConfig.enabledTools = TOOL_GROUPS.flatMap(g => g.tools);
                 state.agentConfig.loadedSkills = ['self-modify', 'mineru-agent-parse', 'literature-translate',
-                    'literature-contradiction', 'literature-search', 'code-search', 'document-entry'];
+                    'literature-contradiction', 'literature-search', 'code-search', 'document-entry',
+                    'fenton-multiagent-mining'];
                 state.agentConfig.maxRounds = 0;
-                state.agentConfig.settingsRev = 2;
+                state.agentConfig.settingsRev = 3;
                 state.settings.timeoutNudge = 0; state.settings.timeoutWarn = 0; state.settings.timeoutAbort = 86400;
                 state.settings.subagentMaxRounds = 0; state.settings.subagentMaxParallel = 8; state.settings.subagentMaxTasks = 8;
                 state.settings.subagentNudge = 0; state.settings.subagentWarn = 0; state.settings.subagentAbort = 86400;

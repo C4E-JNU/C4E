@@ -21,10 +21,13 @@ ROOT = Path(__file__).resolve().parent.parent
 SKIP_DIRS = {
     ".git", ".venv", "venv", "workspace", "dist", "python", "model_cache",
     "__pycache__", "_private", "开发中间产物", "outputs", "parse_out",
-    "_backup", ".idea", ".vscode", "node_modules", "graphify-out",
+    "_backup", "_deprecated", ".idea", ".vscode", "node_modules", "graphify-out",
 }
 SKIP_FILES = {
     "deploy_cloud.py", "C4EAI_hosts设置.bat", "共享库部署指南.md",
+    "CHANGELOG.md", "项目架构说明.md", "设计方案-账号存储v2.md",
+    "_move_lit.py", "一键打包.bat", "智能体使用指南.html", ".gitignore",
+    "自动补",
     "neo4j.env", "run_translate.py", "server.py",
 }
 SKIP_SUFFIXES = (".pyc", ".pyo", ".log", ".tmp", ".bak")
