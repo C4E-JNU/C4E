@@ -3,19 +3,19 @@ Neo4j 图谱工具 — graph_schema + execute_cypher
 直接从前端 agent_tools.js 的 JS 逻辑翻译为 Python
 """
 import json
-import os
 from pathlib import Path
 
 from neo4j import GraphDatabase
 
-# ── 服务端连接配置（neo4j.env / 环境变量）──────────
-# 背景：前端把 Aura 凭证存在浏览器 localStorage，只有前端发请求时才随 payload 送达；
-# 若用户在设置面板里没点过「连接」，后端拿到的 uri 是空的，graph_query 就会一直
-# 返回「Neo4j 未连接」——哪怕本机其实已经配好了实例。
-# 这里补一条服务端兜底：环境变量优先，其次仓库内的 neo4j.env（该文件被 .gitignore 排除）。
+# ── 服务端连接配置（硬编码优先，不读环境变量）──────────
+# 连接信息直接写在 backend/tools/neo4j_local.py。该文件被 .gitignore 排除，
+# 不会进仓库，也不会被打进公开发布的便携包 —— 既能开箱即用，又不会泄露密码。
+# 没有该文件时（别人 clone 后用自己的实例），退回仓库内 neo4j.env；
+# 两者都没有，仍可由前端「智能体配置」面板填写。
+
 _ENV_FILES = (
-    ("neo4j.env",),
-    ("skills", "fenton-multiagent-mining", "scripts", "neo4j.env"),
+    ('neo4j.env',),
+    ('skills', 'fenton-multiagent-mining', 'scripts', 'neo4j.env'),
 )
 
 
@@ -23,44 +23,60 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def load_env_config() -> dict:
-    """读取服务端 Neo4j 连接信息；读不到返回 {}。绝不回传 password 给前端。"""
-    uri = os.environ.get("NEO4J_URI", "").strip()
-    if uri:
-        cfg = {
-            "uri": uri,
-            "user": (os.environ.get("NEO4J_USERNAME") or os.environ.get("NEO4J_USER") or "neo4j").strip(),
-            "password": os.environ.get("NEO4J_PASSWORD", ""),
-            "database": os.environ.get("NEO4J_DATABASE", "").strip(),
-            "source": "env",
-        }
-        return cfg if cfg["password"] else {}
+def _hardcoded_config() -> dict:
+    """读取硬编码在 backend/tools/neo4j_local.py 里的连接信息。"""
+    try:
+        from . import neo4j_local as local       # 以 tools 包导入
+    except Exception:
+        try:
+            import neo4j_local as local          # 直接在 backend 目录运行
+        except Exception:
+            return {}
+    uri = (getattr(local, 'NEO4J_URI', '') or '').strip()
+    password = getattr(local, 'NEO4J_PASSWORD', '') or ''
+    if not uri or not password:
+        return {}
+    return {
+        'uri': uri,
+        'user': (getattr(local, 'NEO4J_USERNAME', '') or 'neo4j').strip(),
+        'password': password,
+        'database': (getattr(local, 'NEO4J_DATABASE', '') or '').strip(),
+        'source': 'hardcoded',
+    }
 
+
+def _env_file_config() -> dict:
     for parts in _ENV_FILES:
         path = _repo_root().joinpath(*parts)
         if not path.is_file():
             continue
         values = {}
         try:
-            text = path.read_text(encoding="utf-8")
+            text = path.read_text(encoding='utf-8')
         except Exception:
             continue
         for line in text.splitlines():
             line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
+            if not line or line.startswith('#') or '=' not in line:
                 continue
-            key, value = line.split("=", 1)
+            key, value = line.split('=', 1)
             values[key.strip().upper()] = value.strip()
-        if values.get("NEO4J_URI"):
+        if values.get('NEO4J_URI'):
             cfg = {
-                "uri": values["NEO4J_URI"],
-                "user": values.get("NEO4J_USERNAME") or values.get("NEO4J_USER") or "neo4j",
-                "password": values.get("NEO4J_PASSWORD", ""),
-                "database": values.get("NEO4J_DATABASE", ""),
-                "source": str(path),
+                'uri': values['NEO4J_URI'],
+                'user': values.get('NEO4J_USERNAME') or values.get('NEO4J_USER') or 'neo4j',
+                'password': values.get('NEO4J_PASSWORD', ''),
+                'database': values.get('NEO4J_DATABASE', ''),
+                'source': str(path),
             }
-            return cfg if cfg["password"] else {}
+            return cfg if cfg['password'] else {}
     return {}
+
+
+def load_neo4j_config() -> dict:
+    """服务端连接信息：硬编码 > neo4j.env 文件 > 空。绝不回传 password。"""
+    return _hardcoded_config() or _env_file_config()
+
 
 class Neo4jClient:
     """Neo4j 连接管理器（单例模式）"""
@@ -100,7 +116,7 @@ class Neo4jClient:
         if cls._driver is not None:
             return {"success": True, "source": "existing"}
         if cls._env_cfg is None:
-            cls._env_cfg = load_env_config()
+            cls._env_cfg = load_neo4j_config()
         cfg = cls._env_cfg
         if not cfg:
             return {}

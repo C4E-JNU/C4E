@@ -555,8 +555,8 @@ def _resolve_neo4j_config(neo4j_config: dict = None) -> dict:
     """前端没带 uri 时，用服务端 neo4j.env / 环境变量兜底（本地部署免手填）。"""
     if neo4j_config and neo4j_config.get("uri"):
         return neo4j_config
-    from tools.neo4j_tools import load_env_config
-    return load_env_config() or (neo4j_config or {})
+    from tools.neo4j_tools import load_neo4j_config
+    return load_neo4j_config() or (neo4j_config or {})
 
 
 # ── 运行 Agent ────────────────────────────────────

@@ -15,7 +15,7 @@ import asyncio
 from pydantic import BaseModel
 from typing import Optional, Any, Dict
 
-from tools.neo4j_tools import Neo4jClient, execute_graph_schema, execute_cypher, load_env_config
+from tools.neo4j_tools import Neo4jClient, execute_graph_schema, execute_cypher, load_neo4j_config
 from tools.web_tools import web_search, web_extract
 from tools.skill_tools import skill_list, skill_view
 from tools.code_sandbox import run_python
@@ -528,7 +528,7 @@ async def neo4j_connect(req: Neo4jConnectRequest):
 async def neo4j_status():
     """服务端连接状态（不含密码）；前端据此把状态灯点亮。"""
     cr = Neo4jClient.auto_connect()
-    cfg = load_env_config()
+    cfg = load_neo4j_config()
     return {
         "connected": Neo4jClient.is_connected(),
         "server_configured": bool(cfg),

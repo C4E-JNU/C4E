@@ -58,9 +58,18 @@ python start.py
 打开页面右上角的「配置」面板：
 
 1. **大模型（必填）**：DeepSeek、通义千问、OpenAI 或任意兼容 OpenAI 接口的服务，填写 Base URL、API Key、模型名。
-2. **Neo4j（可选）**：使用图谱功能时填写自己的实例；也可以复制 `skills/fenton-multiagent-mining/scripts/neo4j.env.example` 为 `neo4j.env` 后填写。仓库不内置任何共享实例凭据。
-   放好 `neo4j.env` 后后端会在首次请求时自动连接（环境变量 `NEO4J_URI/NEO4J_USERNAME/NEO4J_PASSWORD` 优先），
-   面板的 Neo4j 状态灯会变绿，不必每次启动都在浏览器里重填密码。凭据只留在本机，不会入库、不会回传前端。
+2. **Neo4j（可选）**：使用图谱功能时填写自己的实例。推荐把连接信息**硬编码**在
+   `backend/tools/neo4j_local.py`（该文件被 `.gitignore` 排除，不会进仓库、也不会打进便携包）：
+
+   ```python
+   NEO4J_URI = "neo4j+s://<instance>.databases.neo4j.io"
+   NEO4J_USERNAME = "<user>"
+   NEO4J_PASSWORD = "<password>"
+   NEO4J_DATABASE = "<database>"
+   ```
+
+   没有该文件时会退回 `skills/fenton-multiagent-mining/scripts/neo4j.env`；两者都没有，仍可在设置面板填写。
+   后端不读取 `NEO4J_*` 环境变量。连上后面板状态灯自动变绿，密码不会回传前端。
 3. **MinerU Token（可选）**：批量解析 PDF 时需要，需自备账号。
 4. **工具/技能**：按需钩选；启用 `fenton-multiagent-mining` 后可对指定文献目录发起 TruthCross 流水线。
 

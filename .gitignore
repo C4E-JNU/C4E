@@ -98,3 +98,6 @@ C4EAI.exe
 
 # 本地备份（带后缀的变体；*.bak 已在上面）
 *.bak_*
+
+# 硬编码的本机 Neo4j 连接信息（含密码，禁止提交）
+backend/tools/neo4j_local.py
