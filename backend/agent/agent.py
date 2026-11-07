@@ -551,6 +551,14 @@ async def _build_file_manifest(file_ids: list) -> str:
 
 
 
+def _resolve_neo4j_config(neo4j_config: dict = None) -> dict:
+    """前端没带 uri 时，用服务端 neo4j.env / 环境变量兜底（本地部署免手填）。"""
+    if neo4j_config and neo4j_config.get("uri"):
+        return neo4j_config
+    from tools.neo4j_tools import load_env_config
+    return load_env_config() or (neo4j_config or {})
+
+
 # ── 运行 Agent ────────────────────────────────────
 
 async def run_agent(
@@ -581,6 +589,7 @@ async def run_agent(
     clear_delegate_pending()
     _t_start = time.time()
     # 1. Neo4j 连接（可选增强：连不上只降级摘掉图谱工具，绝不终止 —— 用户 2026-09-22 定）
+    neo4j_config = _resolve_neo4j_config(neo4j_config)
     if neo4j_config and neo4j_config.get("uri"):
         if "graph_query" in enabled_tools:
             if not Neo4jClient.is_connected():
@@ -771,6 +780,7 @@ async def stream_agent(
     # Neo4j（可选增强：连不上只降级摘掉图谱工具，绝不终止对话 —— 用户 2026-09-22 定）
     # 理由：用户常只想问普通问题/读附件；图谱没连上不该让整个对话失败。
     # 降级后 graph_query 工具本身也返回 {"error":"Neo4j 未连接"}，LLM 自会判断跳过。
+    neo4j_config = _resolve_neo4j_config(neo4j_config)
     if neo4j_config and neo4j_config.get("uri"):
         if "graph_query" in enabled_tools:
             if not Neo4jClient.is_connected():
@@ -1335,6 +1345,7 @@ async def stream_agent_lc(
     # Neo4j（可选增强：连不上只降级摘掉图谱工具，绝不终止对话 —— 用户 2026-09-22 定）
     # 理由：用户常只想问普通问题/读附件；图谱没连上不该让整个对话失败。
     # 降级后 graph_query 工具本身也返回 {"error":"Neo4j 未连接"}，LLM 自会判断跳过。
+    neo4j_config = _resolve_neo4j_config(neo4j_config)
     if neo4j_config and neo4j_config.get("uri"):
         if "graph_query" in enabled_tools:
             if not Neo4jClient.is_connected():

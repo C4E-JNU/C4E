@@ -15,7 +15,7 @@ import asyncio
 from pydantic import BaseModel
 from typing import Optional, Any, Dict
 
-from tools.neo4j_tools import Neo4jClient, execute_graph_schema, execute_cypher
+from tools.neo4j_tools import Neo4jClient, execute_graph_schema, execute_cypher, load_env_config
 from tools.web_tools import web_search, web_extract
 from tools.skill_tools import skill_list, skill_view
 from tools.code_sandbox import run_python
@@ -177,6 +177,7 @@ class AgentRunRequest(BaseModel):
 
 @app.get("/api/health")
 async def health():
+    Neo4jClient.auto_connect()          # 有 neo4j.env 就顺手连上，前端状态灯才准
     return {"status": "ok", "neo4j_connected": Neo4jClient.is_connected()}
 
 # ── 账号系统（初始 admin 在首次启动时创建，密码见启动日志或 C4EAI_ADMIN_PASSWORD）──
@@ -522,6 +523,21 @@ async def api_auth_users_delete(req: DeleteUserReq, request: Request):
 @app.post("/api/neo4j/connect")
 async def neo4j_connect(req: Neo4jConnectRequest):
     return Neo4jClient.connect(req.uri, req.user, req.password)
+
+@app.get("/api/neo4j/status")
+async def neo4j_status():
+    """服务端连接状态（不含密码）；前端据此把状态灯点亮。"""
+    cr = Neo4jClient.auto_connect()
+    cfg = load_env_config()
+    return {
+        "connected": Neo4jClient.is_connected(),
+        "server_configured": bool(cfg),
+        "uri": cfg.get("uri", ""),
+        "user": cfg.get("user", ""),
+        "source": cfg.get("source", ""),
+        "error": cr.get("error", ""),
+    }
+
 @app.post("/api/neo4j/disconnect")
 async def neo4j_disconnect():
     Neo4jClient.disconnect(); return {"success": True}

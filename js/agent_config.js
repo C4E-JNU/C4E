@@ -357,6 +357,25 @@ function syncNeo4jConfigToPanel() {
     if (panelNeo4jConnect) {
         panelNeo4jConnect.textContent = state.neo4j.connected ? t('agentcfg.connected') : t('agentcfg.connect');
     }
+    syncNeo4jServerStatus();
+}
+
+// 后端用 neo4j.env 自动连上时，把面板状态灯同步过来（用户不必再手填密码）。
+let _neo4jServerChecked = false;
+async function syncNeo4jServerStatus() {
+    if (_neo4jServerChecked || state.neo4j.connected) return;
+    try {
+        const res = await fetch('/api/neo4j/status');
+        if (!res.ok) return;
+        const d = await res.json();
+        if (!d || !d.connected) return;
+        _neo4jServerChecked = true;
+        state.neo4j.connected = true;
+        if (panelNeo4jUri && !panelNeo4jUri.value) panelNeo4jUri.value = d.uri || '';
+        if (panelNeo4jUser && !panelNeo4jUser.value) panelNeo4jUser.value = d.user || '';
+        updateNeo4jStatusUI(true);
+        if (panelNeo4jConnect) panelNeo4jConnect.textContent = t('agentcfg.connected');
+    } catch (e) { /* 离线/端点不存在 → 保持原状 */ }
 }
 
 if (panelNeo4jConnect) {

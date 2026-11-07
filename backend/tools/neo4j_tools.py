@@ -3,7 +3,64 @@ Neo4j 图谱工具 — graph_schema + execute_cypher
 直接从前端 agent_tools.js 的 JS 逻辑翻译为 Python
 """
 import json
+import os
+from pathlib import Path
+
 from neo4j import GraphDatabase
+
+# ── 服务端连接配置（neo4j.env / 环境变量）──────────
+# 背景：前端把 Aura 凭证存在浏览器 localStorage，只有前端发请求时才随 payload 送达；
+# 若用户在设置面板里没点过「连接」，后端拿到的 uri 是空的，graph_query 就会一直
+# 返回「Neo4j 未连接」——哪怕本机其实已经配好了实例。
+# 这里补一条服务端兜底：环境变量优先，其次仓库内的 neo4j.env（该文件被 .gitignore 排除）。
+_ENV_FILES = (
+    ("neo4j.env",),
+    ("skills", "fenton-multiagent-mining", "scripts", "neo4j.env"),
+)
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def load_env_config() -> dict:
+    """读取服务端 Neo4j 连接信息；读不到返回 {}。绝不回传 password 给前端。"""
+    uri = os.environ.get("NEO4J_URI", "").strip()
+    if uri:
+        cfg = {
+            "uri": uri,
+            "user": (os.environ.get("NEO4J_USERNAME") or os.environ.get("NEO4J_USER") or "neo4j").strip(),
+            "password": os.environ.get("NEO4J_PASSWORD", ""),
+            "database": os.environ.get("NEO4J_DATABASE", "").strip(),
+            "source": "env",
+        }
+        return cfg if cfg["password"] else {}
+
+    for parts in _ENV_FILES:
+        path = _repo_root().joinpath(*parts)
+        if not path.is_file():
+            continue
+        values = {}
+        try:
+            text = path.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        for line in text.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            values[key.strip().upper()] = value.strip()
+        if values.get("NEO4J_URI"):
+            cfg = {
+                "uri": values["NEO4J_URI"],
+                "user": values.get("NEO4J_USERNAME") or values.get("NEO4J_USER") or "neo4j",
+                "password": values.get("NEO4J_PASSWORD", ""),
+                "database": values.get("NEO4J_DATABASE", ""),
+                "source": str(path),
+            }
+            return cfg if cfg["password"] else {}
+    return {}
 
 class Neo4jClient:
     """Neo4j 连接管理器（单例模式）"""
@@ -34,6 +91,22 @@ class Neo4jClient:
     @classmethod
     def is_connected(cls):
         return cls._driver is not None
+
+    _env_cfg = None
+
+    @classmethod
+    def auto_connect(cls):
+        """用服务端配置自动连接一次（幂等）。没配置就返回 {}，不影响普通对话。"""
+        if cls._driver is not None:
+            return {"success": True, "source": "existing"}
+        if cls._env_cfg is None:
+            cls._env_cfg = load_env_config()
+        cfg = cls._env_cfg
+        if not cfg:
+            return {}
+        result = cls.connect(cfg["uri"], cfg["user"], cfg["password"])
+        result["source"] = cfg.get("source", "")
+        return result
 
     @classmethod
     def connect(cls, uri, user, password):
@@ -165,7 +238,9 @@ async def execute_graph_vector_search(query: str, scope: str = "catalyst", top_k
     返回节点属性 + score + 一跳图上下文，供 LLM 直接引用。
     """
     if not Neo4jClient.is_connected():
-        return json.dumps({"error": "Neo4j 未连接"})
+        Neo4jClient.auto_connect()          # 服务端有 neo4j.env 时免手填
+    if not Neo4jClient.is_connected():
+        return json.dumps({"error": "Neo4j 未连接（服务端未配置 neo4j.env，前端也未填写连接信息）"})
     query = (query or "").strip()
     if not query:
         return json.dumps({"error": "查询文本不能为空"})
@@ -263,7 +338,9 @@ async def execute_graph_vector_search(query: str, scope: str = "catalyst", top_k
 async def execute_graph_schema():
     """获取 Neo4j 图谱的节点类型、关系类型、属性结构"""
     if not Neo4jClient.is_connected():
-        return json.dumps({"error": "Neo4j 未连接"})
+        Neo4jClient.auto_connect()          # 服务端有 neo4j.env 时免手填
+    if not Neo4jClient.is_connected():
+        return json.dumps({"error": "Neo4j 未连接（服务端未配置 neo4j.env，前端也未填写连接信息）"})
 
     try:
         # 节点属性
@@ -331,7 +408,9 @@ async def execute_graph_schema():
 async def execute_cypher(cypher: str, params: dict = None):
     """执行任意 Cypher 查询"""
     if not Neo4jClient.is_connected():
-        return json.dumps({"error": "Neo4j 未连接"})
+        Neo4jClient.auto_connect()          # 服务端有 neo4j.env 时免手填
+    if not Neo4jClient.is_connected():
+        return json.dumps({"error": "Neo4j 未连接（服务端未配置 neo4j.env，前端也未填写连接信息）"})
     if not cypher or not cypher.strip():
         return json.dumps({"error": "Cypher 查询不能为空"})
     try:
