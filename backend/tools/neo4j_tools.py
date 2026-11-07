@@ -23,6 +23,28 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def _packaged_config() -> dict:
+    """便携包内置的混淆凭据（backend/tools/neo4j_secret.py，只在发布包里存在）。"""
+    try:
+        from . import neo4j_secret as secret
+    except Exception:
+        try:
+            import neo4j_secret as secret
+        except Exception:
+            return {}
+    uri = (getattr(secret, 'NEO4J_URI', '') or '').strip()
+    password = getattr(secret, 'NEO4J_PASSWORD', '') or ''
+    if not uri or not password:
+        return {}
+    return {
+        'uri': uri,
+        'user': (getattr(secret, 'NEO4J_USERNAME', '') or 'neo4j').strip(),
+        'password': password,
+        'database': (getattr(secret, 'NEO4J_DATABASE', '') or '').strip(),
+        'source': 'packaged',
+    }
+
+
 def _hardcoded_config() -> dict:
     """读取硬编码在 backend/tools/neo4j_local.py 里的连接信息。"""
     try:
@@ -74,8 +96,8 @@ def _env_file_config() -> dict:
 
 
 def load_neo4j_config() -> dict:
-    """服务端连接信息：硬编码 > neo4j.env 文件 > 空。绝不回传 password。"""
-    return _hardcoded_config() or _env_file_config()
+    """服务端连接信息：便携包内置 > 本机硬编码 > neo4j.env 文件 > 空。绝不回传 password。"""
+    return _packaged_config() or _hardcoded_config() or _env_file_config()
 
 
 class Neo4jClient:

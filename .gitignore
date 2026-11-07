@@ -101,3 +101,6 @@ C4EAI.exe
 
 # 硬编码的本机 Neo4j 连接信息（含密码，禁止提交）
 backend/tools/neo4j_local.py
+
+dist_private/
+backend/tools/neo4j_secret.py

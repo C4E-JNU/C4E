@@ -70,6 +70,11 @@ python start.py
 
    没有该文件时会退回 `skills/fenton-multiagent-mining/scripts/neo4j.env`；两者都没有，仍可在设置面板填写。
    后端不读取 `NEO4J_*` 环境变量。连上后面板状态灯自动变绿，密码不会回传前端。
+
+   **便携包内置凭据（可选）**：`python scripts/make_neo4j_secret.py` 会把连接信息混淆后写到
+   `dist_private/neo4j_secret.py`，`build_portable.py` 构建时把它作为 `backend/tools/neo4j_secret.py`
+   打进 zip。解压后直接搜索不到明文 URI/密码；注意这是**可逆混淆**，不是哈希（哈希不可逆，软件就无法用它连库），
+   专门逆向仍可还原。要真正隔离，应改为服务端代理。
 3. **MinerU Token（可选）**：批量解析 PDF 时需要，需自备账号。
 4. **工具/技能**：按需钩选；启用 `fenton-multiagent-mining` 后可对指定文献目录发起 TruthCross 流水线。
 

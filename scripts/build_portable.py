@@ -108,6 +108,13 @@ def main() -> int:
         if launcher.is_file():
             add_file(zf, launcher, "C4EAI.exe")
 
+        # 便携包内置的 Neo4j 凭据（混淆存储，由 scripts/make_neo4j_secret.py 生成）。
+        # 源码仓库里没有这个文件；只有构建时才会被打进 zip。
+        secret = source / "dist_private" / "neo4j_secret.py"
+        if secret.is_file():
+            add_file(zf, secret, "backend/tools/neo4j_secret.py")
+            print("adding bundled Neo4j credential (obfuscated)")
+
         readme = (
             "C4EAI portable package\n"
             "======================\n\n"
